@@ -40,7 +40,7 @@ any cron/aliases survive intact.
   higher-res-cover-wins :577-608, NTFS `is_legal_name` :149), and the
   dry-run virtual filesystem (`Run.removed/created`, `_exists/_move/
   _rename`, `_survives`) that makes `--dry-run` predict apply exactly
-  — pinned by dedicated test classes. The "fancy" presentation is
+  , pinned by dedicated test classes. The "fancy" presentation is
   already vir_tui.core (print_header/print_summary/color/tqdm).
 
 ## B. The fold design (house mode-flag style, no subcommands)
@@ -96,12 +96,12 @@ per CLAUDE.md:92. The spirit survives: one gated, logged,
 dry-run-defaulted write path, and the remaining seven companions stay
 put.
 
-Risks: (a) contract-erosion precedent — hold the line at "fold only
+Risks: (a) contract-erosion precedent: hold the line at "fold only
 with an explicit contract amendment"; (b) the PyInstaller binary
-(hatch run build-bin) would ship mutation — acceptable, but the TUI
+(hatch run build-bin) would ship mutation; acceptable, but the TUI
 menu entry must confirm before applying; (c) shims must re-export, not
 copy, or the two implementations drift; (d) the tag pass writes
-ID3v2.3+v1 (cleaner.py:835) — same semantics as retag.py, but now a
+ID3v2.3+v1 (cleaner.py:835), same semantics as retag.py, but now a
 package behavior worth a spec sentence.
 
 ## E. Fold effort
@@ -151,7 +151,7 @@ restructuring. The real gaps:
 11. **Lyrics** (USLT embedder companion, slipcover's pattern): L,
     lower priority than 1-7.
 
-Deliberately skipped: beets mbsync/import (needs a DB — anti-filesystem-
+Deliberately skipped: beets mbsync/import (needs a DB; anti-filesystem-
 as-truth), convert (flac2opus.py covers), edit (retag/genre_tidy
 cover), fetchart (slipcover --fetch covers).
 

@@ -257,7 +257,7 @@ the apestrip/cleaner fold Brandon asked for and the toolset's gaps
 against the music-management state of the art. Verdict: the fold is
 feasible, mechanical, and worth its L effort; the landscape gaps are
 mostly S audit modes. The fold requires the one contract amendment the
-house rules anticipate (CLAUDE.md:69 says "without asking" — this is
+house rules anticipate (CLAUDE.md:69 says "without asking"; this is
 the asking), and it carries exactly one deliberate break: inside
 `lattice`, write becomes opt-in (`--apply`), while the script shims
 keep today's apply-by-default so aliases and cron do not change.
