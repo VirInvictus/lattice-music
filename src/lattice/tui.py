@@ -21,6 +21,7 @@ from lattice.config import (
     get_library_roots,
     set_library_root,
 )
+from lattice.modes.apestrip import run_apestrip
 from lattice.modes.artwork import (
     run_art_quality_audit,
     run_extract_art,
@@ -32,6 +33,7 @@ from lattice.modes.audit import (
     run_replaygain_audit,
     run_tag_audit,
 )
+from lattice.modes.clean import run_clean
 from lattice.modes.integrity import (
     run_flac_mode,
     run_mp3_mode,
@@ -97,6 +99,13 @@ _MAIN_SECTIONS = [
         ],
     ),
     (
+        "MAINTENANCE",
+        [
+            "Consolidate fragmented albums (clean)",
+            "Strip APEv2 tags (apestrip)",
+        ],
+    ),
+    (
         "SETTINGS",
         [
             "Change library root",
@@ -148,9 +157,12 @@ _MAIN_ALIASES: dict[str, tuple | None] = {
     "bitrate": (3, 2),
     "rg": (3, 3),
     "replaygain": (3, 3),
-    "settings": (4, 0),
-    "config": (4, 0),
-    "c": (4, 0),
+    "clean": (4, 0),
+    "apestrip": (4, 1),
+    "ape": (4, 1),
+    "settings": (5, 0),
+    "config": (5, 0),
+    "c": (5, 0),
     "quit": None,
     "exit": None,
 }
@@ -167,8 +179,8 @@ _LIB_ALIASES: dict[str, tuple | None] = {
 }
 
 
-_SEL_CHANGE_ROOT = (4, 0)
-_SEL_QUIT = (5, 0)
+_SEL_CHANGE_ROOT = (5, 0)
+_SEL_QUIT = (6, 0)
 _SEL_LIB_BACK = (1, 0)
 
 
@@ -503,6 +515,48 @@ def _menu_session() -> int:
                     verbose=include_ok,
                     quiet=False,
                     footer=out_note(output),
+                )
+
+            elif result == (4, 0):
+                # Write mode: every question defaults to no, and the last
+                # confirm decides dry-run vs apply. With all passes declined
+                # the mode still runs the two merge passes (the script's
+                # base behavior).
+                norm_names = ask_yn(
+                    "Pass 3: rename folders with non-standard characters? (y/N)"
+                )
+                norm_files = ask_yn("Pass 3: rename audio track files too? (y/N)")
+                norm_tags = ask_yn("Pass 4: normalize tags library-wide? (y/N)")
+                layout = ask("Path layout", get_layout())
+                apply = ask_yn("APPLY changes now? No = dry-run preview only (y/N)")
+                run_with_capture(
+                    "Consolidate fragmented albums (clean)",
+                    run_clean,
+                    root,
+                    dry_run=not apply,
+                    normalize_names=norm_names,
+                    normalize_filenames=norm_files,
+                    normalize_tags=norm_tags,
+                    layout=layout,
+                    quiet=False,
+                )
+
+            elif result == (4, 1):
+                # Write mode: the ask_yn confirm below is the gate, so the
+                # mode itself runs with assume_yes (its own input() prompt
+                # would fire inside the captured output).
+                keep = ask_yn("Migrate APE fields into ID3 before stripping? (y/N)")
+                repair = ask_yn("Also repair malformed APE tags? (y/N)")
+                apply = ask_yn("APPLY strip now? No = dry-run preview only (y/N)")
+                run_with_capture(
+                    "Strip APEv2 tags (apestrip)",
+                    run_apestrip,
+                    root,
+                    dry_run=not apply,
+                    keep_metadata=keep,
+                    repair_malformed=repair,
+                    assume_yes=True,
+                    quiet=False,
                 )
         except CancelledError:
             continue

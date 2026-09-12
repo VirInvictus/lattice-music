@@ -20,6 +20,7 @@ from lattice.config import (
     VERSION,
     get_layout,
 )
+from lattice.modes.apestrip import run_apestrip
 from lattice.modes.artwork import (
     run_art_quality_audit,
     run_extract_art,
@@ -31,6 +32,7 @@ from lattice.modes.audit import (
     run_replaygain_audit,
     run_tag_audit,
 )
+from lattice.modes.clean import run_clean
 from lattice.modes.integrity import (
     run_flac_mode,
     run_mp3_mode,
@@ -123,6 +125,18 @@ def build_parser() -> argparse.ArgumentParser:
     group.add_argument(
         "--stats", action="store_true", help="Library-wide statistics summary"
     )
+    group.add_argument(
+        "--clean",
+        action="store_true",
+        help="Consolidate fragmented album folders; optionally normalize names "
+        "and tags (write mode: dry-run by default, --apply to write)",
+    )
+    group.add_argument(
+        "--apestrip",
+        action="store_true",
+        help="Strip stray APEv2 tags from MP3s (write mode: dry-run by "
+        "default, --apply to write)",
+    )
 
     p.add_argument(
         "--root",
@@ -182,7 +196,49 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run",
         dest="dry_run",
         action="store_true",
-        help="Preview changes without writing (extractArt)",
+        help="Preview changes without writing (extractArt, clean, apestrip)",
+    )
+    p.add_argument(
+        "--apply",
+        action="store_true",
+        help="Write for real (clean, apestrip); without it these modes only preview",
+    )
+    p.add_argument(
+        "--normalize-names",
+        action="store_true",
+        help="--clean: also rename non-duplicate folders at every depth with "
+        "non-standard characters to their normalized form",
+    )
+    p.add_argument(
+        "--normalize-filenames",
+        action="store_true",
+        help="--clean: also rename audio track files the same way (a distinct "
+        "change from --normalize-names)",
+    )
+    p.add_argument(
+        "--normalize-tags",
+        action="store_true",
+        help="--clean: library-wide typographic tag normalization (Pass 4)",
+    )
+    p.add_argument(
+        "--all",
+        dest="clean_all",
+        action="store_true",
+        help="--clean: run all normalization passes (--normalize-names, "
+        "--normalize-filenames, --normalize-tags)",
+    )
+    p.add_argument(
+        "--keep-metadata",
+        action="store_true",
+        help="--apestrip: before stripping, migrate APE fields not already in "
+        "ID3 into the matching ID3 frame (genre is never migrated, ratings "
+        "never written)",
+    )
+    p.add_argument(
+        "--repair-malformed",
+        action="store_true",
+        help="--apestrip: also repair malformed APE tags mutagen cannot parse, "
+        "by excising the tag bytes directly (verified + atomic)",
     )
 
     p.add_argument(
@@ -376,6 +432,35 @@ def main(argv: list[str] | None = None) -> int:
         if args.stats:
             run_stats(root, args.output, layout=args.layout, quiet=args.quiet)
             return 0
+
+        # The write modes operate on exactly one tree (like the companion
+        # scripts they replace), not on an aggregated root list.
+        if args.clean or args.apestrip:
+            if len(root) != 1:
+                print(
+                    "error: this write mode needs exactly one library root; "
+                    "pass one DIR (or configure a single library_root)",
+                    file=sys.stderr,
+                )
+                return 2
+            dry_run = args.dry_run or not args.apply
+            if args.clean:
+                return run_clean(
+                    root[0],
+                    dry_run=dry_run,
+                    normalize_names=args.normalize_names or args.clean_all,
+                    normalize_filenames=args.normalize_filenames or args.clean_all,
+                    normalize_tags=args.normalize_tags or args.clean_all,
+                    layout=args.layout,
+                    quiet=args.quiet,
+                )
+            return run_apestrip(
+                root[0],
+                dry_run=dry_run,
+                keep_metadata=args.keep_metadata,
+                repair_malformed=args.repair_malformed,
+                quiet=args.quiet,
+            )
 
         build_parser().print_help()
         return 2
