@@ -248,3 +248,76 @@ The usual porting direction inverted: cquarry finished porting this audit (its v
 - [x] **(shipped 2026-07-03, v4.10.1; SIGINT-at-text-menu → 130 verified end-to-end) Ctrl-C at the text-fallback menu exits 0 while the curses menu exits 130.** `_fallback_input` (tui.py:563) catches `KeyboardInterrupt` and returns None, which the menu loop reads as Quit; the same keystroke at the curses menu propagates and `interactive_menu` returns 130. A wrapper script checking for the documented 130 sees a clean 0. **Fix (cquarry's):** let `KeyboardInterrupt` propagate (the session handler already maps it to 130); keep `EOFError` as a quiet Quit (None) with a tidy `print()`. **Tests:** monkeypatched `input` raising `KeyboardInterrupt` propagates out of `_fallback_input`; raising `EOFError` returns None; end-to-end, SIGINT at the degraded text menu exits 130 (cquarry verified this under a pty).
 - [x] **(shipped 2026-07-03, v4.10.1) `_tui_prompt_str`'s curses.error fallback re-implements the text prompt inline.** tui.py:499-506 duplicates `_prompt_str`'s body, and both copies render a None default as `[None]`. After `_degrade_to_text()` has flipped `_USE_CURSES`, the handler can simply `return _prompt_str(label, default)`; while there, render an empty default as `[]` (`display = default if default else ""`). Same shape in `_tui_pause`'s handler (tui.py:552-557): degrade, then delegate to `_pause()`. **Test:** a curses.error prompt fallback goes through `_prompt_str` (monkeypatch it and assert one call).
 - [x] **(shipped 2026-07-03, v4.10.1) Every widget `_run` re-calls `_init_tui_colors()` although the session screen already initialized colors.** Four call sites (tui.py:383, :417, :514, :743) re-run color setup on every widget invocation even though `_open_screen` (tui.py:94) did it once. **Fix (cquarry's):** move the one-shot init into `_with_screen`'s wrapper branch (a small `_boot(stdscr)` that calls `_init_tui_colors()` then the widget body) and delete the four per-widget calls. **Test:** none needed beyond the existing suite staying green; behavior is identical.
+
+## Research 2026-09-12: the companion fold + the music-toolset landscape (from REPORT-12-Sept.md)
+
+A read-only research pass (full evidence in REPORT-12-Sept.md) studied
+the apestrip/cleaner fold Brandon asked for and the toolset's gaps
+against the music-management state of the art. Verdict: the fold is
+feasible, mechanical, and worth its L effort; the landscape gaps are
+mostly S audit modes. The fold requires the one contract amendment the
+house rules anticipate (CLAUDE.md:69 says "without asking" — this is
+the asking), and it carries exactly one deliberate break: inside
+`lattice`, write becomes opt-in (`--apply`), while the script shims
+keep today's apply-by-default so aliases and cron do not change.
+
+### A. The fold (spec.md §5 amendment + README.md:16 + CLAUDE.md:69 ride this section)
+
+- [ ] **`src/lattice/norm.py`**: promote the pure rules engine
+  (normalize_name, canonical_render, tag_fold, tag_dedupe,
+  is_legal_name, the fold tables, `_FEAT_RE`, canon_track_artist).
+  Zero I/O.
+- [ ] **`src/lattice/modes/clean.py`**: the `Run` virtual filesystem +
+  the four passes as `run_clean(root, *, dry_run, normalize_names,
+  normalize_filenames, normalize_tags, layout, log_path, quiet)`;
+  dry-run by default, `--apply` opt-in.
+- [ ] **`src/lattice/modes/apestrip.py`**: classify/plan/apply/repair
+  as `run_apestrip(root, *, dry_run, keep_metadata, repair_malformed,
+  log_path, quiet)`.
+- [ ] **CLI + TUI wiring**: `lattice --clean [DIR] [...]` and
+  `lattice --apestrip [DIR] [...]` (argparse + dispatch + the
+  mandatory TUI entries with `ask_yn` confirms).
+- [ ] **Compat shims**: scripts/cleaner.py and scripts/apestrip.py
+  become argparse-preserving re-export wrappers (the slipcover.py
+  pattern); flags, log defaults, idempotency, and non-TTY
+  auto-confirm preserved.
+- [ ] **Tests retargeted** to the package modules (~135 tests; delete
+  the sys.path hack at test_apestrip.py:17).
+- [ ] **Contract amendment**: spec.md §5 rewritten to "reads tags;
+  writes metadata only via the explicit --clean/--apestrip write
+  modes (opt-in, logged, dry-run by default)"; README.md:16 and
+  CLAUDE.md:69 name the two exceptions; patchnotes + version bump.
+- [ ] **Ship as v5.0.0**: the contract change is a major (the spec
+  amendment says so); the PyInstaller binary ships mutation, so the
+  TUI menu entry confirms before applying.
+
+### B. The landscape gaps (each an audit mode unless noted)
+
+- [ ] **Content-hash audio duplicate detection**
+  (`--auditAudioDupes`): sha256 exact + head/tail sampling; catches
+  retagged/renamed dupes the tag-based `--duplicates` misses. M.
+- [ ] **Library health score**: aggregate tag completeness, RG
+  coverage, art, bitrate, decode errors into a per-album/per-root
+  score. S.
+- [ ] **Unimported/stray-file audit**: audio at wrong depth,
+  non-audio junk, loose tracks, hidden dirs (integrity prunes them
+  today; nothing reports them). S.
+- [ ] **`--checkPlaylists`**: dead paths, #EXTM3U compliance,
+  relative-vs-absolute in generated m3us. S.
+- [ ] **Album-consistency audit**: mixed codec within an album,
+  missing year/label, tracknumber gaps. S.
+- [ ] **`--auditMbids` + the Picard hand-off TSV**: MusicBrainz TXXX
+  coverage from `--auditTags`. S.
+- [ ] **ReplayGain verification**: stored gain vs a fresh rsgain/
+  ffmpeg ebur128 measurement, read-only. M.
+- [ ] **`--auditJunkFrames`**: iTunNORM/private-TXXX reporting. S.
+  (The strip itself is a new-companion or retag.py extension, M.)
+- [ ] **Art mismatch audit**: embedded vs folder art, per-track art
+  divergence. S.
+- [ ] **`--snapshot` / `--diff`**: tag+path fingerprint change
+  detection between curation runs (no DB by design). S.
+
+Deliberately skipped (already covered or anti-contract): beets-style
+import/DB (filesystem is the truth), convert (flac2opus), edit
+(retag/genre_tidy), fetchart (slipcover --fetch), lyrics (new-companion
+candidate, L, behind 1-7).
