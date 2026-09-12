@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import shutil
@@ -150,12 +151,77 @@ def _flac_verdict(
     return "ffmpeg", tier, reason
 
 
+# =====================================
+# Progress persistence (--resume, FLAC/MP3)
+# =====================================
+
+# The state file exists only while the last scan of its report is unfinished:
+# every scan writes through as it goes, a completed scan deletes it, and
+# --resume reads it back so the rerun scans only the remainder. It is a
+# transient cache beside the report, not an index; the filesystem stays the
+# source of truth.
+
+_PROGRESS_FORMAT = 1
+_FLUSH_EVERY = 25
+
+
+def _progress_file(output: str) -> Path:
+    """State path for a scan's report: <output>.progress.json."""
+    out = Path(output).expanduser()
+    return out.with_name(out.name + ".progress.json")
+
+
+def _load_progress(path: Path, scan_id: dict) -> dict[str, dict] | None:
+    """Cached per-file results for this exact scan configuration, or None when
+    there is nothing usable: no state file, a different configuration (so the
+    verdicts would not be comparable), or state corrupted by the interrupt."""
+    try:
+        with path.open(encoding="utf-8") as fh:
+            data = json.load(fh)
+    except OSError, ValueError:
+        return None
+    if not isinstance(data, dict) or data.get("format") != _PROGRESS_FORMAT:
+        return None
+    if data.get("scan") != scan_id:
+        return None
+    results = data.get("results")
+    if not isinstance(results, dict) or not results:
+        return None
+    return results
+
+
+def _save_progress(path: Path, scan_id: dict, results: dict[str, dict]) -> None:
+    """Atomically write the state so an interrupt keeps every flushed verdict.
+    Best-effort: persistence must never fail the scan itself."""
+    tmp = path.with_name(path.name + ".tmp")
+    try:
+        with tmp.open("w", encoding="utf-8") as fh:
+            json.dump(
+                {"format": _PROGRESS_FORMAT, "scan": scan_id, "results": results}, fh
+            )
+        os.replace(tmp, path)
+    except OSError:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+
+
+def _clear_progress(path: Path) -> None:
+    """The scan finished; there is nothing left to resume."""
+    try:
+        path.unlink()
+    except OSError:
+        pass
+
+
 def run_flac_mode(
     root: str | list[str],
     output: str,
     workers: int,
     prefer: str,
     *,
+    resume: bool = False,
     quiet: bool = False,
 ) -> int:
     roots = as_roots(root)
@@ -184,11 +250,31 @@ def run_flac_mode(
             file=sys.stderr,
         )
 
+    # Persistence is always write-through; --resume only controls whether a
+    # previous run's verdicts are reused. A verdict is reused only when the
+    # verification tool is the same one.
+    pfile = _progress_file(output)
+    scan_id = {"kind": "flac", "use_flac": use_flac}
+    state: dict[str, dict] = {}
+    cached: dict[str, dict] = {}
+    if resume:
+        cached = _load_progress(pfile, scan_id) or {}
+        if cached and not quiet:
+            print(
+                f"Resuming: {len(cached)} previously verified file(s) reused "
+                f"from {pfile.name}"
+            )
+    pending = [p for p in flacs if str(p) not in cached]
+
     if not quiet:
         print(f"Found {total} FLAC files under: {', '.join(roots)}")
 
     counts = {tier: 0 for tier in TIER_ORDER}
     flagged: list[tuple[str, str, str, str]] = []  # (path, tool, tier, reason)
+    for path_s, rec in cached.items():
+        counts[rec["tier"]] = counts.get(rec["tier"], 0) + 1
+        if rec["tier"] in (TIER_CORRUPT, TIER_SUSPECT):
+            flagged.append((path_s, rec["tool"], rec["tier"], rec["reason"]))
 
     def worker(path: Path) -> tuple[str, str, str, str]:
         try:
@@ -202,17 +288,22 @@ def run_flac_mode(
             return str(path), "exception", TIER_CORRUPT, repr(e)
 
     pbar = _make_pbar(total, "Testing FLACs", quiet)
+    if cached:
+        pbar.update(len(cached))
     ex: ThreadPoolExecutor | None = None
     futures: dict = {}
     try:
         ex = ThreadPoolExecutor(max_workers=max(1, workers))
-        futures = {ex.submit(worker, p): p for p in flacs}
+        futures = {ex.submit(worker, p): p for p in pending}
         for fut in as_completed(futures):
             path, tool, tier, reason = fut.result()
+            state[path] = {"tool": tool, "tier": tier, "reason": reason}
             counts[tier] = counts.get(tier, 0) + 1
             if tier in (TIER_CORRUPT, TIER_SUSPECT):
                 flagged.append((path, tool, tier, reason))
             pbar.update(1)
+            if len(state) % _FLUSH_EVERY == 0:
+                _save_progress(pfile, scan_id, state)
     except KeyboardInterrupt:
         if not quiet:
             print("\nInterrupted by user. Cancelling FLAC checks...")
@@ -220,6 +311,7 @@ def run_flac_mode(
             for f in futures:
                 f.cancel()
             ex.shutdown(cancel_futures=True)
+        _save_progress(pfile, scan_id, state)
         return 130
     finally:
         if ex is not None:
@@ -260,6 +352,7 @@ def run_flac_mode(
             print(f"Scanned {total}. {corrupt_s}  {suspect_s}. Details: {out_path}")
         else:
             print(green("✅ All FLAC files passed integrity checks."))
+    _clear_progress(pfile)
     return 1 if counts[TIER_CORRUPT] > 0 else 0
 
 
@@ -419,8 +512,10 @@ def _run_decode_scan(
     only_errors: bool,
     verbose: bool,
     quiet: bool,
+    resume: bool = False,
 ) -> int:
-    """Unified decode-check scanner for MP3, Opus, and future formats."""
+    """Unified decode-check scanner for MP3, Opus, and future formats. Only the
+    MP3 entry point exposes --resume; the other formats never forward it."""
     roots = as_roots(root)
     ffmpeg_path = _find_ffmpeg(ffmpeg)
 
@@ -455,26 +550,57 @@ def _run_decode_scan(
     if verbose:
         quiet = False
 
+    # Same contract as the FLAC mode: write-through always, --resume only
+    # decides whether previous verdicts are reused, and the state is deleted
+    # when a scan completes.
+    pfile = _progress_file(output)
+    scan_id = {"kind": ext, "ffmpeg": ffmpeg_path}
+    state: dict[str, dict] = {}
+    cached: dict[str, dict] = {}
+    if resume:
+        cached = _load_progress(pfile, scan_id) or {}
+        if cached and not quiet:
+            print(
+                f"Resuming: {len(cached)} previously scanned file(s) reused "
+                f"from {pfile.name}"
+            )
+    pending = [p for p in targets if str(p) not in cached]
+
     pbar = _make_pbar(len(targets), f"Scanning {label}", quiet)
+    if cached:
+        pbar.update(len(cached))
     ex: ThreadPoolExecutor | None = None
     futures: dict = {}
     # CORRUPT and SUSPECT are always listed; METADATA and OK only when the user
     # asks (keeps a clean library's report short and bounds memory on big runs).
     list_benign = verbose or not only_errors
 
+    # Cached verdicts fold into the counts unconditionally; their report rows
+    # follow the same list_benign rule as fresh ones.
+    for path_s, rec in sorted(cached.items()):
+        rec_tier = rec.get("tier", TIER_OK)
+        counts[rec_tier] = counts.get(rec_tier, 0) + 1
+        row = dict(rec)
+        row["path"] = path_s
+        if rec_tier in (TIER_CORRUPT, TIER_SUSPECT) or list_benign:
+            results.append(row)
+
     try:
         ex = ThreadPoolExecutor(max_workers=max(1, workers))
         futures = {
-            ex.submit(_scan_one_file, p, ffmpeg_path, enrich=enrich): p for p in targets
+            ex.submit(_scan_one_file, p, ffmpeg_path, enrich=enrich): p for p in pending
         }
 
         for fut in as_completed(futures):
             row = fut.result()
             tier = row.get("tier", TIER_OK)
+            state[row["path"]] = row
             counts[tier] = counts.get(tier, 0) + 1
             if tier in (TIER_CORRUPT, TIER_SUSPECT) or list_benign:
                 results.append(row)
             pbar.update(1)
+            if len(state) % _FLUSH_EVERY == 0:
+                _save_progress(pfile, scan_id, state)
 
     except KeyboardInterrupt:
         if not quiet:
@@ -483,6 +609,7 @@ def _run_decode_scan(
             for f in futures:
                 f.cancel()
             ex.shutdown(cancel_futures=True)
+        _save_progress(pfile, scan_id, state)
         return 130
     finally:
         if ex is not None:
@@ -549,6 +676,7 @@ def _run_decode_scan(
             f"metadata: {counts[TIER_METADATA]}  {suspect_s}  {corrupt_s}"
         )
         print(f"Report written to: {out_path}")
+    _clear_progress(pfile)
     return 1 if counts[TIER_CORRUPT] > 0 else 0
 
 
@@ -561,6 +689,7 @@ def run_mp3_mode(
     only_errors: bool,
     verbose: bool,
     quiet: bool,
+    resume: bool = False,
 ) -> int:
     return _run_decode_scan(
         root,
@@ -575,6 +704,7 @@ def run_mp3_mode(
         only_errors=only_errors,
         verbose=verbose,
         quiet=quiet,
+        resume=resume,
     )
 
 

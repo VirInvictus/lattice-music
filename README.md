@@ -252,6 +252,8 @@ The integrity modes (`--testFLAC`, `--testMP3`, `--testOpus`, `--testWAV`, `--te
 
 CORRUPT and SUSPECT are always listed in the report; METADATA and OK are summarized and listed only with `--verbose`. The exit code is `1` only when something is CORRUPT, so a clean-but-chatty library still exits `0`. FFmpeg is invoked with the demuxer forced from the file extension (so a large ID3v2 tag is never mis-read as a corrupt container) and with embedded cover art skipped.
 
+The FLAC and MP3 scans support `--resume` for large libraries: every run writes each verdict through to a transient `<output>.progress.json` beside the report as it goes, and a run interrupted with Ctrl-C leaves that state behind. Re-running with `--resume` reuses the recorded verdicts and decodes only the remaining files, producing the same full report either way; a scan that runs to completion deletes the state file. A state recorded by a different verification tool (libFLAC vs ffmpeg) is discarded rather than trusted.
+
 ## Library statistics
 
 `--stats` reports file counts, total size and duration, a per-format breakdown, a bitrate summary, the rating distribution, top genres, and top artists. Prints to screen, or `--output` to save.
@@ -291,8 +293,8 @@ usage: lattice [-h] [--version] [--library | --ai-library | --all-wings | --ai-w
                [--rule RULE] [--layout LAYOUT] [--min-art-res MIN_ART_RES] [--min-bitrate MIN_BITRATE]
                [--workers WORKERS] [--prefer {flac,ffmpeg}] [--quiet] [--genres] [--paths] [--dry-run]
                [--apply] [--normalize-names] [--normalize-filenames] [--normalize-tags] [--all]
-               [--keep-metadata] [--repair-malformed] [--only-errors | --no-only-errors] [--ffmpeg FFMPEG]
-               [--verbose]
+               [--keep-metadata] [--repair-malformed] [--resume] [--only-errors | --no-only-errors]
+               [--ffmpeg FFMPEG] [--verbose]
                [pos_root]
 
 Music library toolkit: tree, integrity, art, duplicates, tag audit
@@ -358,6 +360,9 @@ options:
                         matching ID3 frame (genre is never migrated, ratings never written)
   --repair-malformed    --apestrip: also repair malformed APE tags mutagen cannot parse, by excising the tag
                         bytes directly (verified + atomic)
+  --resume              --testFLAC / --testMP3: reuse the verdicts recorded by an interrupted run
+                        (<output>.progress.json) and scan only the remaining files; finishing a scan clears
+                        the state
   --only-errors, --no-only-errors
                         Write only errors/warns (MP3/Opus modes)
   --ffmpeg FFMPEG       Path to ffmpeg

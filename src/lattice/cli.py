@@ -249,6 +249,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="--apestrip: also repair malformed APE tags mutagen cannot parse, "
         "by excising the tag bytes directly (verified + atomic)",
     )
+    p.add_argument(
+        "--resume",
+        action="store_true",
+        help="--testFLAC / --testMP3: reuse the verdicts recorded by an "
+        "interrupted run (<output>.progress.json) and scan only the remaining "
+        "files; finishing a scan clears the state",
+    )
 
     p.add_argument(
         "--only-errors",
@@ -350,7 +357,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.testFLAC:
             output = args.output or DEFAULT_FLAC_OUTPUT
             return run_flac_mode(
-                root, output, args.workers, args.prefer, quiet=args.quiet
+                root,
+                output,
+                args.workers,
+                args.prefer,
+                resume=args.resume,
+                quiet=args.quiet,
             )
 
         if args.testMP3:
@@ -363,6 +375,7 @@ def main(argv: list[str] | None = None) -> int:
                 only_errors=args.only_errors,
                 verbose=args.verbose,
                 quiet=args.quiet,
+                resume=args.resume,
             )
 
         if args.testOpus:

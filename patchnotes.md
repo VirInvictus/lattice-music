@@ -1,5 +1,8 @@
 # lattice-music Patch Notes
 
+## v5.3.0 (2026-09-12)
+- **New: `--resume` for `--testFLAC` and `--testMP3`** (Progress Persistence, the roadmap's long-standing open box, scoped to the two big-library walks). Every run writes each verdict through to a transient `<output>.progress.json` beside the report as the scan progresses; Ctrl-C leaves that state behind, and re-running with `--resume` reuses the recorded verdicts and decodes only the remaining files. The report is always complete (cached and fresh rows alike), so the severity tiers, the summaries, and the exit code are identical to an uninterrupted run. A state recorded with a different verification tool (libFLAC vs ffmpeg) is discarded rather than trusted, a scan that finishes deletes the state, and the file is best-effort: persistence can never fail the scan itself. The TUI's FLAC and MP3 entries ask whether to resume. Four new tests; suite 513 to 517.
+
 ## v5.2.1 (2026-09-12)
 - **Fix (release hygiene):** the v5.2.0 commit missed the pyproject half of the version sync set (config.VERSION said 5.2.0, pyproject still said 5.1.0). The tagged v5.2.0 build therefore produced artifacts named `5.1.0`, which raced the real v5.1.0 publish and won: **PyPI's 5.1.0 files are the v5.2.0-commit build** (internally `lattice --version` prints 5.2.0 and `Requires-Dist` is the newer `vir-tui>=2.3.0`), the true v5.1.0 build lost the race with a 400, and no 5.2.0 was ever uploaded. PyPI forbids re-uploading a filename, so that 5.1.0 record is permanent; it is functionally complete but its embedded version string lags. This release restores the sync set and ships the real 5.2.1 to PyPI. No code changes.
 

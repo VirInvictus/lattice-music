@@ -1,6 +1,6 @@
 # lattice-music Application Specification
 
-**Version:** 5.2.1  
+**Version:** 5.3.0  
 **Language:** Python 3.14+  
 **Dependencies:** `mutagen`, `tqdm`, `vir-tui`  
 **License:** MIT
@@ -143,6 +143,12 @@ audio (ffmpeg reports decode errors on files that play start to finish):
 CORRUPT and SUSPECT are always listed; METADATA and OK are summarized and listed
 only with `--verbose`. The process exit code is `1` only when at least one file
 is CORRUPT.
+
+The FLAC and MP3 integrity scans support `--resume`: each run persists its
+verdicts to a transient `<output>.progress.json` beside the report, an
+interrupted run leaves that state behind, and a resumed run reuses recorded
+verdicts (only when the verification tool is unchanged) and scans only the
+remainder, still producing the full report. A completed scan deletes the state.
 
 ---
 

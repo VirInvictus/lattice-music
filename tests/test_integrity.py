@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 import time
@@ -12,7 +13,9 @@ from lattice.modes.integrity import (
     TIER_OK,
     TIER_SUSPECT,
     _find_files_by_ext_path,
+    _progress_file,
     classify_decode,
+    run_flac_mode,
     run_mp3_mode,
 )
 
@@ -210,6 +213,159 @@ class DecodeReportOrderTests(unittest.TestCase):
             ]
             self.assertEqual(listed, sorted(listed))
             self.assertEqual(len(listed), 3)
+
+
+class ProgressPersistenceTests(unittest.TestCase):
+    """--resume (FLAC/MP3 scoped): every scan writes verdicts through to
+    <output>.progress.json as it goes, an interrupted run leaves the state
+    behind, a resumed run reuses recorded verdicts and scans only the
+    remainder, and a completed scan deletes the state."""
+
+    def _tree(self, td: str, ext: str, names=("A", "B", "C")) -> list[Path]:
+        files = []
+        for name in names:
+            p = Path(td) / name / f"01{ext}"
+            p.parent.mkdir(parents=True)
+            p.write_bytes(b"")
+            files.append(p)
+        return files
+
+    def test_flac_interrupt_leaves_state_and_resume_finishes(self):
+        with tempfile.TemporaryDirectory() as td:
+            files = self._tree(td, ".flac")
+            out = Path(td) / "flac_errors.txt"
+            pfile = Path(str(out) + ".progress.json")
+            calls: list[str] = []
+            armed = [True]  # run one raises for B; the resumed run never does
+
+            def verdict(path, *, use_flac, ffmpeg_path):
+                calls.append(path)
+                if armed[0] and Path(path).parent.name == "B":
+                    raise KeyboardInterrupt
+                return ("flac", TIER_OK, "clean")
+
+            with (
+                mock.patch.object(integrity_mod, "has_tool", return_value=True),
+                mock.patch.object(integrity_mod, "_flac_verdict", verdict),
+            ):
+                rc1 = run_flac_mode([td], str(out), 1, "flac", quiet=True)
+            self.assertEqual(rc1, 130)
+            self.assertTrue(pfile.exists())
+            # The pool may have started files beyond the recorded verdicts
+            # before the interrupt landed; the state holds what was recorded.
+            cached = set(json.loads(pfile.read_text(encoding="utf-8"))["results"])
+            self.assertIn(str(files[0]), cached)  # A, first in the 1-worker queue
+
+            armed[0] = False
+            before = len(calls)
+            with (
+                mock.patch.object(integrity_mod, "has_tool", return_value=True),
+                mock.patch.object(integrity_mod, "_flac_verdict", verdict),
+            ):
+                rc2 = run_flac_mode([td], str(out), 1, "flac", resume=True, quiet=True)
+            self.assertEqual(rc2, 0)
+            # The rerun scans exactly the files the interrupted run never recorded.
+            self.assertEqual(set(calls[before:]), {str(p) for p in files} - cached)
+            # The full report covers every file; completion cleared the state.
+            self.assertIn("Scanned: 3", out.read_text(encoding="utf-8"))
+            self.assertFalse(pfile.exists())
+
+    def test_flac_resume_discards_state_when_the_tool_changes(self):
+        # A libFLAC verdict is not comparable to one from ffmpeg's stricter
+        # decoder; the state must be ignored rather than trusted.
+        with tempfile.TemporaryDirectory() as td:
+            files = self._tree(td, ".flac")
+            out = Path(td) / "flac_errors.txt"
+            pfile = Path(str(out) + ".progress.json")
+            calls: list[str] = []
+            armed = [True]
+
+            def verdict(path, *, use_flac, ffmpeg_path):
+                calls.append(path)
+                if armed[0] and Path(path).parent.name == "B":
+                    raise KeyboardInterrupt
+                return ("flac", TIER_OK, "clean")
+
+            with (
+                mock.patch.object(integrity_mod, "has_tool", return_value=True),
+                mock.patch.object(integrity_mod, "_flac_verdict", verdict),
+            ):
+                run_flac_mode([td], str(out), 1, "flac", quiet=True)
+            self.assertTrue(pfile.exists())
+
+            armed[0] = False
+            before = len(calls)
+            with (
+                mock.patch.object(integrity_mod, "has_tool", return_value=True),
+                mock.patch.object(integrity_mod, "_flac_verdict", verdict),
+            ):
+                # prefer=ffmpeg flips use_flac, invalidating every cached verdict.
+                run_flac_mode([td], str(out), 1, "ffmpeg", resume=True, quiet=True)
+            # Every file was re-scanned despite the state file existing.
+            self.assertEqual(set(calls[before:]), {str(p) for p in files})
+
+    def test_mp3_resume_reuses_verdicts_including_corrupt_rows(self):
+        with tempfile.TemporaryDirectory() as td:
+            files = self._tree(td, ".mp3")
+            out = Path(td) / "mp3_results.txt"
+            pfile = _progress_file(str(out))
+            calls: list[str] = []
+            armed = [True]
+            real = integrity_mod._scan_one_file
+
+            def scan(path, ffmpeg_path, *, enrich=False):
+                calls.append(str(path))
+                if armed[0] and Path(path).parent.name == "B":
+                    raise KeyboardInterrupt
+                row = real(path, ffmpeg_path, enrich=enrich)
+                if Path(path).parent.name == "C":
+                    row["tier"] = TIER_CORRUPT
+                    row["reason"] = "decode failed (test fixture)"
+                return row
+
+            with mock.patch.object(integrity_mod, "_scan_one_file", scan):
+                rc1 = run_mp3_mode(
+                    [td], str(out), 1, None, only_errors=True, verbose=False, quiet=True
+                )
+            self.assertEqual(rc1, 130)
+            cached = set(json.loads(pfile.read_text(encoding="utf-8"))["results"])
+
+            armed[0] = False
+            before = len(calls)
+            with mock.patch.object(integrity_mod, "_scan_one_file", scan):
+                rc2 = run_mp3_mode(
+                    [td],
+                    str(out),
+                    1,
+                    None,
+                    only_errors=True,
+                    verbose=False,
+                    quiet=True,
+                    resume=True,
+                )
+            self.assertEqual(rc2, 1)  # C's cached CORRUPT keeps the exit code
+            second_run = set(calls[before:])
+            self.assertEqual(second_run, {str(p) for p in files} - cached)
+            report = out.read_text(encoding="utf-8")
+            self.assertIn("Scanned: 3", report)
+            self.assertIn("decode failed (test fixture)", report)  # cached row
+            self.assertFalse(pfile.exists())
+
+    def test_progress_load_rejects_foreign_or_corrupt_state(self):
+        with tempfile.TemporaryDirectory() as td:
+            pfile = Path(td) / "r.txt.progress.json"
+            scan_id = {"kind": "flac", "use_flac": True}
+            self.assertIsNone(integrity_mod._load_progress(pfile, scan_id))
+            pfile.write_text("not json", encoding="utf-8")
+            self.assertIsNone(integrity_mod._load_progress(pfile, scan_id))
+            integrity_mod._save_progress(pfile, scan_id, {"/x": {"tier": TIER_OK}})
+            self.assertEqual(
+                integrity_mod._load_progress(pfile, scan_id),
+                {"/x": {"tier": TIER_OK}},
+            )
+            self.assertIsNone(
+                integrity_mod._load_progress(pfile, {"kind": "flac", "use_flac": False})
+            )
 
 
 if __name__ == "__main__":

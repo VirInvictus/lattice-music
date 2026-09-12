@@ -368,6 +368,7 @@ def _menu_session() -> int:
                         .strip()
                         .lower()
                     )
+                resume = ask_yn("Resume an interrupted scan? (y/N)")
                 run_with_capture(
                     "Test FLAC files",
                     run_flac_mode,
@@ -375,6 +376,7 @@ def _menu_session() -> int:
                     output,
                     workers,
                     pref,
+                    resume=resume,
                     quiet=False,
                     footer=out_note(output),
                 )
@@ -382,6 +384,7 @@ def _menu_session() -> int:
             elif result == (1, 1):
                 output = prompt_out("Output file", DEFAULT_MP3_OUTPUT)
                 workers, ffmpeg, include_ok = _integrity_prompts()
+                resume = ask_yn("Resume an interrupted scan? (y/N)")
                 run_with_capture(
                     "Test MP3 files",
                     run_mp3_mode,
@@ -391,6 +394,7 @@ def _menu_session() -> int:
                     ffmpeg,
                     only_errors=not include_ok,
                     verbose=include_ok,
+                    resume=resume,
                     quiet=False,
                     footer=out_note(output),
                 )

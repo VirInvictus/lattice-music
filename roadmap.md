@@ -5,7 +5,7 @@
 - [x] Adopt vir-tui 2.2.0's Phase-3 primitives — `progress_box()`, `interactive_session()`, `out_note()` — deleting the hand-mirrored `_TUIPbar`/shared-screen plumbing (v4.17.0).
 - [x] Adopt vir-tui 2.3.0: dependency floor `>=2.3.0` (mouse support, type-to-filter in menus of 15+ items, `configure_theme`); the lockfile had already been running 2.3.0. pytest-asyncio dropped from the dev group (v5.2.0).
 
-What's done, what's next, what's deferred. Sequenced for maximum utility as a standalone library management suite. Updated as of v5.2.1.
+What's done, what's next, what's deferred. Sequenced for maximum utility as a standalone library management suite. Updated as of v5.3.0.
 
 ---
 
@@ -50,7 +50,7 @@ What's done, what's next, what's deferred. Sequenced for maximum utility as a st
 - [x] **Submenus**: Nested library tree/export modes inside the TUI.
 - [x] **Standalone Binary**: Support compiling a self-contained, native binary using PyInstaller.
 - [x] **CLI Flag Parity**: Extensive command-line arguments mapping 1:1 with TUI capabilities (including `--dry-run` and `--version`).
-- [ ] **Progress Persistence**: Resume interrupted large-scale integrity scans (FLAC/MP3) from where they left off without restarting.
+- [x] **Progress Persistence**: Resume interrupted large-scale integrity scans (FLAC/MP3) from where they left off without restarting. Scoped to the FLAC and MP3 walks: every run writes verdicts through to a transient `<output>.progress.json`, an interrupted run leaves it behind, `--resume` reuses recorded verdicts (discarded if the verification tool changed) and scans only the remainder, and a completed run deletes the state. (v5.3.0)
 - [x] **Color Output in CLI**: Status summaries are colorized (green all-clear, yellow suspect, red corrupt). Gated on an interactive TTY: off in the TUI, off when piped or redirected, off under `NO_COLOR`, so reports and pipes stay clean. (v4.6.0)
 - [x] **Multi-Root Scanning**: `--root` is repeatable; several libraries scan together in one pass and de-dupe a repeated path. Cross-library duplicate detection groups an album that lives in two libraries, with each entry prefixed by its root's basename. An optional `library_roots` array in the JSON config supplies default roots; the first-run prompt still saves only the single `library_root`. (v4.6.0)
 - [x] **Configurable Path Layout**: A `layout` config key (and `--layout`) sets the pattern lattice-music uses to recover artist/album/genre from a path, so a genre-first tree (`{genre}/{artist}/{album}`) is fully supported; genre now falls back to the path like artist/album already did. Default stays `{artist}/{album}`. Pairs with the `genre_foldermap.py` companion script that builds such a tree. (v4.7.0)
