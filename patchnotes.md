@@ -1,5 +1,15 @@
 # lattice-music Patch Notes
 
+## v5.0.0 (2026-09-12)
+- **New write modes (the fold):** `scripts/cleaner.py` and `scripts/apestrip.py` are promoted into the `lattice` package as `lattice --clean` and `lattice --apestrip`, per the commissioned fold in REPORT-12-Sept.md. The pure name/tag rules engine now lives in `lattice.norm` (zero I/O), the four consolidation/normalization passes and their dry-run virtual filesystem in `lattice.modes.clean`, and the APEv2 classify/plan/apply/repair brain (including the verified atomic malformed-tag repair) in `lattice.modes.apestrip`.
+- **Contract amendment:** spec.md §5 now reads "reads tags; writes metadata only via the explicit `--clean`/`--apestrip` write modes (opt-in, logged, dry-run by default)". Every other mode remains read-only, and the remaining seven companion scripts stay put.
+- **Behavior change (the one deliberate break):** inside `lattice`, the write modes dry-run by default and write only on `--apply` (`--dry-run` always wins). The scripts keep their historical apply-by-default contract, so aliases and cron are unaffected.
+- **New:** `lattice --clean DIR [--normalize-names|--normalize-filenames|--normalize-tags|--all] [--layout]` consolidates fragmented album folders and optionally normalizes names and tags. Every change is logged (default `<root>/cleanup.log`) and the dry-run preview predicts the real run exactly.
+- **New:** `lattice --apestrip DIR [--keep-metadata] [--repair-malformed]` strips stray APEv2 tags from MP3s. A real run prints the worklist and asks for confirmation (auto-skipped when stdin is not a TTY); the log defaults to `<root>/apestrip.log`. Both write modes take exactly one root; an aggregated `--root` list is refused.
+- **TUI:** a new Maintenance section exposes both write modes behind yes/no confirms; answering No to the apply question runs the preview instead.
+- **Companion scripts:** `cleaner.py` (1.6.0) and `apestrip.py` (1.3.0) are now thin launchers that re-export the package implementation, so flags, log formats, idempotency, and the non-TTY auto-confirm are unchanged while the two implementations cannot drift.
+- **Tests:** test_cleaner.py and test_apestrip.py retarget the package modules wholesale (the `scripts/` sys.path hack is gone; the dry-run fidelity classes moved whole), and new test_write_modes.py pins the CLI/TUI write-mode contract. Suite: 489 to 501, green.
+
 ## v4.17.0 (2026-08-28)
 - **Refactor**: Dropped lattice-music's hand-mirrored TUI progress implementation — `_TUIPbar`, the `_TUI_BOX_W`/color-pair id mirrors, and the `_SHARED_SCREEN`/`set_shared_screen` plumbing (~110 lines) are replaced by `vir_tui.progress_box()` (vir-tui 2.2.0's first-class, session-screen-aware progress widget). Rendering can no longer drift from the TUI's style when vir-tui restyles.
 - **Refactor**: `interactive_menu()` delegates the curses session lifecycle (open, degrade-to-text, close, KeyboardInterrupt cleanup) to vir-tui 2.2.0's `interactive_session()` context manager; the `utils.IN_TUI` flag is now set from the yielded session screen.

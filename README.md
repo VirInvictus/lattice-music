@@ -13,7 +13,7 @@
 
 A CLI/TUI toolkit for music collectors who manage their own libraries. lattice-music handles library visualization, integrity verification, cover art extraction, and metadata auditing, built on `mutagen` and `tqdm`, with the shared `vir-tui` library powering its terminal UI and `flac` and `ffmpeg` shelled out for integrity checks.
 
-> **lattice-music is read-only.** It reads tags and decodes audio, and it writes only reports, playlists, and extracted cover art. It never modifies the metadata inside your audio files. The optional companion scripts in `scripts/` are the deliberate exception: they **do** modify files (tags, rating bytes, folder layout) and must be used with caution. See [Companion scripts](#companion-scripts).
+> **Read-only by default.** lattice-music reads tags and decodes audio, and it writes only reports, playlists, and extracted cover art. The two exceptions are the explicit write modes: `--clean` (consolidate fragmented album folders, optionally normalize names and tags) and `--apestrip` (remove stray APEv2 tags from MP3s). Both are dry-run by default, write only on `--apply`, and log every change. The optional companion scripts in `scripts/` also **do** modify files (tags, rating bytes, folder layout) and must be used with caution. See [Write modes](#write-modes) and [Companion scripts](#companion-scripts).
 
 > **Note:** This is considered completed software. It is effectively feature complete; bug fixes will be addressed as they come, but no new features are planned. It has been thoroughly tested and is known to be fully functional on the primary development environment: **Fedora Linux 44 (Workstation Edition)**, kernel `7.0.9-205.fc44.x86_64`, on **Python 3.14**, with `flac` and `ffmpeg` from the Fedora repositories. While it is pure Python and should be cross-platform, this specific setup is the only officially tested environment.
 
@@ -23,7 +23,7 @@ A CLI/TUI toolkit for music collectors who manage their own libraries. lattice-m
 - [Features](#features) · [Sample output](#sample-output)
 - [Installation](#installation) · [Requirements](#requirements)
 - [Usage](#usage)
-- Modes: [AI library export](#ai-library-export) · [Genre wings](#genre-wings) · [Multi-root scanning](#multi-root-scanning) · [Integrity checks](#integrity-checks) · [Library statistics](#library-statistics) · [Cover art extraction](#cover-art-extraction) · [Color output](#color-output) · [Supported formats](#supported-formats)
+- Modes: [Write modes](#write-modes) · [AI library export](#ai-library-export) · [Genre wings](#genre-wings) · [Multi-root scanning](#multi-root-scanning) · [Integrity checks](#integrity-checks) · [Library statistics](#library-statistics) · [Cover art extraction](#cover-art-extraction) · [Color output](#color-output) · [Supported formats](#supported-formats)
 - [Architecture](#architecture)
 - [Full help output](#full-help-output)
 - [Companion scripts](#companion-scripts) (destructive): [`retag.py`](#retagpy) · [`genre_tidy.py`](#genre_tidypy) · [`rerate.py`](#reratepy) · [`cleaner.py`](#cleanerpy) · [`genre_foldermap.py`](#genre_foldermappy) · [`replaygain.py`](#replaygainpy) · [`apestrip.py`](#apestrippy) · [`slipcover.py`](#slipcoverpy) · [`flac2opus.py`](#flac2opuspy)
@@ -55,9 +55,11 @@ Modern music players often hide your library behind proprietary databases. latti
 | **Tag audit** | `--auditTags` | Reports files missing title, artist, track number, or genre to text |
 | **Bitrate audit** | `--auditBitrate` | Reports files falling below a minimum bitrate floor |
 | **ReplayGain audit** | `--auditReplayGain` | Reports per-album ReplayGain coverage (missing, partial, no album gain, OK); Opus R128 gain counts as tagged |
+| **Clean (write)** | `--clean` | Consolidates fragmented album folders; opt-in `--normalize-names`/`--normalize-filenames`/`--normalize-tags` passes. Dry-run by default, `--apply` to write |
+| **APEv2 strip (write)** | `--apestrip` | Removes stray APEv2 tags from MP3s (`--keep-metadata` to migrate first, `--repair-malformed` for broken tags). Dry-run by default, `--apply` to write |
 | **Version** | `--version` | Prints version and exits |
 
-Running with no arguments launches an interactive TUI: a full-screen curses interface with arrow-key navigation, color-coded section groups (Library, Integrity, Artwork, Metadata), and a highlighted selection cursor. Menus, parameter prompts, and pause screens all render inside styled Unicode boxes for a consistent experience. Library tree, AI export, and genre wings live in a dedicated submenu. Long reports open in a scrollable, pannable results pager with `/` search and `n`/`N` match jumping. Falls back to typed input if curses is unavailable.
+Running with no arguments launches an interactive TUI: a full-screen curses interface with arrow-key navigation, color-coded section groups (Library, Integrity, Artwork, Metadata, Maintenance), and a highlighted selection cursor. Menus, parameter prompts, and pause screens all render inside styled Unicode boxes for a consistent experience. Library tree, AI export, and genre wings live in a dedicated submenu; the two write modes live under Maintenance behind yes/no confirms. Long reports open in a scrollable, pannable results pager with `/` search and `n`/`N` match jumping. Falls back to typed input if curses is unavailable.
 
 ## Sample output
 
@@ -162,7 +164,36 @@ lattice --auditTags --output tag_audit.txt
 
 # Audit ReplayGain coverage per album (add --verbose to also list fully-tagged albums)
 lattice --auditReplayGain --output replaygain_audit.txt
+
+# Preview the clean write mode: merge fragmented album folders (writes nothing)
+lattice --clean ~/Music
+
+# Merge for real, plus the opt-in name and tag normalization passes
+lattice --clean ~/Music --apply --normalize-names --normalize-filenames --normalize-tags
+
+# Preview the APEv2 strip, then apply it
+lattice --apestrip ~/Music
+lattice --apestrip ~/Music --apply
 ```
+
+## Write modes
+
+Two modes write to your library, and both are **dry-run by default**: without `--apply` they only preview, and every change is recorded to an append-only timestamped log.
+
+- **`lattice --clean`** consolidates fragmented album folders (the same job as [`cleaner.py`](#cleanerpy)), then applies the opt-in passes you name: `--normalize-names` (rename folders at any depth), `--normalize-filenames` (rename track files), `--normalize-tags` (library-wide typographic tag normalization; on MP3s it writes ID3v2.3 plus a refreshed ID3v1), or `--all` for all three. On a genre-first library, pass `--layout '{genre}/{artist}/{album}'` so the tag pass reads the artist level correctly. The preview predicts the real run exactly; the log defaults to `<root>/cleanup.log`.
+- **`lattice --apestrip`** strips stray APEv2 tags from MP3s (the same job as [`apestrip.py`](#apestrippy)). `--keep-metadata` migrates sole-source APE fields into ID3 first (genre is never migrated; ratings are reported, never written), and `--repair-malformed` also repairs malformed APE tags via verified atomic byte surgery. A real run prints the worklist and asks for confirmation (auto-skipped when stdin is not a TTY); the log defaults to `<root>/apestrip.log`.
+
+```bash
+# Preview, then merge fragmented folders and run every normalization pass
+lattice --clean ~/Music
+lattice --clean ~/Music --apply --all
+
+# Preview, then strip APEv2 tags
+lattice --apestrip ~/Music
+lattice --apestrip ~/Music --apply --keep-metadata
+```
+
+The TUI exposes both under its Maintenance section, behind yes/no confirms (answering No to the apply question runs the preview instead). The `scripts/cleaner.py` and `scripts/apestrip.py` launchers keep their historical apply-by-default behavior for aliases and cron; see [Companion scripts](#companion-scripts).
 
 ## AI library export
 
@@ -248,12 +279,14 @@ The filesystem is the source of truth: lattice-music walks the tree on every inv
 <summary>Full <code>lattice --help</code></summary>
 
 ```
-usage: lattice [-h] [--version] [--library | --ai-library | --all-wings | --ai-wings | --testFLAC | --testMP3 | --testOpus | --testWAV |
-               --testWMA | --extractArt | --missingArt | --auditArtQuality | --duplicates | --auditTags | --auditBitrate | --auditReplayGain |
-               --playlist | --stats]
-               [--root DIR] [--output OUTPUT] [--rule RULE] [--layout LAYOUT] [--min-art-res MIN_ART_RES] [--min-bitrate MIN_BITRATE]
-               [--workers WORKERS] [--prefer {flac,ffmpeg}] [--quiet] [--genres] [--paths] [--dry-run] [--only-errors | --no-only-errors]
-               [--ffmpeg FFMPEG] [--verbose]
+usage: lattice [-h] [--version] [--library | --ai-library | --all-wings | --ai-wings | --testFLAC |
+               --testMP3 | --testOpus | --testWAV | --testWMA | --extractArt | --missingArt |
+               --auditArtQuality | --duplicates | --auditTags | --auditBitrate | --auditReplayGain |
+               --playlist | --stats | --clean | --apestrip] [--root DIR] [--output OUTPUT] [--rule RULE]
+               [--layout LAYOUT] [--min-art-res MIN_ART_RES] [--min-bitrate MIN_BITRATE] [--workers WORKERS]
+               [--prefer {flac,ffmpeg}] [--quiet] [--genres] [--paths] [--dry-run] [--apply]
+               [--normalize-names] [--normalize-filenames] [--normalize-tags] [--all] [--keep-metadata]
+               [--repair-malformed] [--only-errors | --no-only-errors] [--ffmpeg FFMPEG] [--verbose]
                [pos_root]
 
 Music library toolkit: tree, integrity, art, duplicates, tag audit
@@ -276,18 +309,23 @@ options:
   --extractArt          Extract embedded cover art to folder
   --missingArt          Report directories missing cover art
   --auditArtQuality     Report extracted/folder covers below a resolution threshold
-  --duplicates          Four-section dupe report: exact albums, within-folder multi-format, similar names, track-level
+  --duplicates          Four-section dupe report: exact albums, within-folder multi-format, similar names,
+                        track-level
   --auditTags           Report files with incomplete tags
   --auditBitrate        Report files below a certain bitrate floor
   --auditReplayGain     Report per-album ReplayGain coverage (missing, partial, no album gain)
   --playlist            Generate a smart .m3u playlist based on a rule
   --stats               Library-wide statistics summary
-  --root DIR            Root directory; repeat --root to scan several libraries
-                        together (default: read from config or current dir)
+  --clean               Consolidate fragmented album folders; optionally normalize names and tags (write
+                        mode: dry-run by default, --apply to write)
+  --apestrip            Strip stray APEv2 tags from MP3s (write mode: dry-run by default, --apply to write)
+  --root DIR            Root directory; repeat --root to scan several libraries together (default: read from
+                        config or current dir)
   --output OUTPUT       Output path
   --rule RULE           Smart playlist rule (e.g. "rating >= 4 and genre == 'Jazz'")
-  --layout LAYOUT       Directory structure pattern for extracting tags from path (default: the `layout` config key,
-                        or {artist}/{album}). Use {genre}/{artist}/{album} for a genre-first library.
+  --layout LAYOUT       Directory structure pattern for extracting tags from path (default: the `layout`
+                        config key, or {artist}/{album}). Use {genre}/{artist}/{album} for a genre-first
+                        library.
   --min-art-res MIN_ART_RES
                         Minimum resolution in pixels for --auditArtQuality (default: 500)
   --min-bitrate MIN_BITRATE
@@ -298,7 +336,20 @@ options:
   --quiet               Minimize output
   --genres              Include album genres in library tree
   --paths               Include absolute directory paths at the album level
-  --dry-run             Preview changes without writing (extractArt)
+  --dry-run             Preview changes without writing (extractArt, clean, apestrip)
+  --apply               Write for real (clean, apestrip); without it these modes only preview
+  --normalize-names     --clean: also rename non-duplicate folders at every depth with non-standard
+                        characters to their normalized form
+  --normalize-filenames
+                        --clean: also rename audio track files the same way (a distinct change from
+                        --normalize-names)
+  --normalize-tags      --clean: library-wide typographic tag normalization (Pass 4)
+  --all                 --clean: run all normalization passes (--normalize-names, --normalize-filenames,
+                        --normalize-tags)
+  --keep-metadata       --apestrip: before stripping, migrate APE fields not already in ID3 into the
+                        matching ID3 frame (genre is never migrated, ratings never written)
+  --repair-malformed    --apestrip: also repair malformed APE tags mutagen cannot parse, by excising the tag
+                        bytes directly (verified + atomic)
   --only-errors, --no-only-errors
                         Write only errors/warns (MP3/Opus modes)
   --ffmpeg FFMPEG       Path to ffmpeg
@@ -309,7 +360,7 @@ options:
 
 ## Companion scripts
 
-The `scripts/` directory holds eight standalone maintenance tools. They are **not** part of the `lattice` package and deliberately sit **outside its read-only contract**: unlike lattice-music itself, they **modify your files in place**, rewriting tags, rewriting rating bytes, or moving and renaming folders. Run them directly with `python3`.
+The `scripts/` directory holds nine standalone maintenance tools. Two of them, [`cleaner.py`](#cleanerpy) and [`apestrip.py`](#apestrippy), are thin launchers over the packaged [write modes](#write-modes) (same flags, same logs, apply-by-default as they always were). The rest are **not** part of the `lattice` package and sit **outside its contract** on purpose: unlike the package's read-only modes, they **modify your files in place**, rewriting tags, rewriting rating bytes, or moving and renaming folders. Run them directly with `python3`.
 
 **Use them with caution.** Have a backup or snapshot first, always preview with `--dry-run`, and read the log before applying. Each writes an append-only timestamped log and is idempotent, so a second run on an already-clean library is a no-op.
 
@@ -450,6 +501,8 @@ It touches only those exact bytes. foobar's canonical values, MusicBee's bytes (
 ### `cleaner.py`
 
 > **Destructive: moves, merges, and renames folders.** Preview with `--dry-run` and read the log before applying.
+
+> **Launcher note.** Since 5.0.0 the consolidation and normalization engine lives in the package (`lattice --clean`); `scripts/cleaner.py` is a thin launcher over it, kept for aliases and cron with the same flags, the same `<directory>/cleanup.log`, and its historical apply-by-default contract. Everything below describes both entry points; only the default (apply here, dry-run in the package) differs.
 
 A one-shot consolidator for **album folders that have fragmented across two paths because of inconsistent metadata**. The pattern looks like this:
 
@@ -608,6 +661,8 @@ This switches rsgain to custom mode and writes standard `replaygain_*` tags for 
 ### `apestrip.py`
 
 > **Destructive: removes APEv2 tags from MP3s in place.** Always preview with `--dry-run`; a confirmation prompt guards the real run, and a `--log` is written by default.
+
+> **Launcher note.** Since 5.0.0 the strip engine lives in the package (`lattice --apestrip`); `scripts/apestrip.py` is a thin launcher over it, kept for aliases and cron with the same flags, the same `<directory>/apestrip.log`, and its historical apply-by-default contract. Everything below describes both entry points; only the default (apply here, dry-run in the package) differs.
 
 Some MP3s (commonly torrent rips) carry a hidden **APEv2 tag** in addition to their ID3 tags. Players that read APEv2 on MP3, including foobar2000 and DeaDBeeF, merge the APE values over the ID3 ones. So a stray APE `Genre` like `Trash Metal` keeps reappearing as `Trash Metal, Metal` no matter how many times you fix the ID3 genre, and ordinary tag editors never touch the APEv2 block, so it looks unkillable. `retag.py` removes APEv2 only as a side effect of rewriting the genre; `apestrip.py` is the general stripper.
 

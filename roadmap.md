@@ -4,7 +4,7 @@
 - [x] Extract `vir-tui` core into a standalone repository and replace local primitives with the shared dependency.
 - [x] Adopt vir-tui 2.2.0's Phase-3 primitives — `progress_box()`, `interactive_session()`, `out_note()` — deleting the hand-mirrored `_TUIPbar`/shared-screen plumbing (v4.17.0).
 
-What's done, what's next, what's deferred. Sequenced for maximum utility as a standalone library management suite. Updated as of v4.17.0.
+What's done, what's next, what's deferred. Sequenced for maximum utility as a standalone library management suite. Updated as of v5.0.0.
 
 ---
 
@@ -263,33 +263,38 @@ keep today's apply-by-default so aliases and cron do not change.
 
 ### A. The fold (spec.md §5 amendment + README.md:16 + CLAUDE.md:69 ride this section)
 
-- [ ] **`src/lattice/norm.py`**: promote the pure rules engine
+- [x] **`src/lattice/norm.py`**: promote the pure rules engine
   (normalize_name, canonical_render, tag_fold, tag_dedupe,
   is_legal_name, the fold tables, `_FEAT_RE`, canon_track_artist).
-  Zero I/O.
-- [ ] **`src/lattice/modes/clean.py`**: the `Run` virtual filesystem +
+  Zero I/O. (v5.0.0)
+- [x] **`src/lattice/modes/clean.py`**: the `Run` virtual filesystem +
   the four passes as `run_clean(root, *, dry_run, normalize_names,
   normalize_filenames, normalize_tags, layout, log_path, quiet)`;
-  dry-run by default, `--apply` opt-in.
-- [ ] **`src/lattice/modes/apestrip.py`**: classify/plan/apply/repair
+  dry-run by default, `--apply` opt-in. (v5.0.0)
+- [x] **`src/lattice/modes/apestrip.py`**: classify/plan/apply/repair
   as `run_apestrip(root, *, dry_run, keep_metadata, repair_malformed,
-  log_path, quiet)`.
-- [ ] **CLI + TUI wiring**: `lattice --clean [DIR] [...]` and
+  log_path, quiet)`; the script's two-phase main (dry plan, worklist,
+  confirm with non-TTY auto-skip) is preserved inside. (v5.0.0)
+- [x] **CLI + TUI wiring**: `lattice --clean [DIR] [...]` and
   `lattice --apestrip [DIR] [...]` (argparse + dispatch + the
-  mandatory TUI entries with `ask_yn` confirms).
-- [ ] **Compat shims**: scripts/cleaner.py and scripts/apestrip.py
-  become argparse-preserving re-export wrappers (the slipcover.py
-  pattern); flags, log defaults, idempotency, and non-TTY
-  auto-confirm preserved.
-- [ ] **Tests retargeted** to the package modules (~135 tests; delete
-  the sys.path hack at test_apestrip.py:17).
-- [ ] **Contract amendment**: spec.md §5 rewritten to "reads tags;
+  mandatory TUI entries with `ask_yn` confirms; a MAINTENANCE menu
+  section; the write modes refuse an aggregated root list). (v5.0.0)
+- [x] **Compat shims**: scripts/cleaner.py and scripts/apestrip.py
+  become argparse-preserving re-export wrappers (PEP 562) over the
+  package; flags, log defaults, idempotency, and non-TTY
+  auto-confirm preserved, verified end to end. (v5.0.0)
+- [x] **Tests retargeted** to the package modules (139 across
+  tests/test_cleaner.py and tests/test_apestrip.py; the sys.path hack
+  is gone; DryRunFidelity/DryRunCreation parity classes moved whole;
+  test_write_modes.py adds 12 wiring tests; suite 489 → 501). (v5.0.0)
+- [x] **Contract amendment**: spec.md §5 now reads "reads tags;
   writes metadata only via the explicit --clean/--apestrip write
-  modes (opt-in, logged, dry-run by default)"; README.md:16 and
-  CLAUDE.md:69 name the two exceptions; patchnotes + version bump.
-- [ ] **Ship as v5.0.0**: the contract change is a major (the spec
+  modes (opt-in, logged, dry-run by default)"; README and CLAUDE.md
+  name the two exceptions instead of the blanket ban; patchnotes +
+  version bump landed with this release. (v5.0.0)
+- [x] **Ship as v5.0.0**: the contract change is a major (the spec
   amendment says so); the PyInstaller binary ships mutation, so the
-  TUI menu entry confirms before applying.
+  TUI menu entry confirms before applying. (v5.0.0)
 
 ### B. The landscape gaps (each an audit mode unless noted)
 

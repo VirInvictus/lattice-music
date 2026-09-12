@@ -1,6 +1,6 @@
 # lattice-music Application Specification
 
-**Version:** 4.17.0  
+**Version:** 5.0.0  
 **Language:** Python 3.14+  
 **Dependencies:** `mutagen`, `tqdm`, `vir-tui`  
 **License:** MIT
@@ -30,9 +30,10 @@ The codebase is structured as a proper Python package (`src/lattice/`) managed b
 - `cli.py`: Command routing and argparse definitions.
 - `tui.py`: Full-screen interactive curses interface.
 - `tags.py`: Extraction logic (`TagBundle`) over mutagen.
+- `norm.py`: Pure name and tag normalization rules (quote/dash folding, CP1252 mojibake repair, tag deduplication); zero I/O, shared by the write modes.
 - `utils.py`: Shared utilities (progress bars, terminal formatting).
 - `config.py`: Default constants, the default path-extraction `layout`, the tag-read worker count (`tag_workers`), and persistent library root configuration (`~/.config/lattice/config.json`).
-- `modes/`: The individual operation features (e.g., `library.py`, `integrity.py`, `artwork.py`).
+- `modes/`: The individual operation features (e.g., `library.py`, `integrity.py`, `artwork.py`, `clean.py`, `apestrip.py`).
 
 ### 2.2 Tag Reading
 
@@ -114,6 +115,8 @@ supplies default roots; the first-run prompt persists only the single
 | Bitrate audit | `--auditBitrate` | Report files below a configurable bitrate floor |
 | ReplayGain audit | `--auditReplayGain` | Report per-album ReplayGain coverage (missing / partial / no album gain / OK); Opus R128 gain counts as tagged |
 | Smart playlist | `--playlist` | Generate an `.m3u` from a dynamic rule (e.g. `rating >= 4 and genre == 'Jazz'`) |
+| Clean | `--clean` | Consolidate fragmented album folders (quote/dash/case variants) with opt-in name (`--normalize-names`, `--normalize-filenames`) and tag (`--normalize-tags`) normalization passes; write mode, dry-run by default |
+| APEv2 strip | `--apestrip` | Remove stray APEv2 tags from MP3s (`--keep-metadata` to migrate sole-source fields first, `--repair-malformed` for tags mutagen cannot parse); write mode, dry-run by default |
 
 ---
 
@@ -145,15 +148,22 @@ is CORRUPT.
 ## 5. What lattice-music Is Not
 
 - **Not a player.** It reads tags; it does not play audio.
-- **Not a tagger.** It reads metadata; it does not write it.
+- **Not a tagger.** It reads metadata; it writes metadata only via the explicit
+  `--clean`/`--apestrip` write modes (opt-in via `--apply`, logged, dry-run by
+  default). Every other mode stays read-only.
 - **Not a database.** It walks the filesystem every time; there is no index.
 - **Not a sync tool.** It does not interact with cloud services or devices.
 
 ## 6. Companion Scripts
 
-Because the core `lattice` package is strictly read-only, destructive operations are implemented as standalone Python scripts in the `scripts/` directory. These are not installed by `pip` or `pipx`, and are run directly. 
+Seven destructive operations remain standalone Python scripts in the `scripts/`
+directory (they are not installed by `pip` or `pipx`, and are run directly).
+`cleaner.py` and `apestrip.py` were promoted into the package as the
+`--clean`/`--apestrip` write modes in 5.0.0; the scripts by those names survive
+as thin launchers over the package implementation, preserving the
+apply-by-default CLI they always had.
 
 Notable scripts include:
 - `slipcover.py`: Embeds existing folder cover art (`cover.jpg`, etc.) into audio files lacking embedded art, maintaining parity between the filesystem and embedded metadata.
 - `flac2opus.py`: Converts FLAC files to Opus 128kbps, guaranteeing tag and duration parity before cleanly deleting the original FLAC.
-- `retag.py`, `genre_tidy.py`, `rerate.py`, `cleaner.py`, `genre_foldermap.py`, `replaygain.py`, `apestrip.py`: Various other destructive and state-mutating utilities documented in `CLAUDE.md` and `README.md`.
+- `retag.py`, `genre_tidy.py`, `rerate.py`, `genre_foldermap.py`, `replaygain.py`: Various other destructive and state-mutating utilities documented in `CLAUDE.md` and `README.md`. (`cleaner.py` and `apestrip.py` are now launchers over the package's `--clean`/`--apestrip` write modes.)

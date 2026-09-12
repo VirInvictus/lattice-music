@@ -31,7 +31,7 @@ wheels = [
 
 [[package]]
 name = "lattice-music"
-version = "4.17.0"
+version = "5.0.0"
 source = { editable = "." }
 dependencies = [
     { name = "mutagen" },
