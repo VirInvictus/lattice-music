@@ -1,5 +1,9 @@
 # lattice-music Patch Notes
 
+## v5.2.0 (2026-09-12)
+- **Dependency:** the `vir-tui` floor moves to `>=2.3.0` (mouse support, type-to-filter in menus of 15+ items, `configure_theme`). The lockfile has resolved 2.3.0 since the v4.17.0 refresh, so installs already receive it; the floor now says so.
+- **Chore:** dropped `pytest-asyncio` from the dev dependency group. The suite is stdlib `unittest` and the repo carries no asyncio anywhere; `pytest` stays as an optional runner.
+
 ## v5.1.0 (2026-09-12)
 - **New mode: `--auditStrays`** (the stray-file audit from the 2026-09-12 landscape research). One read-only pass reports everything that does not fit the library's own layout: audio at the wrong depth for the configured `--layout` (a flat `Artist/Album` stray in a genre-first tree, a root-level file), loose tracks sitting directly in a folder at the artist slot, audio hidden in dot-directories and dot-names that the scanners and integrity walks prune silently, and unrecognized non-audio files inside album folders. Recognized furniture (cover images, playlists, cue sheets, checksum sidecars, and the companion tools' own logs) is ignored via documented extension sets; anything else is listed for curation. Writes `stray_audit.txt` by default; wired into the CLI and the TUI's Metadata section. Twelve new tests; suite 501 to 513.
 - **Cleanup:** `audit.py`'s hand-mirrored quote/dash fold table (kept because the cleaner used to live outside the package) now imports `lattice.norm`, removing the last copy of the fold rules.
