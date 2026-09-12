@@ -1,5 +1,8 @@
 # lattice-music Patch Notes
 
+## v5.2.1 (2026-09-12)
+- **Fix (release hygiene):** the v5.2.0 commit missed the pyproject half of the version sync set (config.VERSION said 5.2.0, pyproject still said 5.1.0). The tagged v5.2.0 build therefore produced artifacts named `5.1.0`, which raced the real v5.1.0 publish and won: **PyPI's 5.1.0 files are the v5.2.0-commit build** (internally `lattice --version` prints 5.2.0 and `Requires-Dist` is the newer `vir-tui>=2.3.0`), the true v5.1.0 build lost the race with a 400, and no 5.2.0 was ever uploaded. PyPI forbids re-uploading a filename, so that 5.1.0 record is permanent; it is functionally complete but its embedded version string lags. This release restores the sync set and ships the real 5.2.1 to PyPI. No code changes.
+
 ## v5.2.0 (2026-09-12)
 - **Dependency:** the `vir-tui` floor moves to `>=2.3.0` (mouse support, type-to-filter in menus of 15+ items, `configure_theme`). The lockfile has resolved 2.3.0 since the v4.17.0 refresh, so installs already receive it; the floor now says so.
 - **Chore:** dropped `pytest-asyncio` from the dev dependency group. The suite is stdlib `unittest` and the repo carries no asyncio anywhere; `pytest` stays as an optional runner.

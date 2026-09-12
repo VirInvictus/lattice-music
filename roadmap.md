@@ -5,7 +5,7 @@
 - [x] Adopt vir-tui 2.2.0's Phase-3 primitives — `progress_box()`, `interactive_session()`, `out_note()` — deleting the hand-mirrored `_TUIPbar`/shared-screen plumbing (v4.17.0).
 - [x] Adopt vir-tui 2.3.0: dependency floor `>=2.3.0` (mouse support, type-to-filter in menus of 15+ items, `configure_theme`); the lockfile had already been running 2.3.0. pytest-asyncio dropped from the dev group (v5.2.0).
 
-What's done, what's next, what's deferred. Sequenced for maximum utility as a standalone library management suite. Updated as of v5.2.0.
+What's done, what's next, what's deferred. Sequenced for maximum utility as a standalone library management suite. Updated as of v5.2.1.
 
 ---
 
