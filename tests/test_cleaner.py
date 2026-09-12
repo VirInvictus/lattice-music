@@ -1,4 +1,3 @@
-import os
 import re
 import shutil
 import struct
@@ -8,35 +7,33 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-# cleaner.py lives in scripts/ (outside the lattice package); add it to the path
-# so its helpers can be imported. Filesystem ops are exercised against tempfile
-# trees; normalize_name (a pure helper) is tested directly.
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
-
-import cleaner
+# The cleaner brain lives in the lattice package now (promoted out of scripts/,
+# which launches it as a shim). These tests exercise the package modules: the
+# pure name/tag rules via lattice.norm, the Run virtual filesystem and the four
+# passes via lattice.modes.clean, against tempfile trees.
+from lattice import norm
+from lattice.modes import clean
 
 
 class NormalizeNameTests(unittest.TestCase):
     def test_case_and_whitespace_collapse(self):
-        self.assertEqual(cleaner.normalize_name("  The   Album "), "the album")
+        self.assertEqual(norm.normalize_name("  The   Album "), "the album")
 
     def test_dash_variants_fold(self):
-        self.assertEqual(
-            cleaner.normalize_name("Jay‐Z"), cleaner.normalize_name("Jay-Z")
-        )
-        self.assertEqual(cleaner.normalize_name("A–B"), cleaner.normalize_name("A-B"))
+        self.assertEqual(norm.normalize_name("Jay‐Z"), norm.normalize_name("Jay-Z"))
+        self.assertEqual(norm.normalize_name("A–B"), norm.normalize_name("A-B"))
 
     def test_curly_quote_folds(self):
         self.assertEqual(
-            cleaner.normalize_name("You’re Gonna Miss It"),
-            cleaner.normalize_name("You're Gonna Miss It"),
+            norm.normalize_name("You’re Gonna Miss It"),
+            norm.normalize_name("You're Gonna Miss It"),
         )
 
     def test_apostrophe_present_vs_absent(self):
         # The 2026-05-25 found-bug fix: apostrophes are stripped so these merge.
         self.assertEqual(
-            cleaner.normalize_name("Director's Cut"),
-            cleaner.normalize_name("Directors Cut"),
+            norm.normalize_name("Director's Cut"),
+            norm.normalize_name("Directors Cut"),
         )
 
 
@@ -69,14 +66,14 @@ class ConsolidateTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def _run(self, dry_run=False):
-        return cleaner.Run(self.root, self.log, dry_run=dry_run)
+        return clean.Run(self.root, self.log, dry_run=dry_run)
 
     def test_find_groups_matches_normalized_siblings(self):
         _make_dir(self.root, "Album", {"a.flac": b"a"})
         _make_dir(self.root, "album", {"b.flac": b"b"})
         _make_dir(self.root, "Different", {"c.flac": b"c"})
         run = self._run()
-        groups = cleaner.find_groups(self.root, run)
+        groups = clean.find_groups(self.root, run)
         run.close()
         self.assertEqual(len(groups), 1)
         self.assertEqual({p.name for p in groups[0]}, {"Album", "album"})
@@ -85,7 +82,7 @@ class ConsolidateTests(unittest.TestCase):
         _make_dir(self.root, "Album", {"a.flac": b"a"})
         _make_dir(self.root, ".album", {"b.flac": b"b"})
         run = self._run()
-        groups = cleaner.find_groups(self.root, run)
+        groups = clean.find_groups(self.root, run)
         run.close()
         self.assertEqual(groups, [])
 
@@ -93,7 +90,7 @@ class ConsolidateTests(unittest.TestCase):
         canon = _make_dir(self.root, "Album", {"01.flac": b"x", "02.flac": b"y"})
         src = _make_dir(self.root, "album", {"03.flac": b"z"})
         run = self._run()
-        cleaner.consolidate_group([canon, src], "test", run)
+        clean.consolidate_group([canon, src], "test", run)
         run.close()
         self.assertTrue((canon / "03.flac").exists())
         self.assertFalse(src.exists())
@@ -102,7 +99,7 @@ class ConsolidateTests(unittest.TestCase):
         canon = _make_dir(self.root, "Album", {"01.flac": b"x" * 100, "02.flac": b"y"})
         src = _make_dir(self.root, "album", {"01.flac": b"x" * 200})
         run = self._run()
-        cleaner.consolidate_group([canon, src], "test", run)
+        clean.consolidate_group([canon, src], "test", run)
         run.close()
         self.assertEqual((canon / "01.flac").read_bytes(), b"x" * 100)
         self.assertTrue((canon / "01.from-fragment.flac").exists())
@@ -115,7 +112,7 @@ class ConsolidateTests(unittest.TestCase):
         canon = _make_dir(self.root, "Album", {"01.wma": b"x" * 100, "02.flac": b"y"})
         src = _make_dir(self.root, "album", {"01.wma": b"x" * 200})
         run = self._run()
-        cleaner.consolidate_group([canon, src], "test", run)
+        clean.consolidate_group([canon, src], "test", run)
         run.close()
         self.assertEqual((canon / "01.wma").read_bytes(), b"x" * 100)
         self.assertTrue((canon / "01.from-fragment.wma").exists())
@@ -125,7 +122,7 @@ class ConsolidateTests(unittest.TestCase):
         canon = _make_dir(self.root, "Album", {"01.flac": b"x" * 100, "02.flac": b"y"})
         src = _make_dir(self.root, "album", {"01.flac": b"x" * 100})
         run = self._run()
-        cleaner.consolidate_group([canon, src], "test", run)
+        clean.consolidate_group([canon, src], "test", run)
         run.close()
         self.assertFalse((canon / "01.from-fragment.flac").exists())
         self.assertFalse(src.exists())
@@ -136,7 +133,7 @@ class ConsolidateTests(unittest.TestCase):
         canon = _make_dir(self.root, "Album", {"01.flac": b"x" * 100, "02.flac": b"y"})
         src = _make_dir(self.root, "album", {"01.flac": b"z" * 100})
         run = self._run()
-        cleaner.consolidate_group([canon, src], "test", run)
+        clean.consolidate_group([canon, src], "test", run)
         run.close()
         self.assertEqual((canon / "01.flac").read_bytes(), b"x" * 100)
         self.assertTrue((canon / "01.from-fragment.flac").exists())
@@ -147,7 +144,7 @@ class ConsolidateTests(unittest.TestCase):
         canon = _make_dir(self.root, "Album", {"info.nfo": b"A" * 50, "01.flac": b"z"})
         src = _make_dir(self.root, "album", {"info.nfo": b"B" * 99})
         run = self._run()
-        cleaner.consolidate_group([canon, src], "test", run)
+        clean.consolidate_group([canon, src], "test", run)
         run.close()
         self.assertEqual((canon / "info.nfo").read_bytes(), b"A" * 50)
         self.assertFalse(any(canon.glob("*from-fragment*")))
@@ -157,7 +154,7 @@ class ConsolidateTests(unittest.TestCase):
         canon = _make_dir(self.root, "Album", {"01.flac": b"x", "02.flac": b"y"})
         src = _make_dir(self.root, "album", {"03.flac": b"z"})
         run = self._run(dry_run=True)
-        cleaner.consolidate_group([canon, src], "test", run)
+        clean.consolidate_group([canon, src], "test", run)
         run.close()
         self.assertTrue((src / "03.flac").exists())
         self.assertFalse((canon / "03.flac").exists())
@@ -173,74 +170,74 @@ class _TreeCase(unittest.TestCase):
         self._tmp.cleanup()
 
     def _run(self, dry_run=False):
-        return cleaner.Run(self.root, self.log, dry_run=dry_run)
+        return clean.Run(self.root, self.log, dry_run=dry_run)
 
 
 class CanonicalRenderTests(unittest.TestCase):
     def test_unicode_dash_to_ascii(self):
         self.assertEqual(
-            cleaner.canonical_render("Drive‐By Truckers"), "Drive-By Truckers"
+            norm.canonical_render("Drive‐By Truckers"), "Drive-By Truckers"
         )
 
     def test_curly_apostrophe_to_straight(self):
-        self.assertEqual(cleaner.canonical_render("You’re"), "You're")
+        self.assertEqual(norm.canonical_render("You’re"), "You're")
 
     def test_case_preserved_whitespace_collapsed(self):
-        self.assertEqual(cleaner.canonical_render("  The   XX "), "The XX")
+        self.assertEqual(norm.canonical_render("  The   XX "), "The XX")
 
     def test_curly_double_quotes_preserved(self):
         # Straight " is forbidden on Windows/NTFS, so curly double quotes stay.
         self.assertEqual(
-            cleaner.canonical_render("Damian “Jr. Gong” Marley"),
+            norm.canonical_render("Damian “Jr. Gong” Marley"),
             "Damian “Jr. Gong” Marley",
         )
 
     def test_ellipsis_preserved(self):
         # "..." would end a name in dots, which NTFS rejects; keep the glyph.
-        self.assertEqual(cleaner.canonical_render("Rooms…"), "Rooms…")
+        self.assertEqual(norm.canonical_render("Rooms…"), "Rooms…")
 
     def test_en_dash_preserved(self):
         # En-dashes in ranges are correct; canonical_render must not fold them.
-        self.assertEqual(cleaner.canonical_render("Works 85–92"), "Works 85–92")
+        self.assertEqual(norm.canonical_render("Works 85–92"), "Works 85–92")
 
     def test_em_dash_preserved(self):
-        self.assertEqual(cleaner.canonical_render("peace — reworks"), "peace — reworks")
+        self.assertEqual(norm.canonical_render("peace — reworks"), "peace — reworks")
 
     def test_already_normal_unchanged(self):
         self.assertEqual(
-            cleaner.canonical_render("Damian Jr. Gong Marley"),
+            norm.canonical_render("Damian Jr. Gong Marley"),
             "Damian Jr. Gong Marley",
         )
 
 
 class IsLegalNameTests(unittest.TestCase):
     def test_rejects_trailing_dot_or_space(self):
-        self.assertFalse(cleaner.is_legal_name("Rooms..."))
-        self.assertFalse(cleaner.is_legal_name("Album "))
+        self.assertFalse(norm.is_legal_name("Rooms..."))
+        self.assertFalse(norm.is_legal_name("Album "))
 
     def test_rejects_windows_forbidden_chars(self):
-        self.assertFalse(cleaner.is_legal_name('a"b'))
-        self.assertFalse(cleaner.is_legal_name("a:b"))
-        self.assertFalse(cleaner.is_legal_name("a/b"))
+        self.assertFalse(norm.is_legal_name('a"b'))
+        self.assertFalse(norm.is_legal_name("a:b"))
+        self.assertFalse(norm.is_legal_name("a/b"))
 
     def test_accepts_normal_names(self):
-        self.assertTrue(cleaner.is_legal_name("Drive-By Truckers"))
-        self.assertTrue(cleaner.is_legal_name("Get Rich or Die Tryin'"))
-        self.assertTrue(cleaner.is_legal_name("85–92"))
+        self.assertTrue(norm.is_legal_name("Drive-By Truckers"))
+        self.assertTrue(norm.is_legal_name("Get Rich or Die Tryin'"))
+        self.assertTrue(norm.is_legal_name("85–92"))
 
 
 class GetImageSizeTests(unittest.TestCase):
     def test_png(self):
-        self.assertEqual(cleaner._get_image_size(_png(640, 480)), (640, 480))
+        self.assertEqual(clean._get_image_size(_png(640, 480)), (640, 480))
 
     def test_jpeg(self):
         data = (
             b"\xff\xd8\xff\xc0\x00\x11\x08" + struct.pack(">HH", 300, 200) + b"\x00" * 8
         )
-        self.assertEqual(cleaner._get_image_size(data), (200, 300))
+        self.assertEqual(clean._get_image_size(data), (200, 300))
 
     def test_garbage_none(self):
-        self.assertIsNone(cleaner._get_image_size(b"not an image"))
+        self.assertIsNone(clean._get_image_size(b"not an image"))
 
 
 class DryRunFidelityTests(unittest.TestCase):
@@ -252,8 +249,8 @@ class DryRunFidelityTests(unittest.TestCase):
             root = Path(tmp)
             canon = _make_dir(root, "Album", {"01.flac": b"x", "02.flac": b"y"})
             src = _make_dir(root, "album", {"03.flac": b"z"})
-            run = cleaner.Run(root, root / "log", dry_run=dry)
-            cleaner.consolidate_group([canon, src], "t", run)
+            run = clean.Run(root, root / "log", dry_run=dry)
+            clean.consolidate_group([canon, src], "t", run)
             run.close()
             return dict(run.stats)
         finally:
@@ -270,7 +267,7 @@ class SurvivorRenameTests(_TreeCase):
         )
         src = _make_dir(self.root, "Drive-By Truckers", {"c.flac": b"3"})
         run = self._run()
-        cleaner.consolidate_group([canon, src], "artists", run)
+        clean.consolidate_group([canon, src], "artists", run)
         run.close()
         self.assertTrue((self.root / "Drive-By Truckers").is_dir())
         self.assertFalse((self.root / "Drive‐By Truckers").exists())
@@ -280,7 +277,7 @@ class SurvivorRenameTests(_TreeCase):
         canon = _make_dir(self.root, "Album", {"a.flac": b"1", "b.flac": b"2"})
         src = _make_dir(self.root, "album", {"c.flac": b"3"})
         run = self._run()
-        cleaner.consolidate_group([canon, src], "t", run)
+        clean.consolidate_group([canon, src], "t", run)
         run.close()
         self.assertEqual(run.stats["renamed"], 0)
 
@@ -288,10 +285,10 @@ class SurvivorRenameTests(_TreeCase):
         base = self.root / ("dry" if dry else "apply")
         canon = _make_dir(base, "Drive‐By Truckers", {"a.flac": b"1", "b.flac": b"2"})
         src = _make_dir(base, "Drive-By Truckers", {"c.flac": b"3"})
-        run = cleaner.Run(
+        run = clean.Run(
             base, base / "log", dry_run=dry, normalize_tags=True, artist_depth=1
         )
-        cleaner.consolidate_group([canon, src], "artists", run)
+        clean.consolidate_group([canon, src], "artists", run)
         run.close()
         return dict(run.stats), {name for name, _ in run.tag_targets}
 
@@ -332,7 +329,7 @@ class RenamedSurvivorDryRunParityTests(unittest.TestCase):
 
     def _run_main(self, base: Path, dry: bool) -> dict[str, int]:
         argv = [
-            "cleaner.py",
+            "clean.py",
             str(base),
             "--normalize-names",
             "--normalize-filenames",
@@ -341,7 +338,7 @@ class RenamedSurvivorDryRunParityTests(unittest.TestCase):
         if dry:
             argv.append("--dry-run")
         with mock.patch.object(sys, "argv", argv):
-            self.assertEqual(cleaner.main(), 0)
+            self.assertEqual(clean.main(), 0)
         return self._stats_from_log(base / "cleanup.log")
 
     def test_dry_run_stats_match_apply(self):
@@ -371,10 +368,10 @@ class CoverResolutionTests(_TreeCase):
         )
         src = _make_dir(self.root, "album", {"cover.png": _png(400, 400)})
         run = self._run()
-        cleaner.consolidate_group([canon, src], "t", run)
+        clean.consolidate_group([canon, src], "t", run)
         run.close()
         self.assertEqual(
-            cleaner._get_image_size((canon / "cover.png").read_bytes()), (400, 400)
+            clean._get_image_size((canon / "cover.png").read_bytes()), (400, 400)
         )
         self.assertEqual(run.stats["covers_replaced"], 1)
         self.assertFalse(src.exists())
@@ -385,7 +382,7 @@ class CoverResolutionTests(_TreeCase):
         )
         src = _make_dir(self.root, "album", {"cover.png": _png(200, 200, pad=300)})
         run = self._run()
-        cleaner.consolidate_group([canon, src], "t", run)
+        clean.consolidate_group([canon, src], "t", run)
         run.close()
         self.assertEqual(run.stats["covers_replaced"], 1)
         self.assertEqual(
@@ -397,7 +394,7 @@ class NormalizeTreeTests(_TreeCase):
     def test_renames_lone_unicode_hyphen_artist(self):
         _make_dir(self.root, "Jay‐Z", {"a.flac": b"1"})
         run = self._run()
-        cleaner.normalize_tree(self.root, run, True, False)
+        clean.normalize_tree(self.root, run, True, False)
         run.close()
         self.assertTrue((self.root / "Jay-Z").is_dir())
         self.assertFalse((self.root / "Jay‐Z").exists())
@@ -407,14 +404,14 @@ class NormalizeTreeTests(_TreeCase):
         album.mkdir(parents=True)
         (album / "t.flac").write_bytes(b"1")
         run = self._run()
-        cleaner.normalize_tree(self.root, run, True, False)
+        clean.normalize_tree(self.root, run, True, False)
         run.close()
         self.assertTrue((self.root / "Artist" / "4-44").is_dir())
 
     def test_dry_run_counts_but_does_not_rename(self):
         _make_dir(self.root, "Jay‐Z", {"a.flac": b"1"})
         run = self._run(dry_run=True)
-        cleaner.normalize_tree(self.root, run, True, False)
+        clean.normalize_tree(self.root, run, True, False)
         run.close()
         self.assertTrue((self.root / "Jay‐Z").exists())
         self.assertEqual(run.stats["renamed"], 1)
@@ -426,14 +423,14 @@ class NormalizeTreeTests(_TreeCase):
         album.mkdir(parents=True)
         (album / "t.flac").write_bytes(b"1")
         run = self._run()
-        cleaner.normalize_tree(self.root, run, True, False)
+        clean.normalize_tree(self.root, run, True, False)
         run.close()
         self.assertTrue((self.root / "Artist" / "Rooms…").is_dir())
         self.assertEqual(run.stats["renamed"], 0)
 
 
 from mutagen.flac import FLAC
-from mutagen.id3 import ID3
+from mutagen.id3 import ID3, TALB, TIT2, TPE1, TPE2
 
 FIXTURES = Path(__file__).parent / "fixtures" / "library"
 MP3_SRC = FIXTURES / "Cursive" / "Domestica" / "01 - The Casualty.mp3"
@@ -444,58 +441,58 @@ class TagFoldTests(unittest.TestCase):
     def test_cp1252_mojibake_to_ascii(self):
         # \x93/\x94/\x92 are CP1252 bytes read back as Latin-1 C1 controls.
         self.assertEqual(
-            cleaner.tag_fold("Bonnie \x93Prince\x94 Billy"), 'Bonnie "Prince" Billy'
+            norm.tag_fold("Bonnie \x93Prince\x94 Billy"), 'Bonnie "Prince" Billy'
         )
-        self.assertEqual(cleaner.tag_fold("Tim O\x92Brien"), "Tim O'Brien")
+        self.assertEqual(norm.tag_fold("Tim O\x92Brien"), "Tim O'Brien")
 
     def test_curly_quotes_to_ascii(self):
-        self.assertEqual(cleaner.tag_fold("Singer’s Grave"), "Singer's Grave")
+        self.assertEqual(norm.tag_fold("Singer’s Grave"), "Singer's Grave")
 
     def test_whitespace_collapsed(self):
-        self.assertEqual(cleaner.tag_fold("  A   B "), "A B")
+        self.assertEqual(norm.tag_fold("  A   B "), "A B")
 
     def test_en_em_dash_and_ellipsis_preserved(self):
         # Correct typography (e.g. numeric ranges) must survive the fold.
-        self.assertEqual(cleaner.tag_fold("Works 85–92"), "Works 85–92")
-        self.assertEqual(cleaner.tag_fold("A — B"), "A — B")
-        self.assertEqual(cleaner.tag_fold("Rooms…"), "Rooms…")
+        self.assertEqual(norm.tag_fold("Works 85–92"), "Works 85–92")
+        self.assertEqual(norm.tag_fold("A — B"), "A — B")
+        self.assertEqual(norm.tag_fold("Rooms…"), "Rooms…")
 
     def test_mojibake_dash_repaired_to_real_dash(self):
         # CP1252 0x96/0x97 are broken en/em dashes -> repaired, not hyphenated.
-        self.assertEqual(cleaner.tag_fold("1975\x961985"), "1975–1985")
-        self.assertEqual(cleaner.tag_fold("A\x97B"), "A—B")
+        self.assertEqual(norm.tag_fold("1975\x961985"), "1975–1985")
+        self.assertEqual(norm.tag_fold("A\x97B"), "A—B")
 
     def test_broken_hyphen_folded(self):
-        self.assertEqual(cleaner.tag_fold("Jay‐Z"), "Jay-Z")
+        self.assertEqual(norm.tag_fold("Jay‐Z"), "Jay-Z")
 
     def test_tag_dedupe(self):
         self.assertEqual(
-            cleaner.tag_dedupe("The Documentary 2 / The Documentary 2"),
+            norm.tag_dedupe("The Documentary 2 / The Documentary 2"),
             "The Documentary 2",
         )
-        self.assertEqual(cleaner.tag_dedupe("Intro / Intro"), "Intro")
+        self.assertEqual(norm.tag_dedupe("Intro / Intro"), "Intro")
         self.assertEqual(
-            cleaner.tag_dedupe("On Me (feat. Kendrick Lamar) / On Me"),
+            norm.tag_dedupe("On Me (feat. Kendrick Lamar) / On Me"),
             "On Me (feat. Kendrick Lamar)",
         )
         self.assertEqual(
-            cleaner.tag_dedupe("The Game / The Game feat. DeJ Loaf & Sha Sha"),
+            norm.tag_dedupe("The Game / The Game feat. DeJ Loaf & Sha Sha"),
             "The Game feat. DeJ Loaf & Sha Sha",
         )
-        self.assertEqual(cleaner.tag_dedupe("A / B"), "A / B")
-        self.assertEqual(cleaner.tag_dedupe("The Game ; The Game"), "The Game")
+        self.assertEqual(norm.tag_dedupe("A / B"), "A / B")
+        self.assertEqual(norm.tag_dedupe("The Game ; The Game"), "The Game")
 
 
 class CanonTrackArtistTests(unittest.TestCase):
     def test_plain_collapses_to_canonical(self):
         self.assertEqual(
-            cleaner.canon_track_artist("Bonnie Prince Billy", "Bonnie 'Prince' Billy"),
+            norm.canon_track_artist("Bonnie Prince Billy", "Bonnie 'Prince' Billy"),
             "Bonnie 'Prince' Billy",
         )
 
     def test_doubled_junk_collapses(self):
         self.assertEqual(
-            cleaner.canon_track_artist(
+            norm.canon_track_artist(
                 "Bonnie Prince Billy / Bonnie 'Prince' Billy", "Bonnie 'Prince' Billy"
             ),
             "Bonnie 'Prince' Billy",
@@ -503,7 +500,7 @@ class CanonTrackArtistTests(unittest.TestCase):
 
     def test_feat_preserved_and_folded(self):
         self.assertEqual(
-            cleaner.canon_track_artist(
+            norm.canon_track_artist(
                 "Bonnie \x93Prince\x94 Billy feat. Tim O\x92Brien",
                 "Bonnie 'Prince' Billy",
             ),
@@ -513,18 +510,18 @@ class CanonTrackArtistTests(unittest.TestCase):
     def test_mid_word_ft_not_a_feat_marker(self):
         # H1: bare \s* before the marker was zero-width, so the "ft" ending
         # "Left"/"Swift"/"Croft" matched and corrupted clean tags.
-        self.assertEqual(cleaner.canon_track_artist("Left Boy", "Left Boy"), "Left Boy")
+        self.assertEqual(norm.canon_track_artist("Left Boy", "Left Boy"), "Left Boy")
         self.assertEqual(
-            cleaner.canon_track_artist("Left Lane Cruiser", "Left Lane Cruiser"),
+            norm.canon_track_artist("Left Lane Cruiser", "Left Lane Cruiser"),
             "Left Lane Cruiser",
         )
 
     def test_parenthesised_feat_drops_stray_paren(self):
-        self.assertEqual(cleaner.canon_track_artist("A (feat. B)", "A"), "A feat. B")
+        self.assertEqual(norm.canon_track_artist("A (feat. B)", "A"), "A feat. B")
 
     def test_idempotent_on_feat_case(self):
-        once = cleaner.canon_track_artist("X (feat. Tim O\x92Brien)", "X")
-        self.assertEqual(once, cleaner.canon_track_artist(once, "X"))
+        once = norm.canon_track_artist("X (feat. Tim O\x92Brien)", "X")
+        self.assertEqual(once, norm.canon_track_artist(once, "X"))
 
 
 def _mp3(path, artist=None, albumartist=None, title=None, album=None):
@@ -532,10 +529,10 @@ def _mp3(path, artist=None, albumartist=None, title=None, album=None):
     shutil.copy(MP3_SRC, path)
     tags = ID3(path)
     for fid, cls, val in (
-        ("TIT2", cleaner.TIT2, title),
-        ("TALB", cleaner.TALB, album),
-        ("TPE1", cleaner.TPE1, artist),
-        ("TPE2", cleaner.TPE2, albumartist),
+        ("TIT2", TIT2, title),
+        ("TALB", TALB, album),
+        ("TPE1", TPE1, artist),
+        ("TPE2", TPE2, albumartist),
     ):
         if val is not None:
             tags.setall(fid, [cls(encoding=3, text=[val])])
@@ -565,7 +562,7 @@ class _RunCase(unittest.TestCase):
         self._tmp.cleanup()
 
     def _run(self, dry_run=False, normalize_tags=True, artist_depth=1):
-        return cleaner.Run(
+        return clean.Run(
             self.root,
             self.log,
             dry_run=dry_run,
@@ -581,7 +578,7 @@ class TagWriterTests(_RunCase):
         p = self.root / "t.mp3"
         _mp3(p, artist="A", albumartist="A", title="Cur’ly", album="Da\x92sh")
         run = self._run()
-        cleaner.normalize_file_tags(p, None, run)
+        clean.normalize_file_tags(p, None, run)
         run.close()
         t = ID3(p)
         self.assertEqual(t["TIT2"].text[0], "Cur'ly")
@@ -592,7 +589,7 @@ class TagWriterTests(_RunCase):
         p = self.root / "t.mp3"
         _mp3(p, artist="A", albumartist="A", title="Clean", album="Clean")
         run = self._run()
-        cleaner.normalize_file_tags(p, None, run)
+        clean.normalize_file_tags(p, None, run)
         run.close()
         self.assertEqual(run.stats["tags_rewritten"], 0)
 
@@ -606,7 +603,7 @@ class TagWriterTests(_RunCase):
             albumartist="Bj\x94rk",
         )
         run = self._run()
-        cleaner.normalize_file_tags(p, None, run)
+        clean.normalize_file_tags(p, None, run)
         run.close()
         f = FLAC(p)
         self.assertEqual(f["title"][0], "O'Hare")
@@ -617,7 +614,7 @@ class TagWriterTests(_RunCase):
         p = self.root / "t.flac"
         _flac(p, TITLE="Cur’ly")  # case-variant Vorbis key
         run = self._run()
-        cleaner.normalize_file_tags(p, None, run)
+        clean.normalize_file_tags(p, None, run)
         run.close()
         f = FLAC(p)
         self.assertEqual([k for k in f.keys() if k.lower() == "title"], ["title"])
@@ -633,7 +630,7 @@ class TagWriterTests(_RunCase):
             albumartist="Bonnie \x93Prince\x94 Billy",
         )
         run = self._run()
-        cleaner.normalize_file_tags(p, "Bonnie 'Prince' Billy", run)
+        clean.normalize_file_tags(p, "Bonnie 'Prince' Billy", run)
         run.close()
         f = FLAC(p)
         self.assertEqual(f["artist"][0], "Bonnie 'Prince' Billy feat. Tim O'Brien")
@@ -645,7 +642,7 @@ class TagWriterTests(_RunCase):
         p = self.root / "t.flac"
         _flac(p, title="Cur’ly")  # no album key at all
         run = self._run()
-        cleaner.normalize_file_tags(p, None, run)
+        clean.normalize_file_tags(p, None, run)
         run.close()
         self.assertNotIn("album", [k.lower() for k in FLAC(p).keys()])
 
@@ -663,7 +660,7 @@ class MultiValueTagTests(_RunCase):
         f["title"] = ["Song"]
         f.save()
         run = self._run()
-        cleaner.normalize_file_tags(p, None, run)
+        clean.normalize_file_tags(p, None, run)
         run.close()
         self.assertEqual(FLAC(p)["artist"], ["Artist A's Band", "Artist B"])
 
@@ -675,7 +672,7 @@ class MultiValueTagTests(_RunCase):
         f["artist"] = ["Artist A", "Artist B"]
         f.save()
         run = self._run()
-        cleaner.normalize_file_tags(p, "Artist A", run)
+        clean.normalize_file_tags(p, "Artist A", run)
         run.close()
         self.assertEqual(FLAC(p)["artist"], ["Artist A"])
 
@@ -696,8 +693,8 @@ class DryRunCreationModelTests(unittest.TestCase):
         canon = _make_dir(root, "Album", {"01.flac": b"x" * 10, "02.flac": b"y"})
         s1 = _make_dir(root, "ALBUM", {"03.flac": b"a" * 5})
         s2 = _make_dir(root, "album", {"03.flac": b"b" * 9})
-        run = cleaner.Run(root, root / "log", dry_run=dry)
-        cleaner.consolidate_group([canon, s1, s2], "t", run)
+        run = clean.Run(root, root / "log", dry_run=dry)
+        clean.consolidate_group([canon, s1, s2], "t", run)
         run.close()
         return dict(run.stats)
 
@@ -713,8 +710,8 @@ class DryRunCreationModelTests(unittest.TestCase):
         root = self.base / ("dry" if dry else "apply") / "render"
         _make_dir(root, "A‐B", {"a.flac": b"1"})  # U+2010 hyphen
         _make_dir(root, "A‑B", {"b.flac": b"2"})  # U+2011 non-breaking
-        run = cleaner.Run(root, root / "log", dry_run=dry)
-        cleaner.normalize_tree(root, run, True, False)
+        run = clean.Run(root, root / "log", dry_run=dry)
+        clean.normalize_tree(root, run, True, False)
         run.close()
         return dict(run.stats)
 
@@ -730,9 +727,9 @@ class DryRunCreationModelTests(unittest.TestCase):
         root = self.base / "walkskip"
         a = _make_dir(root, "Album", {"01.flac": b"x"})
         _make_dir(root, "album", {"02.flac": b"y"})
-        run = cleaner.Run(root, root / "log", dry_run=True)
+        run = clean.Run(root, root / "log", dry_run=True)
         run._move(a, root / "elsewhere")  # virtually gone
-        groups = cleaner.find_groups(root, run)
+        groups = clean.find_groups(root, run)
         run.close()
         self.assertEqual(groups, [])  # its variant no longer forms a group
 
@@ -769,14 +766,14 @@ class NormalizeTagsMergeTests(_RunCase):
         return self._run(dry_run=dry_run, artist_depth=2)
 
     def _consolidate(self, run):
-        cleaner.consolidate_group(
-            cleaner.find_groups(self.genre, run)[0], "Alt Country", run
+        clean.consolidate_group(
+            clean.find_groups(self.genre, run)[0], "Alt Country", run
         )
 
     def test_merge_restamps_all_to_survivor(self):
         run = self._run2()
         self._consolidate(run)
-        cleaner.normalize_tags(run)
+        clean.normalize_tags(run)
         run.close()
         beware = self.surv / "Beware" / "01.mp3"
         purple = self.surv / "Purple Bird" / "01.mp3"
@@ -793,7 +790,7 @@ class NormalizeTagsMergeTests(_RunCase):
     def test_dry_run_reports_but_does_not_write(self):
         run = self._run2(dry_run=True)
         self._consolidate(run)
-        cleaner.normalize_tags(run)
+        clean.normalize_tags(run)
         run.close()
         self.assertEqual(
             ID3(self.genre / "Bonnie Prince Billy" / "Beware" / "01.mp3")["TPE1"].text[
@@ -806,7 +803,7 @@ class NormalizeTagsMergeTests(_RunCase):
     def test_clean_file_not_rewritten(self):
         run = self._run2()
         self._consolidate(run)
-        cleaner.normalize_tags(run)
+        clean.normalize_tags(run)
         run.close()
         # 4 tracks scanned; survivor track 02 was already correct.
         self.assertEqual(run.stats["tag_files_scanned"], 4)
@@ -818,7 +815,7 @@ class NormalizeTagsMergeTests(_RunCase):
         # quoted survivor, but mojibake is still typographically folded everywhere.
         run = self._run(artist_depth=1)
         self._consolidate(run)
-        cleaner.normalize_tags(run)
+        clean.normalize_tags(run)
         run.close()
         self.assertEqual(
             ID3(self.surv / "Beware" / "01.mp3")["TPE1"].text[0], "Bonnie Prince Billy"
@@ -841,7 +838,7 @@ class LibraryWideTagTests(_RunCase):
             album="Da\x92y",
         )
         run = self._run(artist_depth=2)
-        cleaner.normalize_tags(run)
+        clean.normalize_tags(run)
         run.close()
         t = ID3(p)
         self.assertEqual(t["TIT2"].text[0], "O'Hare")
@@ -853,7 +850,7 @@ class LibraryWideTagTests(_RunCase):
         (self.root / "A").mkdir()
         (self.root / "A" / "x.wav").write_bytes(b"RIFFxxxx")
         run = self._run()
-        cleaner.normalize_tags(run)
+        clean.normalize_tags(run)
         run.close()
         self.assertEqual(run.stats["tag_unsupported_skipped"], 1)
         self.assertEqual(run.stats["tag_files_scanned"], 0)
@@ -865,7 +862,7 @@ class NameRecursionTests(_RunCase):
         deep.mkdir(parents=True)
         (deep / "t.mp3").write_bytes(b"x")
         run = self._run(normalize_tags=False)
-        cleaner.normalize_tree(self.root, run, True, False)
+        clean.normalize_tree(self.root, run, True, False)
         run.close()
         self.assertTrue((self.root / "Rock" / "Artist-X" / "Album's Best").is_dir())
 
@@ -874,7 +871,7 @@ class NameRecursionTests(_RunCase):
         d.mkdir(parents=True)
         (d / "01 - Re‐do.flac").write_bytes(b"x")  # U+2010 in stem
         run = self._run(normalize_tags=False)
-        cleaner.normalize_tree(self.root, run, False, True)
+        clean.normalize_tree(self.root, run, False, True)
         run.close()
         self.assertTrue((d / "01 - Re-do.flac").exists())
         self.assertEqual(run.stats["files_renamed"], 1)
@@ -885,7 +882,7 @@ class NameRecursionTests(_RunCase):
         d.mkdir()
         (d / "Re‐do.wma").write_bytes(b"x")  # U+2010 in stem
         run = self._run(normalize_tags=False)
-        cleaner.normalize_tree(self.root, run, False, True)
+        clean.normalize_tree(self.root, run, False, True)
         run.close()
         self.assertTrue((d / "Re-do.wma").exists())
         self.assertEqual(run.stats["files_renamed"], 1)
@@ -896,7 +893,7 @@ class NameRecursionTests(_RunCase):
         (d / "Re‐do.flac").write_bytes(b"x")  # folds onto the existing name
         (d / "Re-do.flac").write_bytes(b"y")
         run = self._run(normalize_tags=False)
-        cleaner.normalize_tree(self.root, run, False, True)
+        clean.normalize_tree(self.root, run, False, True)
         run.close()
         self.assertTrue((d / "Re‐do.flac").exists())  # not clobbered
         self.assertEqual((d / "Re-do.flac").read_bytes(), b"y")
@@ -906,7 +903,7 @@ class NameRecursionTests(_RunCase):
         d.mkdir()
         (d / "01 - Re‐do.flac").write_bytes(b"x")
         run = self._run(normalize_tags=False)
-        cleaner.normalize_tree(self.root, run, True, False)  # folders only
+        clean.normalize_tree(self.root, run, True, False)  # folders only
         run.close()
         self.assertTrue((self.root / "Artist-X" / "01 - Re‐do.flac").exists())
         self.assertEqual(run.stats["files_renamed"], 0)
@@ -916,7 +913,7 @@ class NameRecursionTests(_RunCase):
         d.mkdir()
         (d / "01 - Re‐do.flac").write_bytes(b"x")
         run = self._run(dry_run=True, normalize_tags=False)
-        cleaner.normalize_tree(self.root, run, True, True)
+        clean.normalize_tree(self.root, run, True, True)
         run.close()
         self.assertTrue((self.root / "Artist‐X").is_dir())
         self.assertTrue((d / "01 - Re‐do.flac").exists())
@@ -935,8 +932,8 @@ class IdempotencyTests(_RunCase):
         )
 
         run1 = self._run(artist_depth=2)
-        cleaner.normalize_tree(self.root, run1, True, True)
-        cleaner.normalize_tags(run1)
+        clean.normalize_tree(self.root, run1, True, True)
+        clean.normalize_tags(run1)
         run1.close()
         self.assertGreater(
             run1.stats["renamed"]
@@ -946,8 +943,8 @@ class IdempotencyTests(_RunCase):
         )
 
         run2 = self._run(artist_depth=2)
-        cleaner.normalize_tree(self.root, run2, True, True)
-        cleaner.normalize_tags(run2)
+        clean.normalize_tree(self.root, run2, True, True)
+        clean.normalize_tags(run2)
         run2.close()
         self.assertEqual(run2.stats["renamed"], 0)
         self.assertEqual(run2.stats["files_renamed"], 0)
@@ -965,19 +962,19 @@ class HeadTailEqualTests(unittest.TestCase):
 
     def test_equal_files_match(self):
         pa, pb = self._pair(b"x" * 200_000, b"x" * 200_000)
-        self.assertTrue(cleaner.head_tail_equal(pa, pb))
+        self.assertTrue(clean.head_tail_equal(pa, pb))
 
     def test_difference_in_head_detected(self):
         pa, pb = self._pair(b"a" + b"x" * 199_999, b"b" + b"x" * 199_999)
-        self.assertFalse(cleaner.head_tail_equal(pa, pb))
+        self.assertFalse(clean.head_tail_equal(pa, pb))
 
     def test_difference_in_tail_detected(self):
         pa, pb = self._pair(b"x" * 199_999 + b"a", b"x" * 199_999 + b"b")
-        self.assertFalse(cleaner.head_tail_equal(pa, pb))
+        self.assertFalse(clean.head_tail_equal(pa, pb))
 
     def test_unreadable_is_not_identical(self):
         pa, pb = self._pair(b"x", b"x")
-        self.assertFalse(cleaner.head_tail_equal(pa / "nope", pb))
+        self.assertFalse(clean.head_tail_equal(pa / "nope", pb))
 
 
 class LogFormatTests(_TreeCase):
@@ -1001,7 +998,7 @@ class TagTargetDedupeTests(_RunCase):
         )
         src = _make_dir(self.root, "Drive-By Truckers", {"03.mp3": b"c"})
         run = self._run()
-        cleaner.consolidate_group([canon, src], "test", run)
+        clean.consolidate_group([canon, src], "test", run)
         run.close()
         self.assertEqual(run.stats["renamed"], 1)  # survivor rename happened
         self.assertEqual(len(run.tag_targets), 1)
@@ -1014,7 +1011,7 @@ class TagTargetDedupeTests(_RunCase):
     def test_pass3_sweep_rename_still_records(self):
         _make_dir(self.root, "Drive‐By Truckers", {"01.mp3": b"a"})
         run = self._run()
-        cleaner.normalize_tree(self.root, run, True, False)
+        clean.normalize_tree(self.root, run, True, False)
         run.close()
         self.assertEqual(len(run.tag_targets), 1)
         self.assertEqual(run.tag_targets[0][0], "Drive-By Truckers")
@@ -1028,7 +1025,7 @@ class HeaderlessMp3Tests(_RunCase):
         p.parent.mkdir()
         p.write_bytes(b"\xff\xfb" + b"\x00" * 200)  # bare MPEG frame, no ID3
         run = self._run()
-        cleaner.normalize_file_tags(p, None, run)
+        clean.normalize_file_tags(p, None, run)
         run.close()
         self.assertEqual(run.stats["tag_no_id3_skipped"], 1)
         self.assertIn("no ID3 header", self.log.read_text(encoding="utf-8"))
@@ -1048,8 +1045,8 @@ class AsfCaseVariantTests(unittest.TestCase):
 
         fake = FakeASF()
         fake["wm/albumtitle"] = ["Old’s"]
-        with mock.patch.object(cleaner, "ASF", return_value=fake):
-            opened = cleaner._open_for_tags(Path("/x.wma"), ".wma")
+        with mock.patch.object(clean, "ASF", return_value=fake):
+            opened = clean._open_for_tags(Path("/x.wma"), ".wma")
         self.assertIsNotNone(opened)
         cur, apply = opened
         self.assertEqual(cur["album"], ["Old’s"])

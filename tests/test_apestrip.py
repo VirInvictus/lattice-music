@@ -9,14 +9,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-# apestrip.py lives in scripts/ (outside the lattice package). It writes tags, so
-# it is exercised against a copy of the committed MP3 fixture, seeded with an
-# APEv2 tag. The fixture's ID3 has TIT2/TPE1/TALB/TCON(Rock)/TRCK and no date,
-# which lets us cover redundant fields, sole-source migration, and the genre/
-# rating policy in one place.
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
-
-import apestrip
+# apestrip's brain lives in the lattice package now (promoted out of scripts/,
+# which launches it as a shim). It writes tags, so it is exercised against a
+# copy of the committed MP3 fixture, seeded with an APEv2 tag. The fixture's
+# ID3 has TIT2/TPE1/TALB/TCON(Rock)/TRCK and no date, which lets us cover
+# redundant fields, sole-source migration, and the genre/rating policy in one
+# place.
+from lattice.modes import apestrip
 from mutagen.apev2 import (
     BINARY,
     EXTERNAL,
