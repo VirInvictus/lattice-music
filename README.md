@@ -55,6 +55,7 @@ Modern music players often hide your library behind proprietary databases. latti
 | **Tag audit** | `--auditTags` | Reports files missing title, artist, track number, or genre to text |
 | **Bitrate audit** | `--auditBitrate` | Reports files falling below a minimum bitrate floor |
 | **ReplayGain audit** | `--auditReplayGain` | Reports per-album ReplayGain coverage (missing, partial, no album gain, OK); Opus R128 gain counts as tagged |
+| **Stray-file audit** | `--auditStrays` | Reports audio outside the layout's album depth, loose tracks, hidden-dir audio the scanners prune silently, and unrecognized non-audio files in album folders |
 | **Clean (write)** | `--clean` | Consolidates fragmented album folders; opt-in `--normalize-names`/`--normalize-filenames`/`--normalize-tags` passes. Dry-run by default, `--apply` to write |
 | **APEv2 strip (write)** | `--apestrip` | Removes stray APEv2 tags from MP3s (`--keep-metadata` to migrate first, `--repair-malformed` for broken tags). Dry-run by default, `--apply` to write |
 | **Version** | `--version` | Prints version and exits |
@@ -164,6 +165,10 @@ lattice --auditTags --output tag_audit.txt
 
 # Audit ReplayGain coverage per album (add --verbose to also list fully-tagged albums)
 lattice --auditReplayGain --output replaygain_audit.txt
+
+# Audit files that don't fit the layout: strays, loose tracks, hidden-dir
+# audio, and non-audio junk in album folders
+lattice --auditStrays --output stray_audit.txt
 
 # Preview the clean write mode: merge fragmented album folders (writes nothing)
 lattice --clean ~/Music
@@ -282,11 +287,12 @@ The filesystem is the source of truth: lattice-music walks the tree on every inv
 usage: lattice [-h] [--version] [--library | --ai-library | --all-wings | --ai-wings | --testFLAC |
                --testMP3 | --testOpus | --testWAV | --testWMA | --extractArt | --missingArt |
                --auditArtQuality | --duplicates | --auditTags | --auditBitrate | --auditReplayGain |
-               --playlist | --stats | --clean | --apestrip] [--root DIR] [--output OUTPUT] [--rule RULE]
-               [--layout LAYOUT] [--min-art-res MIN_ART_RES] [--min-bitrate MIN_BITRATE] [--workers WORKERS]
-               [--prefer {flac,ffmpeg}] [--quiet] [--genres] [--paths] [--dry-run] [--apply]
-               [--normalize-names] [--normalize-filenames] [--normalize-tags] [--all] [--keep-metadata]
-               [--repair-malformed] [--only-errors | --no-only-errors] [--ffmpeg FFMPEG] [--verbose]
+               --auditStrays | --playlist | --stats | --clean | --apestrip] [--root DIR] [--output OUTPUT]
+               [--rule RULE] [--layout LAYOUT] [--min-art-res MIN_ART_RES] [--min-bitrate MIN_BITRATE]
+               [--workers WORKERS] [--prefer {flac,ffmpeg}] [--quiet] [--genres] [--paths] [--dry-run]
+               [--apply] [--normalize-names] [--normalize-filenames] [--normalize-tags] [--all]
+               [--keep-metadata] [--repair-malformed] [--only-errors | --no-only-errors] [--ffmpeg FFMPEG]
+               [--verbose]
                [pos_root]
 
 Music library toolkit: tree, integrity, art, duplicates, tag audit
@@ -314,6 +320,8 @@ options:
   --auditTags           Report files with incomplete tags
   --auditBitrate        Report files below a certain bitrate floor
   --auditReplayGain     Report per-album ReplayGain coverage (missing, partial, no album gain)
+  --auditStrays         Report audio outside the layout's album depth, loose tracks, hidden-dir audio, and
+                        unrecognized non-audio files in album folders
   --playlist            Generate a smart .m3u playlist based on a rule
   --stats               Library-wide statistics summary
   --clean               Consolidate fragmented album folders; optionally normalize names and tags (write

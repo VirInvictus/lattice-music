@@ -2,7 +2,7 @@ import json
 import os
 import re
 
-VERSION = "5.0.0"
+VERSION = "5.1.0"
 
 DEFAULT_LIBRARY_OUTPUT = "music_library.txt"
 DEFAULT_FLAC_OUTPUT = "flac_errors.txt"
@@ -16,6 +16,7 @@ DEFAULT_DUPLICATES_OUTPUT = "duplicates.txt"
 DEFAULT_TAG_AUDIT_OUTPUT = "tag_audit.txt"
 DEFAULT_BITRATE_AUDIT_OUTPUT = "bitrate_audit.txt"
 DEFAULT_REPLAYGAIN_AUDIT_OUTPUT = "replaygain_audit.txt"
+DEFAULT_STRAY_AUDIT_OUTPUT = "stray_audit.txt"
 DEFAULT_AI_LIBRARY_OUTPUT = "library_ai.txt"
 DEFAULT_PLAYLIST_OUTPUT = "smart_playlist.m3u"
 

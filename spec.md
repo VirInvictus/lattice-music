@@ -1,6 +1,6 @@
 # lattice-music Application Specification
 
-**Version:** 5.0.0  
+**Version:** 5.1.0  
 **Language:** Python 3.14+  
 **Dependencies:** `mutagen`, `tqdm`, `vir-tui`  
 **License:** MIT
@@ -114,6 +114,7 @@ supplies default roots; the first-run prompt persists only the single
 | Tag audit | `--auditTags` | Report files missing title, artist, track number, or genre |
 | Bitrate audit | `--auditBitrate` | Report files below a configurable bitrate floor |
 | ReplayGain audit | `--auditReplayGain` | Report per-album ReplayGain coverage (missing / partial / no album gain / OK); Opus R128 gain counts as tagged |
+| Stray-file audit | `--auditStrays` | Report audio at the wrong depth for the configured layout, loose tracks beside album folders, hidden-dir audio, and unrecognized non-audio files in album folders |
 | Smart playlist | `--playlist` | Generate an `.m3u` from a dynamic rule (e.g. `rating >= 4 and genre == 'Jazz'`) |
 | Clean | `--clean` | Consolidate fragmented album folders (quote/dash/case variants) with opt-in name (`--normalize-names`, `--normalize-filenames`) and tag (`--normalize-tags`) normalization passes; write mode, dry-run by default |
 | APEv2 strip | `--apestrip` | Remove stray APEv2 tags from MP3s (`--keep-metadata` to migrate sole-source fields first, `--repair-malformed` for tags mutagen cannot parse); write mode, dry-run by default |

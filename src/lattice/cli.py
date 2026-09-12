@@ -14,6 +14,7 @@ from lattice.config import (
     DEFAULT_OPUS_OUTPUT,
     DEFAULT_PLAYLIST_OUTPUT,
     DEFAULT_REPLAYGAIN_AUDIT_OUTPUT,
+    DEFAULT_STRAY_AUDIT_OUTPUT,
     DEFAULT_TAG_AUDIT_OUTPUT,
     DEFAULT_WAV_OUTPUT,
     DEFAULT_WMA_OUTPUT,
@@ -30,6 +31,7 @@ from lattice.modes.audit import (
     run_bitrate_audit,
     run_duplicates,
     run_replaygain_audit,
+    run_stray_audit,
     run_tag_audit,
 )
 from lattice.modes.clean import run_clean
@@ -116,6 +118,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--auditReplayGain",
         action="store_true",
         help="Report per-album ReplayGain coverage (missing, partial, no album gain)",
+    )
+    group.add_argument(
+        "--auditStrays",
+        dest="audit_strays",
+        action="store_true",
+        help="Report audio outside the layout's album depth, loose tracks, "
+        "hidden-dir audio, and unrecognized non-audio files in album folders",
     )
     group.add_argument(
         "--playlist",
@@ -422,6 +431,10 @@ def main(argv: list[str] | None = None) -> int:
             return run_replaygain_audit(
                 root, output, verbose=args.verbose, quiet=args.quiet
             )
+
+        if args.audit_strays:
+            output = args.output or DEFAULT_STRAY_AUDIT_OUTPUT
+            return run_stray_audit(root, output, layout=args.layout, quiet=args.quiet)
 
         if args.playlist:
             output = args.output or DEFAULT_PLAYLIST_OUTPUT

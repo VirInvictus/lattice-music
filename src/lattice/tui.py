@@ -31,6 +31,7 @@ from lattice.modes.audit import (
     run_bitrate_audit,
     run_duplicates,
     run_replaygain_audit,
+    run_stray_audit,
     run_tag_audit,
 )
 from lattice.modes.clean import run_clean
@@ -61,6 +62,7 @@ DEFAULT_DUPLICATES_OUTPUT = "lattice_duplicates.txt"
 DEFAULT_TAG_AUDIT_OUTPUT = "lattice_tag_audit.txt"
 DEFAULT_BITRATE_AUDIT_OUTPUT = "lattice_bitrate_audit.txt"
 DEFAULT_REPLAYGAIN_AUDIT_OUTPUT = "lattice_replaygain_audit.txt"
+DEFAULT_STRAY_AUDIT_OUTPUT = "lattice_stray_audit.txt"
 
 
 _MAIN_SECTIONS = [
@@ -96,6 +98,7 @@ _MAIN_SECTIONS = [
             "Audit tags",
             "Audit bitrates",
             "Audit ReplayGain",
+            "Audit stray files",
         ],
     ),
     (
@@ -157,6 +160,7 @@ _MAIN_ALIASES: dict[str, tuple | None] = {
     "bitrate": (3, 2),
     "rg": (3, 3),
     "replaygain": (3, 3),
+    "strays": (3, 4),
     "clean": (4, 0),
     "apestrip": (4, 1),
     "ape": (4, 1),
@@ -513,6 +517,19 @@ def _menu_session() -> int:
                     root,
                     output,
                     verbose=include_ok,
+                    quiet=False,
+                    footer=out_note(output),
+                )
+
+            elif result == (3, 4):
+                output = prompt_out("Output file", DEFAULT_STRAY_AUDIT_OUTPUT)
+                layout = ask("Path layout", get_layout())
+                run_with_capture(
+                    "Audit stray files",
+                    run_stray_audit,
+                    root,
+                    output,
+                    layout=layout,
                     quiet=False,
                     footer=out_note(output),
                 )

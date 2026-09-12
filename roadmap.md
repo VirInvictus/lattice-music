@@ -4,7 +4,7 @@
 - [x] Extract `vir-tui` core into a standalone repository and replace local primitives with the shared dependency.
 - [x] Adopt vir-tui 2.2.0's Phase-3 primitives — `progress_box()`, `interactive_session()`, `out_note()` — deleting the hand-mirrored `_TUIPbar`/shared-screen plumbing (v4.17.0).
 
-What's done, what's next, what's deferred. Sequenced for maximum utility as a standalone library management suite. Updated as of v5.0.0.
+What's done, what's next, what's deferred. Sequenced for maximum utility as a standalone library management suite. Updated as of v5.1.0.
 
 ---
 
@@ -304,9 +304,11 @@ keep today's apply-by-default so aliases and cron do not change.
 - [ ] **Library health score**: aggregate tag completeness, RG
   coverage, art, bitrate, decode errors into a per-album/per-root
   score. S.
-- [ ] **Unimported/stray-file audit**: audio at wrong depth,
-  non-audio junk, loose tracks, hidden dirs (integrity prunes them
-  today; nothing reports them). S.
+- [x] **Unimported/stray-file audit** (`--auditStrays`): audio at wrong
+  depth for the configured layout, loose tracks beside album folders,
+  hidden-dir audio the scanners prune silently, and unrecognized
+  non-audio files in album folders (sidecar/log/image ignore sets).
+  Read-only; beets `unimported` analog. (v5.1.0)
 - [ ] **`--checkPlaylists`**: dead paths, #EXTM3U compliance,
   relative-vs-absolute in generated m3us. S.
 - [ ] **Album-consistency audit**: mixed codec within an album,

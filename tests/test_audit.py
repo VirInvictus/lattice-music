@@ -1,13 +1,18 @@
 import unittest
+from pathlib import Path
+import tempfile
 
 from lattice.modes.audit import (
     _cluster_by_duration,
     _DirInfo,
     _fmt_duration,
     _fmt_size,
+    _layout_depths,
     _loose_key,
     _norm_key,
     _rg_bucket,
+    classify_stray,
+    run_stray_audit,
 )
 from lattice.tags import TagBundle
 
@@ -131,6 +136,104 @@ class ReplayGainBucketTests(unittest.TestCase):
 
     def test_single_track_fully_tagged_is_ok(self):
         self.assertEqual(_rg_bucket(1, 1, 1), "OK")
+
+
+class LayoutDepthsTests(unittest.TestCase):
+    def test_default_layout(self):
+        self.assertEqual(_layout_depths("{artist}/{album}"), (1, 2))
+
+    def test_genre_layout(self):
+        self.assertEqual(_layout_depths("{genre}/{artist}/{album}"), (2, 3))
+
+    def test_missing_album_is_an_error(self):
+        with self.assertRaises(ValueError):
+            _layout_depths("{artist}")
+
+
+class ClassifyStrayTests(unittest.TestCase):
+    """rel_parts are components below the library root; the default layout
+    ({artist}/{album}) has artist depth 1 and album depth 2."""
+
+    def test_placed_album_track(self):
+        self.assertEqual(classify_stray(("Artist", "Album", "01.flac"), 1, 2), "placed")
+
+    def test_placed_disc_subfolder(self):
+        # A multi-disc album lives deeper than album depth, but an ancestor
+        # sits at album depth, so it is placed.
+        self.assertEqual(
+            classify_stray(("Artist", "Album", "CD1", "01.flac"), 1, 2), "placed"
+        )
+
+    def test_loose_track_beside_albums(self):
+        self.assertEqual(classify_stray(("Artist", "loose.flac"), 1, 2), "loose")
+
+    def test_root_level_audio_is_wrong_depth(self):
+        self.assertEqual(classify_stray(("00 - Stray.flac",), 1, 2), "wrong-depth")
+
+    def test_flat_strays_on_a_genre_library(self):
+        # {genre}/{artist}/{album}: a flat Artist/Album stray's files sit one
+        # slot short of the album depth, in a folder at the artist slot.
+        # Depth alone cannot tell them from genuinely loose tracks, so they
+        # share the loose bucket (the report's section note says so).
+        self.assertEqual(classify_stray(("Artist", "Album", "01.flac"), 2, 3), "loose")
+        self.assertEqual(
+            classify_stray(("Genre", "Artist", "loose.flac"), 2, 3), "loose"
+        )
+        self.assertEqual(classify_stray(("Genre", "loose.flac"), 2, 3), "wrong-depth")
+
+    def test_hidden_dir_wins_over_everything(self):
+        self.assertEqual(classify_stray((".testing", "Copy", "01.mp3"), 1, 2), "hidden")
+
+    def test_hidden_file(self):
+        self.assertEqual(classify_stray(("Artist", ".01.flac"), 1, 2), "hidden")
+
+
+class StrayAuditRunTests(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name)
+        self._touch("Artist/Album/01.flac")  # placed
+        self._touch("Artist/Album/cover.jpg")  # image, never junk
+        self._touch("Artist/Album/cleanup.log")  # sidecar, never junk
+        self._touch("Artist/Album/notes.doc")  # unknown extension -> junk
+        self._touch("Artist/loose.flac")  # loose
+        self._touch("00 - Root Stray.flac")  # wrong-depth
+        self._touch(".testing/Copy/01.mp3")  # hidden
+        self.out = self.root / "stray_audit.txt"
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _touch(self, rel: str) -> None:
+        p = self.root / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b"x")
+
+    def test_reports_every_bucket_and_junk(self):
+        rc = run_stray_audit(str(self.root), str(self.out), layout="{artist}/{album}")
+        self.assertEqual(rc, 0)
+        text = self.out.read_text(encoding="utf-8")
+        self.assertIn("Scanned: 4 audio", text)
+        self.assertIn("== WRONG-DEPTH AUDIO (1) ==", text)
+        self.assertIn("00 - Root Stray.flac", text)
+        self.assertIn("== LOOSE TRACKS (1) ==", text)
+        self.assertIn("Artist/loose.flac", text)
+        self.assertIn("== HIDDEN-DIR AUDIO (1) ==", text)
+        self.assertIn(".testing", text)
+        self.assertIn("== NON-AUDIO FILES IN ALBUM FOLDERS (1) ==", text)
+        self.assertIn("notes.doc", text)
+        # Placed audio and recognized sidecars are never reported.
+        self.assertNotIn("01.flac", text.replace(".testing", ""))
+        self.assertNotIn("cover.jpg", text)
+        self.assertNotIn("cleanup.log", text)
+
+    def test_clean_tree_reports_zeros(self):
+        empty = self.root / "empty"
+        empty.mkdir()
+        out = self.root / "empty_audit.txt"
+        rc = run_stray_audit(str(empty), str(out))
+        self.assertEqual(rc, 0)
+        self.assertIn("Strays: 0", out.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

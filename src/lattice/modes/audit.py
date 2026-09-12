@@ -12,8 +12,11 @@ from lattice.config import (
     DEFAULT_BITRATE_AUDIT_OUTPUT,
     DEFAULT_DUPLICATES_OUTPUT,
     DEFAULT_REPLAYGAIN_AUDIT_OUTPUT,
+    DEFAULT_STRAY_AUDIT_OUTPUT,
     DEFAULT_TAG_AUDIT_OUTPUT,
+    get_layout,
 )
+from lattice.norm import QUOTE_DASH_FOLD as _NORM_QUOTE_DASH_FOLD
 from lattice.tags import HAVE_MUTAGEN_BASE, TagBundle, read_replaygain
 from lattice.utils import (
     _make_pbar,
@@ -30,21 +33,10 @@ from lattice.utils import (
 # Mode: Duplicate detection
 # =====================================
 
-# Mirrors cleaner.py's fold table — kept in-package because spec §5 keeps
-# cleaner.py outside the lattice package.
-_QUOTE_DASH_FOLD = {
-    "‘": "'",
-    "’": "'",
-    "ʼ": "'",
-    "“": '"',
-    "”": '"',
-    "‐": "-",
-    "‑": "-",
-    "‒": "-",
-    "–": "-",
-    "—": "-",
-    "―": "-",
-}
+# The duplicate key folds quote/dash variants through the shared rules engine
+# (lattice.norm, promoted from the cleaner in 5.0.0; this file used to carry a
+# hand-mirrored copy of the table).
+_QUOTE_DASH_FOLD = _NORM_QUOTE_DASH_FOLD
 
 _WS_RUN = re.compile(r"\s+")
 _PAREN_TAIL = re.compile(r"\s*[\(\[][^\(\[\)\]]*[\)\]]\s*$")
@@ -722,6 +714,197 @@ def run_replaygain_audit(
         print(f"  No album gain:  {n_noalbum}")
         print(f"  Partial:        {n_partial}")
         print(f"  Missing:        {n_missing}")
+        print(f"Results written to: {out_path}")
+
+    return 0
+
+
+# =====================================
+# Mode: Stray-file audit
+# =====================================
+
+# Routine album-folder furniture that is neither audio nor a cover image:
+# player/encoder sidecars, playlist formats, checksums, and the companion
+# tools' own logs. Non-audio files inside an album folder whose extension is
+# outside these sets are reported as likely import junk.
+SIDECAR_IGNORE_EXT = {
+    ".log",  # cleaner/apestrip/rerate/replaygain/genre_tidy/slipcover logs
+    ".m3u",
+    ".m3u8",
+    ".pls",
+    ".wpl",
+    ".asx",  # playlists
+    ".cue",  # cue sheets
+    ".txt",
+    ".nfo",
+    ".url",
+    ".csv",  # liner notes and download metadata
+    ".accurip",
+    ".md5",
+    ".sfv",  # checksum sidecars
+    ".xml",
+    ".json",
+    ".ini",
+    ".db",  # player sidecars
+}
+
+IMAGE_SIDECAR_EXT = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
+
+
+def _layout_depths(layout: str) -> tuple[int, int]:
+    """(artist_depth, album_depth): the 1-based component positions of
+    {artist} and {album} in a layout pattern. Raises ValueError when either
+    is missing."""
+    parts = [p for p in layout.replace("\\", "/").split("/") if p]
+
+    def slot(key: str) -> int | None:
+        return next(
+            (i + 1 for i, p in enumerate(parts) if p.strip("{}").lower() == key),
+            None,
+        )
+
+    artist = slot("artist")
+    album = slot("album")
+    if artist is None or album is None:
+        raise ValueError(f"layout {layout!r} must name {{artist}} and {{album}}")
+    return artist, album
+
+
+def classify_stray(
+    rel_parts: tuple[str, ...], artist_depth: int, album_depth: int
+) -> str:
+    """Bucket one audio file by how it sits in the tree; rel_parts is the
+    file's path below its library root, split into components.
+
+    hidden       some component (folder or file) is a dot-name: the scanner
+                 and the integrity walks prune these silently, so nothing
+                 official ever saw the file
+    loose        directly inside a folder at the layout's artist slot: with
+                 the default layout that is the artist folder itself, and on
+                 a genre-first layout it also catches flat Artist/Album
+                 strays, whose files sit one slot short of the album depth
+    placed       inside (or below) a folder at the layout's album depth, so
+                 multi-disc subfolders deeper than album depth still count
+    wrong-depth  everywhere else: audio at or above the genre/root slots, or
+                 otherwise short of both the artist and album depths
+    """
+    if any(part.startswith(".") for part in rel_parts):
+        return "hidden"
+    depth = len(rel_parts) - 1  # containing folder's depth below the root
+    if depth == artist_depth:
+        return "loose"
+    if depth >= album_depth:
+        return "placed"
+    return "wrong-depth"
+
+
+def run_stray_audit(
+    root: str | list[str],
+    output: str,
+    *,
+    layout: str | None = None,
+    quiet: bool = False,
+) -> int:
+    """Report files that don't fit the library's own layout: audio outside the
+    configured album depth, loose tracks sitting beside album folders, audio
+    hidden in dot-directories the scanners prune silently, and unrecognized
+    non-audio files inside album folders (the beets 'unimported' analog).
+    Read-only; the report is the whole point."""
+    roots = as_roots(root)
+    if layout is None:
+        layout = get_layout()
+    artist_depth, album_depth = _layout_depths(layout)
+
+    strays: dict[str, list[str]] = {"wrong-depth": [], "loose": [], "hidden": []}
+    junk: list[str] = []
+    scanned = 0
+
+    for src_root in roots:
+        # One unpruned walk per root: unlike the scanner and integrity walks,
+        # this mode exists to surface what they silently skip, hidden
+        # directories and files included.
+        for dirpath, dirnames, filenames in os.walk(src_root):
+            dirnames[:] = sorted(dirnames)
+            rel_dir = os.path.relpath(dirpath, src_root)
+            dir_parts = tuple(p for p in rel_dir.split(os.sep) if p and p != ".")
+            dir_is_hidden = any(p.startswith(".") for p in dir_parts)
+            audio = sorted(f for f in filenames if is_audio(f))
+            scanned += len(audio)
+            for f in audio:
+                bucket = classify_stray(dir_parts + (f,), artist_depth, album_depth)
+                if bucket != "placed":
+                    strays[bucket].append(
+                        relpath_under(os.path.join(dirpath, f), roots)
+                    )
+            if audio and not dir_is_hidden:
+                for f in sorted(filenames):
+                    ext = os.path.splitext(f)[1].lower()
+                    if (
+                        is_audio(f)
+                        or ext in IMAGE_SIDECAR_EXT
+                        or ext in SIDECAR_IGNORE_EXT
+                    ):
+                        continue
+                    junk.append(
+                        f"{ext or '(none)'}  "
+                        f"{relpath_under(os.path.join(dirpath, f), roots)}"
+                    )
+
+    total_strays = sum(len(v) for v in strays.values())
+    out_path = os.path.abspath(output or DEFAULT_STRAY_AUDIT_OUTPUT)
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+
+    with open(out_path, "w", encoding="utf-8") as out_file:
+        out_file.write("STRAY-FILE AUDIT\n")
+        out_file.write(f"Root: {', '.join(roots)}\n")
+        out_file.write(
+            f"Layout: {layout}  (artist depth {artist_depth}, "
+            f"album depth {album_depth})\n"
+        )
+        out_file.write(
+            f"Scanned: {scanned} audio  Strays: {total_strays}  "
+            f"Unrecognized files: {len(junk)}\n"
+        )
+        out_file.write("=" * 60 + "\n\n")
+
+        sections = [
+            (
+                "WRONG-DEPTH AUDIO",
+                strays["wrong-depth"],
+                "short of both the artist and album slots (root or genre level)",
+            ),
+            (
+                "LOOSE TRACKS",
+                strays["loose"],
+                "directly inside a folder at the layout's artist slot; on a "
+                "genre-first layout this includes flat Artist/Album strays",
+            ),
+            (
+                "HIDDEN-DIR AUDIO",
+                strays["hidden"],
+                "dot-names the scanners and integrity walks prune silently",
+            ),
+        ]
+        for title, rows, note in sections:
+            out_file.write(f"== {title} ({len(rows)}) ==\n")
+            out_file.write(f"   ({note})\n")
+            for row in rows:
+                out_file.write(f"  {row}\n")
+            out_file.write("\n")
+
+        out_file.write(f"== NON-AUDIO FILES IN ALBUM FOLDERS ({len(junk)}) ==\n")
+        out_file.write("   (outside the audio, image, and sidecar ignore sets)\n")
+        for row in junk:
+            out_file.write(f"  {row}\n")
+
+    if not quiet:
+        print(f"\nAudited {scanned} audio files under: {', '.join(roots)}")
+        print(
+            f"  Wrong-depth: {len(strays['wrong-depth'])}  "
+            f"Loose: {len(strays['loose'])}  "
+            f"Hidden: {len(strays['hidden'])}  "
+            f"Unrecognized: {len(junk)}"
+        )
         print(f"Results written to: {out_path}")
 
     return 0
