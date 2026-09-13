@@ -327,7 +327,14 @@ keep today's apply-by-default so aliases and cron do not change.
 - [ ] **`--auditMbids` + the Picard hand-off TSV**: MusicBrainz TXXX
   coverage from `--auditTags`. S.
 - [ ] **ReplayGain verification**: stored gain vs a fresh rsgain/
-  ffmpeg ebur128 measurement, read-only. M.
+  ffmpeg ebur128 measurement, read-only. M. RESEARCHED 2026-09-13
+  (RESEARCH-b7-replaygain-2026-09-13.md; probed live on synthetic
+  audio): the harness gate is resolved - `rsgain custom -O -s s` is a
+  byte-identical no-write scan with machine-readable per-track AND
+  album rows on the same libebur128 that wrote the tags, and the
+  identity gain = target - loudness held exactly on the probes. Design,
+  clip-protection handling, tolerance (0.5 dB default), and the
+  promoted value reader are specced in the doc; M, ready to commission.
 - [ ] **`--auditJunkFrames`**: iTunNORM/private-TXXX reporting. S.
   (The strip itself is a new-companion or retag.py extension, M.)
 - [ ] **Art mismatch audit**: embedded vs folder art, per-track art
