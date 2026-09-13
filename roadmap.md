@@ -5,7 +5,7 @@
 - [x] Adopt vir-tui 2.2.0's Phase-3 primitives — `progress_box()`, `interactive_session()`, `out_note()` — deleting the hand-mirrored `_TUIPbar`/shared-screen plumbing (v4.17.0).
 - [x] Adopt vir-tui 2.3.0: dependency floor `>=2.3.0` (mouse support, type-to-filter in menus of 15+ items, `configure_theme`); the lockfile had already been running 2.3.0. pytest-asyncio dropped from the dev group (v5.2.0).
 
-What's done, what's next, what's deferred. Sequenced for maximum utility as a standalone library management suite. Updated as of v5.3.0.
+What's done, what's next, what's deferred. Sequenced for maximum utility as a standalone library management suite. Updated as of v5.4.0.
 
 ---
 
@@ -299,12 +299,22 @@ keep today's apply-by-default so aliases and cron do not change.
 
 ### B. The landscape gaps (each an audit mode unless noted)
 
-- [ ] **Content-hash audio duplicate detection**
+- [x] **Content-hash audio duplicate detection**
   (`--auditAudioDupes`): sha256 exact + head/tail sampling; catches
   retagged/renamed dupes the tag-based `--duplicates` misses. M.
-- [ ] **Library health score**: aggregate tag completeness, RG
+  Shipped as a three-tier sha256 audit: exact (whole file), audio-stream
+  (container tag regions parsed and skipped: ID3v2/ID3v1/APEv2 on MP3,
+  FLAC metadata blocks, MP4 mdat), and sampled (raw first/last 64KB for
+  the formats without a parsed region). Tags never read; falls back
+  safely on malformed containers. (v5.4.0)
+- [x] **Library health score**: aggregate tag completeness, RG
   coverage, art, bitrate, decode errors into a per-album/per-root
-  score. S.
+  score. S. Shipped as `--healthScore`: per-album score out of 100
+  (tags 40, ReplayGain 30, art 20, bitrate 10) with point-by-point
+  deductions and A/B/C/D grades, worst first; `--verbose` lists the
+  perfect albums. No decode scans: the integrity walks stay their own
+  modes, so the score reuses only existing read-only machinery.
+  (v5.4.0)
 - [x] **Unimported/stray-file audit** (`--auditStrays`): audio at wrong
   depth for the configured layout, loose tracks beside album folders,
   hidden-dir audio the scanners prune silently, and unrecognized
@@ -332,25 +342,34 @@ candidate, L, behind 1-7).
 
 ## New findings 2026-09-12 (six-lens full audit; detail: audit/FULL-AUDIT-2026-09-12.md, Wave 23)
 
-- [ ] **GitHub presentation (workspace batch):** no Releases exist for
+- [x] **GitHub presentation (workspace batch):** no Releases exist for
       any v5.x tag (latestRelease is v2.0.0 from March) - cut Releases
       for the v5 line from the existing patchnotes (v5.2.1's note is the
       only public record of the PyPI incident); the description is
       pre-fold stale (replacement drafted in the ledger); swap
       python-314/tqdm/shells-out-to-flac--ffmpeg topics for curses/
       replaygain/music-manager; the codex homepage predates the rename
-      (verify it resolves).
-- [ ] **Reopen queue order (per the research's own ranking):** B.1
+      (verify it resolves). Done 2026-09-13 under decision 60: Releases
+      cut from the patchnotes for v5.0.0-v5.3.0 (v5.4.0's rides its tag
+      push at stage close); description re-set post-fold; topics swapped
+      (curses, replaygain, music-manager in); codex homepage verified
+      resolving with a redirect.
+- [x] **Reopen queue order (per the research's own ranking):** B.1
       --auditAudioDupes first (M; sha256 + head/tail sampling closes the
       retagged-dupe blind spot; no hashlib in modes/ yet); B.2 library
       health score (S, aggregates six audits); then the S sweep B.4/B.5/
       B.6/B.8/B.9/B.10; B.7 ReplayGain verification last (needs an
-      rsgain/ebur128 harness).
-- [ ] **Docs:** CLAUDE.md:72 names the deleted _TUIPbar (actual dispatch:
+      rsgain/ebur128 harness). Followed: B.1 and B.2 shipped in v5.4.0;
+      the S sweep (B.4-B.6, B.8-B.10) and B.7 remain the queue.
+- [x] **Docs:** CLAUDE.md:72 names the deleted _TUIPbar (actual dispatch:
       vir_tui.progress_box / tqdm / _FallbackProgress); README's
       "completed software" claim is falsified by tonight's own lane
       (reword to maintained software with the landscape queue);
       pyproject description is pre-fold (feeds PyPI). The README sample
       output's em-dashes are faithful to the program's real output
       (verify before scrubbing) - legacy em-dashes elsewhere predate the
-      lane (declare out of scope or do one legacy pass).
+      lane (declare out of scope or do one legacy pass). All three fixed
+      in v5.4.0; the sample-output em-dashes were verified faithful
+      (library.py joins artist and title with a real em-dash) and kept;
+      no prose em-dashes exist elsewhere in the README, so no legacy
+      pass was needed.

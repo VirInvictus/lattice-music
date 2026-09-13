@@ -2,7 +2,7 @@ import json
 import os
 import re
 
-VERSION = "5.3.0"
+VERSION = "5.4.0"
 
 DEFAULT_LIBRARY_OUTPUT = "music_library.txt"
 DEFAULT_FLAC_OUTPUT = "flac_errors.txt"
@@ -13,6 +13,8 @@ DEFAULT_WMA_OUTPUT = "wma_scan_results.txt"
 DEFAULT_MISSING_ART_OUTPUT = "missing_art.txt"
 DEFAULT_ART_QUALITY_OUTPUT = "art_quality_audit.txt"
 DEFAULT_DUPLICATES_OUTPUT = "duplicates.txt"
+DEFAULT_AUDIO_DUPES_OUTPUT = "audio_dupes.txt"
+DEFAULT_HEALTH_SCORE_OUTPUT = "health_score.txt"
 DEFAULT_TAG_AUDIT_OUTPUT = "tag_audit.txt"
 DEFAULT_BITRATE_AUDIT_OUTPUT = "bitrate_audit.txt"
 DEFAULT_REPLAYGAIN_AUDIT_OUTPUT = "replaygain_audit.txt"

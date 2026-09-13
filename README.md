@@ -15,7 +15,7 @@ A CLI/TUI toolkit for music collectors who manage their own libraries. lattice-m
 
 > **Read-only by default.** lattice-music reads tags and decodes audio, and it writes only reports, playlists, and extracted cover art. The two exceptions are the explicit write modes: `--clean` (consolidate fragmented album folders, optionally normalize names and tags) and `--apestrip` (remove stray APEv2 tags from MP3s). Both are dry-run by default, write only on `--apply`, and log every change. The optional companion scripts in `scripts/` also **do** modify files (tags, rating bytes, folder layout) and must be used with caution. See [Write modes](#write-modes) and [Companion scripts](#companion-scripts).
 
-> **Note:** This is considered completed software. It is effectively feature complete; bug fixes will be addressed as they come, but no new features are planned. It has been thoroughly tested and is known to be fully functional on the primary development environment: **Fedora Linux 44 (Workstation Edition)**, kernel `7.0.9-205.fc44.x86_64`, on **Python 3.14**, with `flac` and `ffmpeg` from the Fedora repositories. While it is pure Python and should be cross-platform, this specific setup is the only officially tested environment.
+> **Note:** This is actively maintained software: bug fixes land as they come, and the audit-mode family keeps growing (see the Features table). It is thoroughly tested and known to be fully functional on the primary development environment: **Fedora Linux 44 (Workstation Edition)**, kernel `7.0.9-205.fc44.x86_64`, on **Python 3.14**, with `flac` and `ffmpeg` from the Fedora repositories. While it is pure Python and should be cross-platform, this specific setup is the only officially tested environment.
 
 ## Contents
 
@@ -52,10 +52,12 @@ Modern music players often hide your library behind proprietary databases. latti
 | **Missing art report** | `--missingArt` | Lists directories with no cover art (folder or embedded) to text |
 | **Art quality audit** | `--auditArtQuality` | Reports extracted/folder covers below a resolution threshold |
 | **Duplicate detection** | `--duplicates` | Four-section report: exact album dupes across directories, within-folder multi-format pairs, fuzzy similar-name candidates, and track-level dupes filtered by duration |
+| **Content-hash duplicate audit** | `--auditAudioDupes` | Byte-level duplicate detection: exact-file sha256, audio-stream sha256 (tags parsed out, so retagged copies match), and head/tail 64KB sampling; catches renamed and retagged dupes the tag-based report misses |
 | **Tag audit** | `--auditTags` | Reports files missing title, artist, track number, or genre to text |
 | **Bitrate audit** | `--auditBitrate` | Reports files falling below a minimum bitrate floor |
 | **ReplayGain audit** | `--auditReplayGain` | Reports per-album ReplayGain coverage (missing, partial, no album gain, OK); Opus R128 gain counts as tagged |
 | **Stray-file audit** | `--auditStrays` | Reports audio outside the layout's album depth, loose tracks, hidden-dir audio the scanners prune silently, and unrecognized non-audio files in album folders |
+| **Library health score** | `--healthScore` | Per-album score out of 100 aggregating tag completeness, ReplayGain coverage, art, and the bitrate floor, with point-by-point deductions |
 | **Clean (write)** | `--clean` | Consolidates fragmented album folders; opt-in `--normalize-names`/`--normalize-filenames`/`--normalize-tags` passes. Dry-run by default, `--apply` to write |
 | **APEv2 strip (write)** | `--apestrip` | Removes stray APEv2 tags from MP3s (`--keep-metadata` to migrate first, `--repair-malformed` for broken tags). Dry-run by default, `--apply` to write |
 | **Version** | `--version` | Prints version and exits |
@@ -157,8 +159,15 @@ lattice --missingArt --output missing_art.txt
 # Find duplicates: exact, multi-format, similar-name, track-level
 lattice --duplicates --output duplicates.txt
 
+# Byte-level duplicate hunt: catches renamed and retagged copies
+# (exact sha256, audio-stream sha256, head/tail 64KB sampling)
+lattice --auditAudioDupes --output audio_dupes.txt
+
 # Scan two libraries together (repeat --root); surfaces cross-library duplicates
 lattice --duplicates --root ~/Music --root /mnt/usb/Albums --output duplicates.txt
+
+# Score every album out of 100: tags, ReplayGain, art, bitrate
+lattice --healthScore --output health_score.txt
 
 # Audit tags for missing metadata
 lattice --auditTags --output tag_audit.txt
@@ -286,18 +295,19 @@ The filesystem is the source of truth: lattice-music walks the tree on every inv
 <summary>Full <code>lattice --help</code></summary>
 
 ```
-usage: lattice [-h] [--version] [--library | --ai-library | --all-wings | --ai-wings | --testFLAC |
-               --testMP3 | --testOpus | --testWAV | --testWMA | --extractArt | --missingArt |
-               --auditArtQuality | --duplicates | --auditTags | --auditBitrate | --auditReplayGain |
-               --auditStrays | --playlist | --stats | --clean | --apestrip] [--root DIR] [--output OUTPUT]
-               [--rule RULE] [--layout LAYOUT] [--min-art-res MIN_ART_RES] [--min-bitrate MIN_BITRATE]
-               [--workers WORKERS] [--prefer {flac,ffmpeg}] [--quiet] [--genres] [--paths] [--dry-run]
-               [--apply] [--normalize-names] [--normalize-filenames] [--normalize-tags] [--all]
-               [--keep-metadata] [--repair-malformed] [--resume] [--only-errors | --no-only-errors]
+usage: lattice [-h] [--version] [--library | --ai-library | --all-wings | --ai-wings | --testFLAC | --testMP3 |
+               --testOpus | --testWAV | --testWMA | --extractArt | --missingArt | --auditArtQuality |
+               --duplicates | --auditAudioDupes | --auditTags | --auditBitrate | --auditReplayGain |
+               --auditStrays | --healthScore | --playlist | --stats | --clean | --apestrip] [--root DIR]
+               [--output OUTPUT] [--rule RULE] [--layout LAYOUT] [--min-art-res MIN_ART_RES]
+               [--min-bitrate MIN_BITRATE] [--workers WORKERS] [--prefer {flac,ffmpeg}] [--quiet] [--genres]
+               [--paths] [--dry-run] [--apply] [--normalize-names] [--normalize-filenames] [--normalize-tags]
+               [--all] [--keep-metadata] [--repair-malformed] [--resume] [--only-errors | --no-only-errors]
                [--ffmpeg FFMPEG] [--verbose]
                [pos_root]
 
-Music library toolkit: tree, integrity, art, duplicates, tag audit
+Filesystem-first music library toolkit: trees, integrity, audits, content-hash duplicate detection, health score,
+write modes
 
 positional arguments:
   pos_root              Root directory (positional fallback)
@@ -317,25 +327,28 @@ options:
   --extractArt          Extract embedded cover art to folder
   --missingArt          Report directories missing cover art
   --auditArtQuality     Report extracted/folder covers below a resolution threshold
-  --duplicates          Four-section dupe report: exact albums, within-folder multi-format, similar names,
-                        track-level
+  --duplicates          Four-section dupe report: exact albums, within-folder multi-format, similar names, track-
+                        level
+  --auditAudioDupes     Content-hash duplicate detection: exact sha256, audio-stream, and head/tail sampled
+                        matches (catches retagged or renamed dupes)
   --auditTags           Report files with incomplete tags
   --auditBitrate        Report files below a certain bitrate floor
   --auditReplayGain     Report per-album ReplayGain coverage (missing, partial, no album gain)
   --auditStrays         Report audio outside the layout's album depth, loose tracks, hidden-dir audio, and
                         unrecognized non-audio files in album folders
+  --healthScore         Per-album health score aggregating tag completeness, ReplayGain coverage, art, and the
+                        bitrate floor
   --playlist            Generate a smart .m3u playlist based on a rule
   --stats               Library-wide statistics summary
-  --clean               Consolidate fragmented album folders; optionally normalize names and tags (write
-                        mode: dry-run by default, --apply to write)
+  --clean               Consolidate fragmented album folders; optionally normalize names and tags (write mode:
+                        dry-run by default, --apply to write)
   --apestrip            Strip stray APEv2 tags from MP3s (write mode: dry-run by default, --apply to write)
   --root DIR            Root directory; repeat --root to scan several libraries together (default: read from
                         config or current dir)
   --output OUTPUT       Output path
   --rule RULE           Smart playlist rule (e.g. "rating >= 4 and genre == 'Jazz'")
-  --layout LAYOUT       Directory structure pattern for extracting tags from path (default: the `layout`
-                        config key, or {artist}/{album}). Use {genre}/{artist}/{album} for a genre-first
-                        library.
+  --layout LAYOUT       Directory structure pattern for extracting tags from path (default: the `layout` config
+                        key, or {artist}/{album}). Use {genre}/{artist}/{album} for a genre-first library.
   --min-art-res MIN_ART_RES
                         Minimum resolution in pixels for --auditArtQuality (default: 500)
   --min-bitrate MIN_BITRATE
@@ -348,21 +361,21 @@ options:
   --paths               Include absolute directory paths at the album level
   --dry-run             Preview changes without writing (extractArt, clean, apestrip)
   --apply               Write for real (clean, apestrip); without it these modes only preview
-  --normalize-names     --clean: also rename non-duplicate folders at every depth with non-standard
-                        characters to their normalized form
+  --normalize-names     --clean: also rename non-duplicate folders at every depth with non-standard characters to
+                        their normalized form
   --normalize-filenames
-                        --clean: also rename audio track files the same way (a distinct change from
-                        --normalize-names)
+                        --clean: also rename audio track files the same way (a distinct change from --normalize-
+                        names)
   --normalize-tags      --clean: library-wide typographic tag normalization (Pass 4)
   --all                 --clean: run all normalization passes (--normalize-names, --normalize-filenames,
                         --normalize-tags)
-  --keep-metadata       --apestrip: before stripping, migrate APE fields not already in ID3 into the
-                        matching ID3 frame (genre is never migrated, ratings never written)
+  --keep-metadata       --apestrip: before stripping, migrate APE fields not already in ID3 into the matching ID3
+                        frame (genre is never migrated, ratings never written)
   --repair-malformed    --apestrip: also repair malformed APE tags mutagen cannot parse, by excising the tag
                         bytes directly (verified + atomic)
   --resume              --testFLAC / --testMP3: reuse the verdicts recorded by an interrupted run
-                        (<output>.progress.json) and scan only the remaining files; finishing a scan clears
-                        the state
+                        (<output>.progress.json) and scan only the remaining files; finishing a scan clears the
+                        state
   --only-errors, --no-only-errors
                         Write only errors/warns (MP3/Opus modes)
   --ffmpeg FFMPEG       Path to ffmpeg

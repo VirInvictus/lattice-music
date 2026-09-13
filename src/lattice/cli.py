@@ -5,9 +5,11 @@ import sys
 from lattice.config import (
     DEFAULT_AI_LIBRARY_OUTPUT,
     DEFAULT_ART_QUALITY_OUTPUT,
+    DEFAULT_AUDIO_DUPES_OUTPUT,
     DEFAULT_BITRATE_AUDIT_OUTPUT,
     DEFAULT_DUPLICATES_OUTPUT,
     DEFAULT_FLAC_OUTPUT,
+    DEFAULT_HEALTH_SCORE_OUTPUT,
     DEFAULT_LIBRARY_OUTPUT,
     DEFAULT_MISSING_ART_OUTPUT,
     DEFAULT_MP3_OUTPUT,
@@ -28,8 +30,10 @@ from lattice.modes.artwork import (
     run_missing_art,
 )
 from lattice.modes.audit import (
+    run_audio_dupes,
     run_bitrate_audit,
     run_duplicates,
+    run_health_score,
     run_replaygain_audit,
     run_stray_audit,
     run_tag_audit,
@@ -56,7 +60,8 @@ from lattice.tui import interactive_menu
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="lattice",
-        description="Music library toolkit: tree, integrity, art, duplicates, tag audit",
+        description="Filesystem-first music library toolkit: trees, integrity, "
+        "audits, content-hash duplicate detection, health score, write modes",
     )
     p.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
     group = p.add_mutually_exclusive_group()
@@ -107,6 +112,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Four-section dupe report: exact albums, within-folder multi-format, similar names, track-level",
     )
     group.add_argument(
+        "--auditAudioDupes",
+        dest="audit_audio_dupes",
+        action="store_true",
+        help="Content-hash duplicate detection: exact sha256, audio-stream, "
+        "and head/tail sampled matches (catches retagged or renamed dupes)",
+    )
+    group.add_argument(
         "--auditTags", action="store_true", help="Report files with incomplete tags"
     )
     group.add_argument(
@@ -125,6 +137,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Report audio outside the layout's album depth, loose tracks, "
         "hidden-dir audio, and unrecognized non-audio files in album folders",
+    )
+    group.add_argument(
+        "--healthScore",
+        dest="health_score",
+        action="store_true",
+        help="Per-album health score aggregating tag completeness, "
+        "ReplayGain coverage, art, and the bitrate floor",
     )
     group.add_argument(
         "--playlist",
@@ -431,6 +450,10 @@ def main(argv: list[str] | None = None) -> int:
             output = args.output or DEFAULT_DUPLICATES_OUTPUT
             return run_duplicates(root, output, quiet=args.quiet)
 
+        if args.audit_audio_dupes:
+            output = args.output or DEFAULT_AUDIO_DUPES_OUTPUT
+            return run_audio_dupes(root, output, quiet=args.quiet)
+
         if args.auditTags:
             output = args.output or DEFAULT_TAG_AUDIT_OUTPUT
             return run_tag_audit(root, output, quiet=args.quiet)
@@ -448,6 +471,17 @@ def main(argv: list[str] | None = None) -> int:
         if args.audit_strays:
             output = args.output or DEFAULT_STRAY_AUDIT_OUTPUT
             return run_stray_audit(root, output, layout=args.layout, quiet=args.quiet)
+
+        if args.health_score:
+            output = args.output or DEFAULT_HEALTH_SCORE_OUTPUT
+            return run_health_score(
+                root,
+                output,
+                min_kbps=args.min_bitrate,
+                min_res=args.min_art_res,
+                verbose=args.verbose,
+                quiet=args.quiet,
+            )
 
         if args.playlist:
             output = args.output or DEFAULT_PLAYLIST_OUTPUT

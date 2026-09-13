@@ -1,5 +1,7 @@
+import hashlib
 import os
 import re
+import struct
 import sys
 import unicodedata
 from collections import Counter, defaultdict
@@ -9,16 +11,20 @@ from typing import NamedTuple
 
 from lattice.config import (
     AUDIO_EXTENSIONS,
+    DEFAULT_AUDIO_DUPES_OUTPUT,
     DEFAULT_BITRATE_AUDIT_OUTPUT,
     DEFAULT_DUPLICATES_OUTPUT,
+    DEFAULT_HEALTH_SCORE_OUTPUT,
     DEFAULT_REPLAYGAIN_AUDIT_OUTPUT,
     DEFAULT_STRAY_AUDIT_OUTPUT,
     DEFAULT_TAG_AUDIT_OUTPUT,
     get_layout,
 )
+from lattice.modes.artwork import _get_image_size, _has_embedded_art
 from lattice.norm import QUOTE_DASH_FOLD as _NORM_QUOTE_DASH_FOLD
-from lattice.tags import HAVE_MUTAGEN_BASE, TagBundle, read_replaygain
+from lattice.tags import HAVE_MUTAGEN_BASE, ReplayGainStatus, TagBundle, read_replaygain
 from lattice.utils import (
+    _find_cover_file,
     _make_pbar,
     as_roots,
     count_audio_files,
@@ -425,6 +431,508 @@ def run_duplicates(root: str | list[str], output: str, *, quiet: bool = False) -
         print(f"  Within-folder multi-format:   {mf_count}")
         print(f"  Similar-name candidates:      {sim_count}")
         print(f"  Track-level duplicates:       {trk_count}")
+    return 0
+
+
+# =====================================
+# Mode: Content-hash audio duplicates
+# =====================================
+
+# Raw head/tail sample size, and the streaming chunk size.
+DUPES_SAMPLE_BYTES = 64 * 1024
+_DUPES_CHUNK = 1024 * 1024
+
+# Extensions whose audio region can be located exactly by parsing (never
+# trusting) the tag containers: MP3 skips ID3v2/ID3v1/APEv2, FLAC skips its
+# metadata blocks, M4A hashes only mdat boxes. Everything else falls back to
+# raw head/tail byte samples, which survive a rename but only some retags.
+_AUDIO_REGION_EXTS = {".mp3", ".flac", ".m4a"}
+
+_APE_HAS_HEADER = 0x80000000
+
+
+class _FileSig(NamedTuple):
+    path: str
+    size: int
+    full: str  # sha256 over the whole file
+    stream: str  # sha256 over the audio region(s); "" when not computable
+    head: str  # sha256 over the raw first DUPES_SAMPLE_BYTES bytes
+    tail: str  # sha256 over the last bytes, trailing tag containers stripped
+    error: str  # "" or why the file could not be read
+
+
+class _BufReader:
+    """seek/read over an in-memory buffer, so the tail-sample strip runs
+    through the same code as the file-backed one."""
+
+    def __init__(self, data: bytes):
+        self.data = data
+        self.pos = 0
+
+    def seek(self, off: int) -> None:
+        self.pos = off
+
+    def read(self, n: int) -> bytes:
+        out = self.data[self.pos : self.pos + n]
+        self.pos += n
+        return out
+
+
+def _trailing_tags_len(reader, size: int) -> int:
+    """Byte length of the well-formed ID3v1/APEv2 containers stacked at the
+    end of `size` bytes (ID3v1 last, APEv2 before it, either optional; both
+    are the tags this mode exists to see past). Every claim is end-anchored
+    and bounded by `size`; a malformed or oversized claim simply counts as
+    audio and returns shorter, so the strip can never cut into real audio
+    beyond the bounds it proved."""
+    cut = 0
+    for _ in range(4):  # at most a couple of stacked containers
+        if size - cut >= 128:
+            reader.seek(size - cut - 128)
+            if reader.read(3) == b"TAG":
+                cut += 128
+                continue
+        if size - cut >= 32:
+            reader.seek(size - cut - 32)
+            footer = reader.read(32)
+            if footer[:8] == b"APETAGEX":
+                tag_size, _items, flags = struct.unpack("<III", footer[12:24])
+                total = tag_size + (32 if flags & _APE_HAS_HEADER else 0)
+                if 32 < total <= size - cut:
+                    cut += total
+                    continue
+        break
+    return cut
+
+
+def _audio_regions(fh, ext: str, size: int) -> list[tuple[int, int]] | None:
+    """(start, end) byte ranges holding the audio stream, or None when the
+    container cannot be trusted enough to locate them (the caller then falls
+    back to the raw head/tail samples). Every parse is bounded by `size`; a
+    malformed claim means None, never a wrong range."""
+    try:
+        if ext == ".mp3":
+            fh.seek(0)
+            head = fh.read(10)
+            if len(head) < 10 or head[:3] != b"ID3":
+                return None
+            end = 10 + (head[6] << 21) + (head[7] << 14) + (head[8] << 7) + head[9]
+            if head[5] & 0x10:
+                end += 10  # a footer mirrors the header
+            if not 10 < end < size:
+                return None
+            audio_end = size - _trailing_tags_len(fh, size)
+            if audio_end <= end:
+                return None
+            return [(end, audio_end)]
+        if ext == ".flac":
+            fh.seek(0)
+            if fh.read(4) != b"fLaC":
+                return None
+            pos = 4
+            for _ in range(64):  # block count is small; longer is malformed
+                fh.seek(pos)
+                header = fh.read(4)
+                if len(header) < 4:
+                    return None
+                pos += 4 + int.from_bytes(header[1:4], "big")
+                if pos >= size:
+                    return None  # metadata reaches EOF: no audio to hash
+                if header[0] & 0x80:
+                    return [(pos, size)]
+            return None
+        if ext == ".m4a":
+            regions: list[tuple[int, int]] = []
+            pos = 0
+            for _ in range(64):
+                if pos >= size:
+                    break
+                fh.seek(pos)
+                header = fh.read(16)
+                if len(header) < 8:
+                    return None
+                box = int.from_bytes(header[:4], "big")
+                hdr = 8
+                if box == 1:
+                    if len(header) < 16:
+                        return None
+                    box = int.from_bytes(header[8:16], "big")
+                    hdr = 16
+                elif box == 0:
+                    box = size - pos  # a to-EOF box
+                if box < hdr or pos + box > size:
+                    return None
+                if header[4:8] == b"mdat":
+                    regions.append((pos + hdr, pos + box))
+                pos += box
+            else:
+                return None  # walk hit its bound before EOF: malformed
+            return regions or None
+    except OSError:
+        return None
+    return None
+
+
+def _fingerprint_file(path: str) -> _FileSig:
+    """One pass over the file for the full sha256, the head sample, the tail
+    sample, and (when the container is one we can parse) the audio-stream
+    sha256 over the located region(s). Read errors come back in `error`
+    rather than raising, so one unreadable file cannot kill a library run."""
+    ext = os.path.splitext(path)[1].lower()
+    try:
+        size = os.path.getsize(path)
+        regions: list[tuple[int, int]] | None = None
+        if ext in _AUDIO_REGION_EXTS and size > 0:
+            with open(path, "rb") as fh:
+                regions = _audio_regions(fh, ext, size)
+            if regions and sum(end - start for start, end in regions) == 0:
+                regions = None
+
+        h_full = hashlib.sha256()
+        h_stream = hashlib.sha256() if regions else None
+        h_head = hashlib.sha256()
+        tail_buf = bytearray()
+        pos = 0
+        with open(path, "rb") as fh:
+            while chunk := fh.read(_DUPES_CHUNK):
+                h_full.update(chunk)
+                if pos < DUPES_SAMPLE_BYTES:
+                    h_head.update(chunk[: DUPES_SAMPLE_BYTES - pos])
+                tail_buf.extend(chunk)
+                if len(tail_buf) > DUPES_SAMPLE_BYTES:
+                    del tail_buf[: len(tail_buf) - DUPES_SAMPLE_BYTES]
+                if h_stream is not None:
+                    chunk_end = pos + len(chunk)
+                    while regions and regions[0][1] <= pos:
+                        regions.pop(0)
+                    for start, end in regions or ():
+                        if start >= chunk_end:
+                            break
+                        lo = max(pos, start)
+                        hi = min(chunk_end, end)
+                        if hi > lo:
+                            h_stream.update(chunk[lo - pos : hi - pos])
+                pos += len(chunk)
+
+        tail = bytes(tail_buf)
+        strip = _trailing_tags_len(_BufReader(tail), len(tail))
+        h_tail = hashlib.sha256(tail[: len(tail) - strip])
+        return _FileSig(
+            path=path,
+            size=size,
+            full=h_full.hexdigest(),
+            stream=h_stream.hexdigest() if h_stream else "",
+            head=h_head.hexdigest(),
+            tail=h_tail.hexdigest(),
+            error="",
+        )
+    except OSError as e:
+        return _FileSig(
+            path=path, size=0, full="", stream="", head="", tail="", error=str(e)
+        )
+
+
+def _sig_section(
+    out, title: str, groups: list[list[_FileSig]], roots
+) -> tuple[int, int]:
+    files = sum(len(g) for g in groups)
+    if not groups:
+        out.write(f"[{title}]    (none)\n\n")
+        return 0, 0
+    out.write(f"[{title}]    ({len(groups)} group(s), {files} file(s))\n\n")
+    for i, group in enumerate(sorted(groups, key=lambda g: g[0].path), 1):
+        first = min(group, key=lambda s: s.path)
+        out.write(f"  {i}. {relpath_under(os.path.dirname(first.path), roots)}/\n")
+        for s in sorted(group, key=lambda x: x.path):
+            out.write(
+                f"       {relpath_under(s.path, roots)}    ({_fmt_size(s.size)})\n"
+            )
+        out.write("\n")
+    return len(groups), files
+
+
+def run_audio_dupes(root: str | list[str], output: str, *, quiet: bool = False) -> int:
+    """Content-hash duplicate detection: the byte-level complement to
+    `--duplicates` (which keys on tags, names, and sizes). Tags are never
+    read; the report is purely byte-level, so it also works without mutagen.
+
+    Three matching tiers, each a sha256:
+      exact   the whole file byte for byte (a renamed or copied dupe);
+      stream  the audio region only, located by parsing the container's tag
+              boundaries (MP3: ID3v2 head plus trailing ID3v1/APEv2; FLAC:
+              metadata blocks; M4A: the mdat boxes), so files that differ
+              only in their tags match here;
+      sample  for the formats without a parsed region, the raw first and
+              last 64KB: a cheap fingerprint that survives a rename, and
+              survives a retag when the tags stay out of the sampled bytes.
+    Never matches across encodings: a FLAC and the MP3 made from it are
+    different bytes and are not reported."""
+    roots = as_roots(root)
+    if not quiet:
+        print(f"Hashing audio under: {', '.join(roots)}")
+
+    paths = [
+        os.path.join(dirpath, f)
+        for _src_root, dirpath, _dirs, files in iter_audio_dirs(roots)
+        for f in sorted(files)
+        if is_audio(f)
+    ]
+    pbar = _make_pbar(len(paths), "Hashing audio", quiet)
+    sigs = list(map_concurrent(_fingerprint_file, paths, pbar=pbar).values())
+    pbar.close()
+    sigs.sort(key=lambda s: s.path)
+
+    readable = [s for s in sigs if not s.error]
+    errors = [s for s in sigs if s.error]
+
+    by_full: dict[str, list[_FileSig]] = defaultdict(list)
+    for s in readable:
+        by_full[s.full].append(s)
+    exact = [g for g in by_full.values() if len(g) > 1]
+    exact_fulls = {s.full for g in exact for s in g}
+
+    by_stream: dict[str, list[_FileSig]] = defaultdict(list)
+    by_sample: dict[tuple[str, str], list[_FileSig]] = defaultdict(list)
+    for s in readable:
+        if s.full in exact_fulls:
+            continue
+        if s.stream:
+            by_stream[s.stream].append(s)
+        else:
+            by_sample[(s.head, s.tail)].append(s)
+    streams = [g for g in by_stream.values() if len(g) > 1]
+    samples = [g for g in by_sample.values() if len(g) > 1]
+
+    out_path = os.path.abspath(output or DEFAULT_AUDIO_DUPES_OUTPUT)
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write("AUDIO DUPLICATE REPORT\n")
+        f.write(f"Root: {', '.join(roots)}\n")
+        f.write(
+            f"Files: {len(readable)} readable, {len(errors)} unreadable    "
+            f"Samples: first/last {_fmt_size(DUPES_SAMPLE_BYTES)}\n"
+        )
+        f.write("=" * 70 + "\n\n")
+
+        _sig_section(f, "EXACT DUPLICATES", exact, roots)
+        _sig_section(f, "AUDIO-STREAM MATCHES", streams, roots)
+        _sig_section(f, "SAMPLED CONTENT MATCHES", samples, roots)
+
+        if errors:
+            f.write(f"[UNREADABLE FILES]    ({len(errors)})\n\n")
+            for s in errors:
+                f.write(f"       {relpath_under(s.path, roots)}    ({s.error})\n")
+            f.write("\n")
+
+    if not quiet:
+        print(f"\nHashed {len(readable)} files ({len(errors)} unreadable).")
+        print(f"  Exact duplicates:      {len(exact)} group(s)")
+        print(f"  Audio-stream matches:  {len(streams)} group(s)")
+        print(f"  Sampled matches:       {len(samples)} group(s)")
+        print(f"Results written to: {out_path}")
+    return 0
+
+
+# =====================================
+# Mode: Library health score
+# =====================================
+
+# Deduction weights per album out of 100: tags 40, ReplayGain 30, art 20,
+# bitrate 10. The buckets reuse the facts the other audits report, so the
+# score is an aggregation, not a new lens.
+_HEALTH_TAG_WEIGHT = 4  # per missing core field (title/artist/track/genre)
+_HEALTH_TAG_CAP = 40
+_HEALTH_RG_WEIGHT = 30  # proportional to track-gain coverage
+_HEALTH_ART_SMALL_COVER = 8  # folder cover below the resolution floor
+_HEALTH_ART_EMBEDDED_ONLY = 12  # art only inside the audio files
+_HEALTH_ART_NONE = 20
+_HEALTH_BITRATE_WEIGHT = 2  # per file below the floor
+_HEALTH_BITRATE_CAP = 10
+
+
+def _health_grade(score: int) -> str:
+    if score >= 90:
+        return "A"
+    if score >= 75:
+        return "B"
+    if score >= 50:
+        return "C"
+    return "D"
+
+
+def _album_health(
+    bundles: dict[str, TagBundle],
+    rg: dict[str, ReplayGainStatus],
+    folder_cover: bool,
+    cover_res: tuple[int, int] | None,
+    embedded: bool,
+    min_kbps: int,
+    min_res: int,
+) -> tuple[int, list[str]]:
+    """Score one album directory out of 100 and list exactly what cost it
+    points. `bundles` maps path -> TagBundle, `rg` path -> ReplayGainStatus;
+    `cover_res` is the folder cover's (width, height) when known."""
+    notes: list[str] = []
+    penalty = 0
+
+    n_missing = 0
+    tag_bits: list[str] = []
+    for path, t in sorted(bundles.items()):
+        missing = [
+            name
+            for name, val in (
+                ("title", t.title),
+                ("artist", t.artist),
+                ("tracknumber", t.trackno),
+                ("genre", t.genre),
+            )
+            if not val
+        ]
+        if missing:
+            n_missing += len(missing)
+            tag_bits.append(f"{os.path.basename(path)}: {', '.join(missing)}")
+    if n_missing:
+        pen = min(_HEALTH_TAG_CAP, _HEALTH_TAG_WEIGHT * n_missing)
+        penalty += pen
+        notes.append(f"tags -{pen} (" + "; ".join(tag_bits) + ")")
+
+    n = len(bundles)
+    if n:
+        n_gain = sum(1 for s in rg.values() if s.has_track_gain)
+        if n_gain < n:
+            pen = round(_HEALTH_RG_WEIGHT * (n - n_gain) / n)
+            penalty += pen
+            notes.append(f"replaygain -{pen} ({n_gain}/{n} tracks tagged)")
+
+    if not folder_cover:
+        if embedded:
+            pen = _HEALTH_ART_EMBEDDED_ONLY
+            notes.append(f"art -{pen} (embedded only; no folder cover)")
+        else:
+            pen = _HEALTH_ART_NONE
+            notes.append(f"art -{pen} (no art found)")
+        penalty += pen
+    elif cover_res is not None and min(cover_res) < min_res:
+        pen = _HEALTH_ART_SMALL_COVER
+        penalty += pen
+        notes.append(
+            f"art -{pen} (folder cover {cover_res[0]}x{cover_res[1]} < {min_res}px)"
+        )
+
+    low_bits: list[str] = []
+    for path, t in sorted(bundles.items()):
+        if t.bitrate_kbps and t.bitrate_kbps < min_kbps:
+            low_bits.append(f"{os.path.basename(path)} {t.bitrate_kbps}kbps")
+    if low_bits:
+        pen = min(_HEALTH_BITRATE_CAP, _HEALTH_BITRATE_WEIGHT * len(low_bits))
+        penalty += pen
+        notes.append(f"bitrate -{pen} (" + "; ".join(low_bits) + f" < {min_kbps}kbps)")
+
+    return max(0, 100 - penalty), notes
+
+
+def run_health_score(
+    root: str | list[str],
+    output: str,
+    *,
+    min_kbps: int,
+    min_res: int,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> int:
+    """Aggregate the audit lenses into a per-album health score out of 100:
+    tag completeness (--auditTags), ReplayGain coverage (--auditReplayGain),
+    art presence and resolution (--missingArt / --auditArtQuality), and the
+    bitrate floor (--auditBitrate). One read-only pass; no decode scans (the
+    integrity walks remain their own modes). Albums scoring below 100 are
+    listed with their point-by-point deductions; --verbose also lists the
+    perfect ones."""
+    if not HAVE_MUTAGEN_BASE:
+        print("ERROR: mutagen is required for the health score.", file=sys.stderr)
+        return 2
+
+    roots = as_roots(root)
+    if not quiet:
+        print(f"Scoring library health under: {', '.join(roots)}")
+
+    total = count_audio_files(roots)
+    pbar = _make_pbar(total * 2, "Scoring albums", quiet)
+
+    # (src_root, dirpath, score, notes, n_files)
+    albums: list[tuple[str, str, int, list[str], int]] = []
+    for src_root, dirpath, _subdirs, files in iter_audio_dirs(roots):
+        audio_files = sorted(f for f in files if is_audio(f))
+        if not audio_files:
+            continue
+        paths = [os.path.join(dirpath, f) for f in audio_files]
+        bundles = read_tags_concurrent(paths, pbar=pbar)
+        rg = map_concurrent(read_replaygain, paths, pbar=pbar)
+
+        cover = _find_cover_file(dirpath)
+        cover_res = None
+        if cover:
+            try:
+                with open(cover, "rb") as fh:
+                    cover_res = _get_image_size(fh.read())
+            except OSError:
+                cover_res = None
+        embedded = _has_embedded_art(dirpath) if not cover else False
+
+        score, notes = _album_health(
+            bundles, rg, cover is not None, cover_res, embedded, min_kbps, min_res
+        )
+        albums.append((src_root, dirpath, score, notes, len(paths)))
+
+    pbar.close()
+
+    grades: Counter = Counter(_health_grade(s) for _, _, s, _, _ in albums)
+    mean = round(sum(s for _, _, s, _, _ in albums) / len(albums), 1) if albums else 0.0
+
+    out_path = os.path.abspath(output or DEFAULT_HEALTH_SCORE_OUTPUT)
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write("LIBRARY HEALTH REPORT\n")
+        f.write(f"Root: {', '.join(roots)}\n")
+        f.write(f"Albums: {len(albums)}    Audio files: {total}\n")
+        f.write(
+            f"Grades: A {grades['A']}  B {grades['B']}  C {grades['C']}  "
+            f"D {grades['D']}    Mean: {mean}\n"
+        )
+        f.write("=" * 60 + "\n\n")
+
+        ranked = sorted(albums, key=lambda a: (a[2], a[1]))
+        flagged = [a for a in ranked if a[2] < 100]
+        full = [a for a in ranked if a[2] == 100]
+
+        f.write(f"[ALBUMS WITH DEDUCTIONS]    ({len(flagged)} album(s))\n\n")
+        for _src_root, dirpath, score, notes, n_files in flagged:
+            rel = relpath_under(dirpath, roots)
+            f.write(f"  {score:>3} {_health_grade(score)}  {rel}/  ({n_files} files)\n")
+            for note in notes:
+                f.write(f"       {note}\n")
+            f.write("\n")
+
+        if verbose:
+            f.write(f"[FULL-SCORE ALBUMS]    ({len(full)} album(s))\n\n")
+            for _src_root, dirpath, score, _notes, n_files in full:
+                rel = relpath_under(dirpath, roots)
+                f.write(
+                    f"  {score:>3} {_health_grade(score)}  {rel}/  ({n_files} files)\n"
+                )
+            f.write("\n")
+        else:
+            f.write(f"[FULL-SCORE ALBUMS]    {len(full)} (list with --verbose)\n\n")
+
+    if not quiet:
+        print(f"\nScored {len(albums)} albums ({total} files).")
+        print(
+            f"  Grades: A {grades['A']}  B {grades['B']}  "
+            f"C {grades['C']}  D {grades['D']}   Mean: {mean}"
+        )
+        print(f"  Deductions: {len(flagged)} album(s) below full score")
+        print(f"Results written to: {out_path}")
     return 0
 
 

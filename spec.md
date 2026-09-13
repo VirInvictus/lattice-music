@@ -1,6 +1,6 @@
 # lattice-music Application Specification
 
-**Version:** 5.3.0  
+**Version:** 5.4.0  
 **Language:** Python 3.14+  
 **Dependencies:** `mutagen`, `tqdm`, `vir-tui`  
 **License:** MIT
@@ -111,6 +111,8 @@ supplies default roots; the first-run prompt persists only the single
 | Missing art | `--missingArt` | Report directories with no cover art |
 | Art quality audit | `--auditArtQuality` | Report folder/embedded covers below a resolution threshold |
 | Duplicates | `--duplicates` | Four-section report: exact album dupes (cross-directory), within-folder multi-format pairs, fuzzy similar-name candidates, and track-level cross-library duplicates filtered by duration |
+| Content-hash duplicate audit | `--auditAudioDupes` | Byte-level duplicate detection, tags never read: exact-file sha256, audio-stream sha256 (container tag regions parsed out: ID3v2/ID3v1/APEv2 on MP3, FLAC metadata blocks, MP4 mdat boxes), and raw first/last 64KB sampled matches for the remaining formats |
+| Library health score | `--healthScore` | Per-album score out of 100 aggregating tag completeness, ReplayGain coverage, art presence/resolution, and the bitrate floor, with per-bucket deductions; read-only, no decode scans |
 | Tag audit | `--auditTags` | Report files missing title, artist, track number, or genre |
 | Bitrate audit | `--auditBitrate` | Report files below a configurable bitrate floor |
 | ReplayGain audit | `--auditReplayGain` | Report per-album ReplayGain coverage (missing / partial / no album gain / OK); Opus R128 gain counts as tagged |

@@ -28,8 +28,10 @@ from lattice.modes.artwork import (
     run_missing_art,
 )
 from lattice.modes.audit import (
+    run_audio_dupes,
     run_bitrate_audit,
     run_duplicates,
+    run_health_score,
     run_replaygain_audit,
     run_stray_audit,
     run_tag_audit,
@@ -59,6 +61,8 @@ DEFAULT_WMA_OUTPUT = "lattice_wma_errors.txt"
 DEFAULT_MISSING_ART_OUTPUT = "lattice_missing_art.txt"
 DEFAULT_ART_QUALITY_OUTPUT = "lattice_art_quality.txt"
 DEFAULT_DUPLICATES_OUTPUT = "lattice_duplicates.txt"
+DEFAULT_AUDIO_DUPES_OUTPUT = "lattice_audio_dupes.txt"
+DEFAULT_HEALTH_SCORE_OUTPUT = "lattice_health_score.txt"
 DEFAULT_TAG_AUDIT_OUTPUT = "lattice_tag_audit.txt"
 DEFAULT_BITRATE_AUDIT_OUTPUT = "lattice_bitrate_audit.txt"
 DEFAULT_REPLAYGAIN_AUDIT_OUTPUT = "lattice_replaygain_audit.txt"
@@ -95,10 +99,12 @@ _MAIN_SECTIONS = [
         "METADATA",
         [
             "Find duplicate albums",
+            "Find duplicate audio (content hash)",
             "Audit tags",
             "Audit bitrates",
             "Audit ReplayGain",
             "Audit stray files",
+            "Library health score",
         ],
     ),
     (
@@ -155,12 +161,15 @@ _MAIN_ALIASES: dict[str, tuple | None] = {
     "quality": (2, 2),
     "dup": (3, 0),
     "dupes": (3, 0),
-    "tags": (3, 1),
-    "audit": (3, 1),
-    "bitrate": (3, 2),
-    "rg": (3, 3),
-    "replaygain": (3, 3),
-    "strays": (3, 4),
+    "adupes": (3, 1),
+    "audiodupes": (3, 1),
+    "tags": (3, 2),
+    "audit": (3, 2),
+    "bitrate": (3, 3),
+    "rg": (3, 4),
+    "replaygain": (3, 4),
+    "strays": (3, 5),
+    "health": (3, 6),
     "clean": (4, 0),
     "apestrip": (4, 1),
     "ape": (4, 1),
@@ -489,6 +498,17 @@ def _menu_session() -> int:
                 )
 
             elif result == (3, 1):
+                output = prompt_out("Output file", DEFAULT_AUDIO_DUPES_OUTPUT)
+                run_with_capture(
+                    "Find duplicate audio (content hash)",
+                    run_audio_dupes,
+                    root,
+                    output,
+                    quiet=False,
+                    footer=out_note(output),
+                )
+
+            elif result == (3, 2):
                 output = prompt_out("Output file", DEFAULT_TAG_AUDIT_OUTPUT)
                 run_with_capture(
                     "Audit tags",
@@ -499,7 +519,7 @@ def _menu_session() -> int:
                     footer=out_note(output),
                 )
 
-            elif result == (3, 2):
+            elif result == (3, 3):
                 output = prompt_out("Output file", DEFAULT_BITRATE_AUDIT_OUTPUT)
                 min_kbps = prompt_int("Minimum bitrate floor (kbps)", 192)
                 run_with_capture(
@@ -512,7 +532,7 @@ def _menu_session() -> int:
                     footer=out_note(output),
                 )
 
-            elif result == (3, 3):
+            elif result == (3, 4):
                 output = prompt_out("Output file", DEFAULT_REPLAYGAIN_AUDIT_OUTPUT)
                 include_ok = ask_yn("List fully-tagged albums? (y/N)")
                 run_with_capture(
@@ -525,7 +545,7 @@ def _menu_session() -> int:
                     footer=out_note(output),
                 )
 
-            elif result == (3, 4):
+            elif result == (3, 5):
                 output = prompt_out("Output file", DEFAULT_STRAY_AUDIT_OUTPUT)
                 layout = ask("Path layout", get_layout())
                 run_with_capture(
@@ -534,6 +554,21 @@ def _menu_session() -> int:
                     root,
                     output,
                     layout=layout,
+                    quiet=False,
+                    footer=out_note(output),
+                )
+
+            elif result == (3, 6):
+                output = prompt_out("Output file", DEFAULT_HEALTH_SCORE_OUTPUT)
+                min_kbps = prompt_int("Minimum bitrate floor (kbps)", 192)
+                min_res = prompt_int("Minimum cover resolution (px)", 500)
+                run_with_capture(
+                    "Library health score",
+                    run_health_score,
+                    root,
+                    output,
+                    min_kbps=min_kbps,
+                    min_res=min_res,
                     quiet=False,
                     footer=out_note(output),
                 )
