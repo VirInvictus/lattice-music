@@ -329,3 +329,28 @@ Deliberately skipped (already covered or anti-contract): beets-style
 import/DB (filesystem is the truth), convert (flac2opus), edit
 (retag/genre_tidy), fetchart (slipcover --fetch), lyrics (new-companion
 candidate, L, behind 1-7).
+
+## New findings 2026-09-12 (six-lens full audit; detail: audit/FULL-AUDIT-2026-09-12.md, Wave 23)
+
+- [ ] **GitHub presentation (workspace batch):** no Releases exist for
+      any v5.x tag (latestRelease is v2.0.0 from March) - cut Releases
+      for the v5 line from the existing patchnotes (v5.2.1's note is the
+      only public record of the PyPI incident); the description is
+      pre-fold stale (replacement drafted in the ledger); swap
+      python-314/tqdm/shells-out-to-flac--ffmpeg topics for curses/
+      replaygain/music-manager; the codex homepage predates the rename
+      (verify it resolves).
+- [ ] **Reopen queue order (per the research's own ranking):** B.1
+      --auditAudioDupes first (M; sha256 + head/tail sampling closes the
+      retagged-dupe blind spot; no hashlib in modes/ yet); B.2 library
+      health score (S, aggregates six audits); then the S sweep B.4/B.5/
+      B.6/B.8/B.9/B.10; B.7 ReplayGain verification last (needs an
+      rsgain/ebur128 harness).
+- [ ] **Docs:** CLAUDE.md:72 names the deleted _TUIPbar (actual dispatch:
+      vir_tui.progress_box / tqdm / _FallbackProgress); README's
+      "completed software" claim is falsified by tonight's own lane
+      (reword to maintained software with the landscape queue);
+      pyproject description is pre-fold (feeds PyPI). The README sample
+      output's em-dashes are faithful to the program's real output
+      (verify before scrubbing) - legacy em-dashes elsewhere predate the
+      lane (declare out of scope or do one legacy pass).
