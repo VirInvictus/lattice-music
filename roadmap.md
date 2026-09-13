@@ -335,6 +335,8 @@ keep today's apply-by-default so aliases and cron do not change.
   identity gain = target - loudness held exactly on the probes. Design,
   clip-protection handling, tolerance (0.5 dB default), and the
   promoted value reader are specced in the doc; M, ready to commission.
+  Decisions (2026-09-13, Brandon): engine = rsgain -O; flag =
+  --verifyReplayGain.
 - [ ] **`--auditJunkFrames`**: iTunNORM/private-TXXX reporting. S.
   (The strip itself is a new-companion or retag.py extension, M.)
 - [ ] **Art mismatch audit**: embedded vs folder art, per-track art
