@@ -54,7 +54,7 @@ requires-dist = [
     { name = "mutagen", specifier = ">=1.46.0" },
     { name = "pyinstaller", marker = "extra == 'pyinstaller'", specifier = ">=6.0" },
     { name = "tqdm", specifier = ">=4.65.0" },
-    { name = "vir-tui", specifier = ">=2.3.0" },
+    { name = "vir-tui", specifier = ">=2.5.0" },
 ]
 provides-extras = ["pyinstaller"]
 
@@ -206,9 +206,9 @@ wheels = [
 
 [[package]]
 name = "vir-tui"
-version = "2.3.0"
+version = "2.5.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/cc/34/3d95d0a1fc0546a3f3aabdd46591de4d882c0df30b97516976e5dc9551b8/vir_tui-2.3.0.tar.gz", hash = "sha256:4799794fbc9d56fa4de298cb0b7d308f05080fe901b2ee0438a0a2d769c4b7d4", size = 23625, upload-time = "2026-09-04T16:31:25.73Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/fb/c3/695185c3b9632dca1b64bc629ce1260c549d3b2c9c6f0a675e3a150d6334/vir_tui-2.5.0.tar.gz", hash = "sha256:4e40e62d73c8419f20641931a29ed3f7921a755fdfdb56db3acc53e28c98d787", size = 56509, upload-time = "2026-09-14T23:36:43.425Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b6/d7/0227818303144bcd69c032a7554f473740c4396e8dc343ef8a1bb8319de5/vir_tui-2.3.0-py3-none-any.whl", hash = "sha256:4c2b78c38c00942f555a8384dd98cf64174ebee497ae5e14441b93cf0b77ff3e", size = 15766, upload-time = "2026-09-04T16:31:24.632Z" },
+    { url = "https://files.pythonhosted.org/packages/2a/42/a0e3e12ea88cb748cd8b3eed30f95fd2a99c89d0365d55858b73caefb5d5/vir_tui-2.5.0-py3-none-any.whl", hash = "sha256:75ac550058367f3bd8c7c48ba6d0a9e712150f7ef4864134794c417df9f729c3", size = 34334, upload-time = "2026-09-14T23:36:41.844Z" },
 ]
