@@ -16,6 +16,8 @@ from vir_tui import (
 
 from lattice import utils
 from lattice.config import (
+    DEFAULT_AI_LIBRARY_OUTPUT,
+    DEFAULT_PLAYLIST_OUTPUT,
     get_layout,
     get_library_root,
     get_library_roots,
@@ -234,7 +236,7 @@ def _integrity_prompts() -> tuple[int, bool, bool]:
     return workers, ffmpeg, include_ok
 
 
-def _library_submenu(root: str) -> None:
+def _library_submenu(roots: list[str]) -> None:
     while True:
         reset_terminal()
         result = _select_library()
@@ -249,31 +251,40 @@ def _library_submenu(root: str) -> None:
             if result == (0, 0):
                 output = prompt_out("Output file (leave blank for screen)", "").strip()
                 output = os.path.expanduser(output) if output else None
+                show_genre = ask_yn("Include album genres? (y/N)")
                 run_with_capture(
                     "Build music library tree",
                     write_music_library_tree,
-                    root,
+                    roots,
                     output,
+                    layout=get_layout(),
+                    show_genre=show_genre,
                     quiet=False,
                     footer=out_note(output),
                 )
             elif result == (0, 1):
-                output = prompt_out("Output file", "library.txt")
+                output = prompt_out("Output file", DEFAULT_AI_LIBRARY_OUTPUT)
                 run_with_capture(
                     "AI-readable library export",
                     write_ai_library,
-                    root,
+                    roots,
                     output,
+                    layout=get_layout(),
                     quiet=False,
                     footer=out_note(output),
                 )
             elif result == (0, 2):
                 outdir = prompt_out("Output directory", "wings")
+                show_genre = ask_yn("Include album genres? (y/N)")
+                show_paths = ask_yn("Include absolute album paths? (y/N)")
                 run_with_capture(
                     "Generate all wings",
                     write_all_wings,
-                    root,
+                    roots,
                     outdir,
+                    layout=get_layout(),
+                    show_genre=show_genre,
+                    show_paths=show_paths,
                     quiet=False,
                     footer=f"Wings written to {os.path.abspath(outdir)}",
                 )
@@ -282,18 +293,22 @@ def _library_submenu(root: str) -> None:
                 run_with_capture(
                     "Generate AI wings",
                     write_ai_wings,
-                    root,
+                    roots,
                     outdir,
+                    layout=get_layout(),
                     quiet=False,
                     footer=f"AI Wings written to {os.path.abspath(outdir)}",
                 )
             elif result == (0, 4):
-                output = prompt_out("Output file", "smart_playlist.m3u")
+                output = prompt_out("Output file", DEFAULT_PLAYLIST_OUTPUT)
+                rule = ask("Smart rule (e.g. \"rating >= 4 and genre == 'Jazz'\")", "")
                 run_with_capture(
                     "Generate smart playlist (.m3u)",
                     generate_playlist,
-                    root,
+                    roots,
                     output,
+                    rule,
+                    layout=get_layout(),
                     quiet=False,
                     footer=out_note(output),
                 )
@@ -303,18 +318,22 @@ def _library_submenu(root: str) -> None:
 
 def _menu_session() -> int:
     while True:
-        single = get_library_root()
-        root = single
-        if not root:
-            roots = get_library_roots()
-            if not roots:
-                return 1
-            root = roots[0]
-        if not os.path.isdir(root):
-            notify(f"Configured library root not found: {root}")
+        # Multi-root configs (a `library_roots` array) scan together, exactly
+        # as cli.py passes its roots list to the modes; a single configured
+        # root that no longer exists stops the session rather than scanning
+        # silently.
+        configured = get_library_roots()
+        roots = [r for r in configured if os.path.isdir(r)]
+        if not roots:
+            if configured:
+                notify(f"Configured library root not found: {configured[0]}")
             return 1
+        single = get_library_root()
 
-        title = f"lattice-music (root: {single})" if single else "lattice-music"
+        if len(roots) > 1:
+            title = f"lattice-music ({len(roots)} roots)"
+        else:
+            title = f"lattice-music (root: {roots[0]})"
 
         reset_terminal()
         result = _select_main(title)
@@ -351,7 +370,7 @@ def _menu_session() -> int:
                 continue
 
             if result == (0, 0):
-                _library_submenu(root)
+                _library_submenu(roots)
 
             elif result == (0, 1):
                 output = ask("Output file (leave blank for screen)", "").strip()
@@ -360,7 +379,7 @@ def _menu_session() -> int:
                 run_with_capture(
                     "Library Statistics",
                     run_stats,
-                    root,
+                    roots,
                     output,
                     layout=layout,
                     quiet=False,
@@ -381,7 +400,7 @@ def _menu_session() -> int:
                 run_with_capture(
                     "Test FLAC files",
                     run_flac_mode,
-                    root,
+                    roots,
                     output,
                     workers,
                     pref,
@@ -397,7 +416,7 @@ def _menu_session() -> int:
                 run_with_capture(
                     "Test MP3 files",
                     run_mp3_mode,
-                    root,
+                    roots,
                     output,
                     workers,
                     ffmpeg,
@@ -414,7 +433,7 @@ def _menu_session() -> int:
                 run_with_capture(
                     "Test Opus files",
                     run_opus_mode,
-                    root,
+                    roots,
                     output,
                     workers,
                     ffmpeg,
@@ -430,7 +449,7 @@ def _menu_session() -> int:
                 run_with_capture(
                     "Test WAV files",
                     run_wav_mode,
-                    root,
+                    roots,
                     output,
                     workers,
                     ffmpeg,
@@ -446,7 +465,7 @@ def _menu_session() -> int:
                 run_with_capture(
                     "Test WMA files",
                     run_wma_mode,
-                    root,
+                    roots,
                     output,
                     workers,
                     ffmpeg,
@@ -459,7 +478,11 @@ def _menu_session() -> int:
             elif result == (2, 0):
                 dry = ask_yn("Dry run? (y/N)")
                 run_with_capture(
-                    "Extract cover art", run_extract_art, root, quiet=False, dry_run=dry
+                    "Extract cover art",
+                    run_extract_art,
+                    roots,
+                    quiet=False,
+                    dry_run=dry,
                 )
 
             elif result == (2, 1):
@@ -467,7 +490,7 @@ def _menu_session() -> int:
                 run_with_capture(
                     "Report missing art",
                     run_missing_art,
-                    root,
+                    roots,
                     output,
                     quiet=False,
                     footer=out_note(output),
@@ -479,7 +502,7 @@ def _menu_session() -> int:
                 run_with_capture(
                     "Audit art quality",
                     run_art_quality_audit,
-                    root,
+                    roots,
                     output,
                     min_res,
                     quiet=False,
@@ -491,7 +514,7 @@ def _menu_session() -> int:
                 run_with_capture(
                     "Find duplicate albums",
                     run_duplicates,
-                    root,
+                    roots,
                     output,
                     quiet=False,
                     footer=out_note(output),
@@ -502,7 +525,7 @@ def _menu_session() -> int:
                 run_with_capture(
                     "Find duplicate audio (content hash)",
                     run_audio_dupes,
-                    root,
+                    roots,
                     output,
                     quiet=False,
                     footer=out_note(output),
@@ -513,7 +536,7 @@ def _menu_session() -> int:
                 run_with_capture(
                     "Audit tags",
                     run_tag_audit,
-                    root,
+                    roots,
                     output,
                     quiet=False,
                     footer=out_note(output),
@@ -525,7 +548,7 @@ def _menu_session() -> int:
                 run_with_capture(
                     "Audit bitrates",
                     run_bitrate_audit,
-                    root,
+                    roots,
                     output,
                     min_kbps,
                     quiet=False,
@@ -538,7 +561,7 @@ def _menu_session() -> int:
                 run_with_capture(
                     "Audit ReplayGain",
                     run_replaygain_audit,
-                    root,
+                    roots,
                     output,
                     verbose=include_ok,
                     quiet=False,
@@ -551,7 +574,7 @@ def _menu_session() -> int:
                 run_with_capture(
                     "Audit stray files",
                     run_stray_audit,
-                    root,
+                    roots,
                     output,
                     layout=layout,
                     quiet=False,
@@ -562,13 +585,15 @@ def _menu_session() -> int:
                 output = prompt_out("Output file", DEFAULT_HEALTH_SCORE_OUTPUT)
                 min_kbps = prompt_int("Minimum bitrate floor (kbps)", 192)
                 min_res = prompt_int("Minimum cover resolution (px)", 500)
+                verbose = ask_yn("List perfect-score albums too? (y/N)")
                 run_with_capture(
                     "Library health score",
                     run_health_score,
-                    root,
+                    roots,
                     output,
                     min_kbps=min_kbps,
                     min_res=min_res,
+                    verbose=verbose,
                     quiet=False,
                     footer=out_note(output),
                 )
@@ -577,7 +602,14 @@ def _menu_session() -> int:
                 # Write mode: every question defaults to no, and the last
                 # confirm decides dry-run vs apply. With all passes declined
                 # the mode still runs the two merge passes (the script's
-                # base behavior).
+                # base behavior). Like the CLI, a write mode refuses a
+                # multi-root config rather than silently picking one tree.
+                if len(roots) != 1:
+                    notify(
+                        "The clean mode needs exactly one library root; "
+                        f"{len(roots)} are configured (library_roots)."
+                    )
+                    continue
                 norm_names = ask_yn(
                     "Pass 3: rename folders with non-standard characters? (y/N)"
                 )
@@ -588,7 +620,7 @@ def _menu_session() -> int:
                 run_with_capture(
                     "Consolidate fragmented albums (clean)",
                     run_clean,
-                    root,
+                    roots[0],
                     dry_run=not apply,
                     normalize_names=norm_names,
                     normalize_filenames=norm_files,
@@ -601,13 +633,19 @@ def _menu_session() -> int:
                 # Write mode: the ask_yn confirm below is the gate, so the
                 # mode itself runs with assume_yes (its own input() prompt
                 # would fire inside the captured output).
+                if len(roots) != 1:
+                    notify(
+                        "The apestrip mode needs exactly one library root; "
+                        f"{len(roots)} are configured (library_roots)."
+                    )
+                    continue
                 keep = ask_yn("Migrate APE fields into ID3 before stripping? (y/N)")
                 repair = ask_yn("Also repair malformed APE tags? (y/N)")
                 apply = ask_yn("APPLY strip now? No = dry-run preview only (y/N)")
                 run_with_capture(
                     "Strip APEv2 tags (apestrip)",
                     run_apestrip,
-                    root,
+                    roots[0],
                     dry_run=not apply,
                     keep_metadata=keep,
                     repair_malformed=repair,
