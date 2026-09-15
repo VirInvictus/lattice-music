@@ -47,8 +47,10 @@ from vir_tui import core as ui
 __version__ = "1.3.0"
 
 # Folds curly quotes, dash variants, and case so artist/genre strings compare
-# the way a human reads them. Mirrors audit._norm_key / cleaner.normalize_name;
-# kept local because companion scripts stay self-contained for normalization.
+# the way a human reads them. The canonical table is lattice.norm's
+# QUOTE_DASH_FOLD (the package absorbed the cleaner in the 5.0.0 fold); this
+# copy predates it and is what build wrote into existing genre maps, so it
+# stays rather than re-keying saved maps on a future norm.py change.
 _QUOTE_DASH_FOLD = {
     "‘": "'",
     "’": "'",

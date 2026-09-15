@@ -87,11 +87,15 @@ def get_layout() -> str:
     return load_config().get("layout") or DEFAULT_LAYOUT
 
 
-# Thread count for tag reads (stats, tag/bitrate/ReplayGain audits, duplicates).
+# Thread count for tag reads (stats; the tag/bitrate/ReplayGain/health-score
+# audits; duplicates; and --auditAudioDupes, whose pool fingerprints files
+# instead of reading tags).
 # Serial by default: mutagen parses tags in Python, so the GIL is held for all
 # but the file open, and on local storage a pool costs more than it saves —
 # measured 1.4-1.5x SLOWER than serial across a 9.6k-file NVMe/ntfs-3g library.
-# The pool is kept rather than deleted because the picture inverts where an
+# That measurement covers the tag readers only: hashing in the audio-dupes
+# pool releases the GIL, so the rationale does not transfer to it. The pool
+# is kept rather than deleted because the picture inverts where an
 # open really blocks (SMB/NFS shares, spinning disks, a sleeping external
 # drive): there the overlap is free latency-hiding. Gated on the storage, not
 # on a file count — concurrency loses at every library size on fast local

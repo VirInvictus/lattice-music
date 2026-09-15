@@ -4,7 +4,11 @@ import struct
 import sys
 from collections import defaultdict
 
-from lattice.config import ART_FORMAT_PRIORITY, DEFAULT_MISSING_ART_OUTPUT
+from lattice.config import (
+    ART_FORMAT_PRIORITY,
+    DEFAULT_ART_QUALITY_OUTPUT,
+    DEFAULT_MISSING_ART_OUTPUT,
+)
 from lattice.tags import (
     FLAC,
     HAVE_MUTAGEN_BASE,
@@ -391,7 +395,7 @@ def run_art_quality_audit(
 
     pbar.close()
 
-    out_path = os.path.abspath(output or "art_quality_audit.txt")
+    out_path = os.path.abspath(output or DEFAULT_ART_QUALITY_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     with open(out_path, "w", encoding="utf-8") as f:

@@ -55,6 +55,11 @@ from lattice.modes.library import (
 from lattice.modes.playlists import generate_playlist
 from lattice.modes.stats import run_stats
 
+# TUI default output names, deliberately prefixed lattice_ so an interactive
+# run never silently overwrites the file a CLI default (config.py's
+# unprefixed list) wrote in the same cwd. Defaults that match config.py
+# exactly are imported from there; the wings directories match the CLI's
+# own inline defaults.
 DEFAULT_FLAC_OUTPUT = "lattice_flac_errors.txt"
 DEFAULT_MP3_OUTPUT = "lattice_mp3_errors.txt"
 DEFAULT_OPUS_OUTPUT = "lattice_opus_errors.txt"

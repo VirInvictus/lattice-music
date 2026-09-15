@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """flac2opus.py - Convert FLAC files to Opus.
 
-Recursively finds FLAC files, encodes them to Opus using ffmpeg, verifies that
-the output file matches the original duration and metadata, and finally deletes
-the original FLAC.
+Recursively finds FLAC files, encodes them to Opus using ffmpeg, verifies
+that the output file matches the original duration, copies tags and cover
+art over directly with mutagen (a byte-for-byte copy, not re-verified), and
+finally deletes the original FLAC.
 """
 
 import argparse

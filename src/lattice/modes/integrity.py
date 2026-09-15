@@ -514,8 +514,9 @@ def _run_decode_scan(
     quiet: bool,
     resume: bool = False,
 ) -> int:
-    """Unified decode-check scanner for MP3, Opus, and future formats. Only the
-    MP3 entry point exposes --resume; the other formats never forward it."""
+    """Unified decode-check scanner for the ffmpeg-decoded formats (MP3, Opus,
+    WAV, WMA). Only the MP3 entry point exposes --resume; the other formats
+    never forward it."""
     roots = as_roots(root)
     ffmpeg_path = _find_ffmpeg(ffmpeg)
 

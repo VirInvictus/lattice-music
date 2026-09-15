@@ -285,7 +285,7 @@ def parse_layout(rel_path: str, layout: str) -> dict:
 
 
 class _FallbackProgress:
-    """Simple progress bar for when tqdm is not installed."""
+    """Simple progress line used when tqdm is missing or the run is quiet."""
 
     __slots__ = ("_current", "_desc", "_quiet", "_total")
 

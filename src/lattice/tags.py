@@ -123,7 +123,8 @@ def read_replaygain(file_path: str) -> ReplayGainStatus:
 
 # --- Mutagen imports ---
 # This module centralizes mutagen imports for the package; `Picture` and
-# `MUTAGEN_MP3` are unused here but re-exported for modes/artwork.py.
+# `MUTAGEN_MP3` are unused here but re-exported for modes/artwork.py,
+# modes/integrity.py, and scripts/slipcover.py.
 HAVE_MUTAGEN_BASE = False
 try:
     from mutagen import File as MutagenFile

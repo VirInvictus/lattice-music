@@ -145,7 +145,7 @@ def run_stats(
         if t.genre:
             genre_ratings[t.genre][label] += 1
 
-        # Duration and bitrate — now carried by TagBundle
+        # Duration and bitrate come from TagBundle
         if t.duration_s:
             total_duration += t.duration_s
         if t.bitrate_kbps:
