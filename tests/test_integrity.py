@@ -308,6 +308,12 @@ class ProgressPersistenceTests(unittest.TestCase):
             before = len(calls)
             with (
                 mock.patch.object(integrity_mod, "has_tool", return_value=True),
+                # The tool-change flip needs an actual ffmpeg to resolve: on
+                # a runner without one, use_flac would stay True and the
+                # state would match, hiding the discard this test pins.
+                mock.patch.object(
+                    integrity_mod, "_find_ffmpeg", return_value="/fake/ffmpeg"
+                ),
                 mock.patch.object(integrity_mod, "_flac_verdict", verdict),
             ):
                 # prefer=ffmpeg flips use_flac, invalidating every cached verdict.
