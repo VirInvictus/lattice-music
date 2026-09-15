@@ -240,7 +240,7 @@ Produces `Alternative_Rock_Library.txt`, `East_Coast_Rap_Library.txt`, and so on
 lattice --duplicates --root ~/Music --root /mnt/usb/Albums --output duplicates.txt
 ```
 
-Every mode aggregates across the roots: combined statistics, one merged library tree, genre wings that span both, and so on. A path passed twice is de-duped. The payoff for `--duplicates` is cross-library detection: an album that lives in both libraries is grouped as a single exact duplicate, and each entry is prefixed by its root's basename (`Music/…` vs `Albums/…`) so you can tell the copies apart.
+Every mode aggregates across the roots: combined statistics, one merged library tree, genre wings that span both, and so on. A path passed twice is de-duped. The exception is the two write modes: `--clean` and `--apestrip` operate on exactly one tree and refuse a multi-root list. The payoff for `--duplicates` is cross-library detection: an album that lives in both libraries is grouped as a single exact duplicate, and each entry is prefixed by its root's basename (`Music/…` vs `Albums/…`) so you can tell the copies apart.
 
 To make several roots permanent, add a `library_roots` array to `~/.config/lattice/config.json`:
 
@@ -259,7 +259,7 @@ The integrity modes (`--testFLAC`, `--testMP3`, `--testOpus`, `--testWAV`, `--te
 - **METADATA**: only tag/container parse warnings; the audio is fine.
 - **OK**: clean decode.
 
-CORRUPT and SUSPECT are always listed in the report; METADATA and OK are summarized and listed only with `--verbose`. The exit code is `1` only when something is CORRUPT, so a clean-but-chatty library still exits `0`. FFmpeg is invoked with the demuxer forced from the file extension (so a large ID3v2 tag is never mis-read as a corrupt container) and with embedded cover art skipped.
+CORRUPT and SUSPECT are always listed in the report; METADATA and OK are summarized and listed only with `--verbose`. The exit code is `1` only when something is CORRUPT, so a clean-but-chatty library still exits `0`; a scan with no decoder available (ffmpeg missing, or neither flac nor ffmpeg for FLAC) refuses with exit `2` rather than report unverified files as OK. FFmpeg is invoked with the demuxer forced from the file extension (so a large ID3v2 tag is never mis-read as a corrupt container) and with embedded cover art skipped.
 
 The FLAC and MP3 scans support `--resume` for large libraries: every run writes each verdict through to a transient `<output>.progress.json` beside the report as it goes, and a run interrupted with Ctrl-C leaves that state behind. Re-running with `--resume` reuses the recorded verdicts and decodes only the remaining files, producing the same full report either way; a scan that runs to completion deletes the state file. A state recorded by a different verification tool (libFLAC vs ffmpeg) is discarded rather than trusted.
 
@@ -377,7 +377,7 @@ options:
                         (<output>.progress.json) and scan only the remaining files; finishing a scan clears the
                         state
   --only-errors, --no-only-errors
-                        Write only errors/warns (MP3/Opus modes)
+                        Write only errors/warns (MP3/Opus/WAV/WMA modes)
   --ffmpeg FFMPEG       Path to ffmpeg
   --verbose             Verbose output
 ```

@@ -281,7 +281,7 @@ def build_parser() -> argparse.ArgumentParser:
         dest="only_errors",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Write only errors/warns (MP3/Opus modes)",
+        help="Write only errors/warns (MP3/Opus/WAV/WMA modes)",
     )
 
     p.add_argument("--ffmpeg", default=None, help="Path to ffmpeg")

@@ -77,7 +77,8 @@ This encapsulates the Python interpreter, dependencies (`mutagen`, `tqdm`, `vir-
 
 When run with no arguments, the tool launches a full-screen curses TUI with:
 - Arrow-key navigation with highlighted selection cursor
-- Color-coded section groups (Library, Integrity, Artwork, Metadata)
+- Color-coded section groups (Library, Integrity, Artwork, Metadata,
+  Maintenance, Settings)
 - Styled Unicode box drawing for menus, prompts, and pause screens
 - Fallback to typed numbered input if curses is unavailable
 
@@ -144,7 +145,8 @@ audio (ffmpeg reports decode errors on files that play start to finish):
 
 CORRUPT and SUSPECT are always listed; METADATA and OK are summarized and listed
 only with `--verbose`. The process exit code is `1` only when at least one file
-is CORRUPT.
+is CORRUPT. A scan with no decoder available (ffmpeg missing, or neither flac
+nor ffmpeg for FLAC) exits `2` instead of reporting unverified files as OK.
 
 The FLAC and MP3 integrity scans support `--resume`: each run persists its
 verdicts to a transient `<output>.progress.json` beside the report, an
@@ -159,7 +161,10 @@ remainder, still producing the full report. A completed scan deletes the state.
 - **Not a player.** It reads tags; it does not play audio.
 - **Not a tagger.** It reads metadata; it writes metadata only via the explicit
   `--clean`/`--apestrip` write modes (opt-in via `--apply`, logged, dry-run by
-  default). Every other mode stays read-only.
+  default). Every other mode writes no tags and no audio: its only outputs are
+  the reports and playlists it writes outside the library, cover art extracted
+  by `--extractArt`, and the transient `--resume` state file beside an
+  integrity report.
 - **Not a database.** It walks the filesystem every time; there is no index.
 - **Not a sync tool.** It does not interact with cloud services or devices.
 
