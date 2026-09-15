@@ -1,0 +1,43 @@
+lattice-music — THE FINAL BLITZ: DONE 2026-09-14
+
+Commit range: 0881c9b..f840c7c (23 commits), all pushed, CI green.
+Release: v5.5.0, annotated tag at d75c79d (verbatim patchnotes entry,
+cat-file verified before push), PyPI published and verified via the JSON
+API (wheel + sdist, vir-tui>=2.5.0 in requires_dist), GitHub Release
+created with the verbatim tag message.
+
+What shipped:
+- The HIGH lane: the TUI library-submenu regressions (dead smart
+  playlist item since v4.17.0, dropped layout kwarg and toggles, the
+  roots[0] passthrough) restored, with a cli/tui kwargs-parity suite.
+- Publish hardening (SHA-pinned actions, tag==pyproject==VERSION
+  assertion, least-privilege permissions, concurrency), CI parity
+  (PYTHONPATH=src, ruff pin in the dev group), .gitignore catch-up,
+  the hero screenshot recaptured, dependency enumerations fixed, the
+  import skill refreshed, nine stale comments corrected, integrity-mode
+  honesty (missing-decoder refusal exit 2, FLAC --prefer/--ffmpeg,
+  defensive resume), four doc truth riders, SECURITY.md / dependabot /
+  release.yml / badges, the slop pass.
+- The feature queue: B.7 --verifyReplayGain, B.4 --checkPlaylists,
+  B.5 --auditAlbums (with the additive TagBundle year read),
+  B.10 --snapshot/--diff, B.9 --auditArtMismatch, B.8 --auditJunkFrames.
+- B.6 --auditMbids + Picard TSV: evaluated and DECLINED (Brandon:
+  Picard is not in the tagging loop; decision recorded 2026-09-14).
+
+Suite: 560 to 634, green; ruff==0.15.14 clean; the audit roadmap block
+ticked in roadmap.md.
+
+Reopen conditions (all recorded, none open work):
+- The health-score RG-correctness bucket: HELD pending B.7's first
+  real-library run (Brandon's; read-only). If the run shows materially
+  wrong gains, build it; if clean, close it unopened. The same run's
+  evidence decides the recorded replaygain nested-parent direct-file
+  scan option.
+- B.6 reopens only if Picard enters the tagging loop.
+- Lyrics USLT companion and the spindle-threading measurement stay
+  parked, as recorded.
+- The social preview image is generated at
+  /tmp/lattice-shots/social-preview.png (1200x630) awaiting the manual
+  upload (GitHub has no API for it); regenerate if /tmp has cleared.
+- Future vir-tui releases: the IN_TUI machinery in utils.py/tui.py can
+  retire onto vir_tui.progress()/tui_active() whenever that lane ships.
