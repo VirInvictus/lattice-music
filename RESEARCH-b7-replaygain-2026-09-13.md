@@ -11,7 +11,7 @@ needed, for reasons in section 3.
 ## 1. What exists today
 
 - `lattice.tags.read_replaygain` (tags.py:108) returns
-  `ReplayGainStatus(has_track_gain, has_album_gain)` - booleans only.
+  `ReplayGainStatus(has_track_gain, has_album_gain)`: booleans only.
   The audit mode (`--auditReplayGain`, audit.py) reports coverage, never
   values. Verification needs the stored VALUES, so tags.py grows a
   value-returning reader (section 5).
@@ -58,7 +58,7 @@ exactly like scripts/replaygain.py. Do not build the ffmpeg leg.
 **Write conventions, read back through lattice** (written to the
 synthetic files with `-s i`, read with read_gain_strings):
 
-| Format | Stored form | Lattice reads |
+| Format | Stored form | lattice-music reads |
 |---|---|---|
 | MP3 (TXXX) | `'9.09 dB'` | `9.09` after float parse |
 | FLAC/Ogg (Vorbis) | `'9.09 dB'` | same |
@@ -68,7 +68,7 @@ R128 quantization is 1/256 dB (0.0039), so Opus deltas versus a 2-decimal
 expectation are bounded by ~0.002 dB: noise. Note `-o d` (rsgain's opus
 default, which scripts/replaygain.py uses) writes standard
 replaygain_* strings on Opus instead, so the verifier must accept both
-conventions per format - read_gain_strings already does.
+conventions per format; read_gain_strings already does.
 
 ## 3. The harness gate, resolved
 
@@ -84,7 +84,7 @@ harness is needed:
   the delta/bucket math, and the report contract via a mocked runner.
   None of this needs real audio.
 - **On-metal proof (done once, here):** this research's probe IS the
-  harness validation - generate sine, measure, confirm identity and
+  harness validation: generate sine, measure, confirm identity and
   byte-identical no-write. The procedure is four commands, recorded in
   section 2, repeatable any time. First real-library run is Brandon's
   (read-only, but his call when).
@@ -104,11 +104,11 @@ decision prompts). Output `replaygain_verify.txt`
       bucket per file/album: OK (|delta| <= tol) / OFF / UNGAUGED*
     * clip protection: a file whose stored gain was clip-adjusted at
       write time legitimately differs from target - loudness; rsgain's
-      Clipping Adjustment column flags those rows - report them
+      Clipping Adjustment column flags those rows; report them
       separately, never as OFF.
 
 Knobs: `--target-lufs N` (default -18, matching the writer's caveat
-that targets cannot be read back from tags - a -14-targeted library
+that targets cannot be read back from tags: a -14-targeted library
 verifies clean only when verified at -14), `--tolerance` (default
 0.5 dB: engine-identical re-measurement is deterministic and lands
 within ~0.01 dB, so 0.5 separates "wrong/mismatched tag" from jitter
@@ -126,7 +126,9 @@ Effort: M as originally rated (one mode function + promoted reader +
 wiring; the analysis engine is rsgain's, not ours). The only tag-layer
 change is additive (new value reader; nothing existing moves).
 
-## 5. Open calls (asked as prompts with this report)
+## 5. Open calls (asked as prompts with this report; all three were
+answered live on 2026-09-13, decisions recorded in the repo: push =
+landed, engine = rsgain -O, flag = --verifyReplayGain)
 
 1. Push this research commit now vs hold for the next batch.
 2. Engine: rsgain -O (recommended) vs ffmpeg ebur128.

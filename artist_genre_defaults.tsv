@@ -1,4 +1,4 @@
-# Lattice genre authority map (genre_tidy.py)
+# lattice-music genre authority map (genre_tidy.py)
 # Format:  Artist<TAB>Genre<TAB>Second Genre<TAB>...   (tab-separated)
 #   - Every genre on the line is ALLOWED for that artist; albums tagged
 #     with any of them are left untouched.

@@ -17,7 +17,7 @@ A CLI/TUI toolkit for music collectors who manage their own libraries. lattice-m
 
 > **Read-only by default.** lattice-music reads tags and decodes audio, and it writes only reports, playlists, and extracted cover art. The two exceptions are the explicit write modes: `--clean` (consolidate fragmented album folders, optionally normalize names and tags) and `--apestrip` (remove stray APEv2 tags from MP3s). Both are dry-run by default, write only on `--apply`, and log every change. The optional companion scripts in `scripts/` also **do** modify files (tags, rating bytes, folder layout) and must be used with caution. See [Write modes](#write-modes) and [Companion scripts](#companion-scripts).
 
-> **Note:** This is actively maintained software: bug fixes land as they come, and the audit-mode family keeps growing (see the Features table). It is thoroughly tested and known to be fully functional on the primary development environment: **Fedora Linux 44 (Workstation Edition)**, kernel `7.0.9-205.fc44.x86_64`, on **Python 3.14**, with `flac` and `ffmpeg` from the Fedora repositories. While it is pure Python and should be cross-platform, this specific setup is the only officially tested environment.
+> **Note:** This is actively maintained software: bug fixes land as they come, and the audit-mode family keeps growing (see the Features table). It is thoroughly tested and known to be fully functional on the primary development environment: **Fedora Linux 44 (Workstation Edition)** on **Python 3.14**, with `flac` and `ffmpeg` from the Fedora repositories. While it is pure Python and should be cross-platform, this specific setup is the only officially tested environment.
 
 ## Contents
 
@@ -286,8 +286,11 @@ The status summary that each integrity mode prints is colorized: green for an al
 lattice-music is a modular Python package under `src/lattice/`:
 
 - `tags.py`: unified abstraction layer for format-agnostic metadata extraction (returns a `TagBundle` from a single `mutagen` open).
-- `modes/`: per-mode implementation of auditing and visualization logic (library, integrity, artwork, audit, stats, playlists).
+- `norm.py`: pure name/tag normalization rules (quote/dash folding, mojibake repair, tag deduplication); zero I/O, shared by the write modes.
+- `modes/`: per-mode implementation of auditing and visualization logic (library, integrity, artwork, audit, stats, playlists, plus the `clean` and `apestrip` write modes).
 - `cli.py` / `tui.py`: the argparse dispatch and the full-screen curses interface; both call the same mode functions.
+- `config.py`: default constants (output names, audio extensions, cover names), the tag-read worker count, and the persistent library root.
+- `utils.py`: filesystem walk, progress-bar dispatch, subprocess helper, and layout parsing.
 
 The filesystem is the source of truth: lattice-music walks the tree on every invocation and keeps no index or database.
 
@@ -401,6 +404,8 @@ The `scripts/` directory holds nine standalone maintenance tools. Two of them, [
 | [`genre_foldermap.py`](#genre_foldermappy) | Restructures the tree into Genre/Artist/Album | filesystem |
 | [`replaygain.py`](#replaygainpy) | Writes ReplayGain 2.0 gain/peak tags (via `rsgain`) | album-by-album |
 | [`apestrip.py`](#apestrippy) | Removes stray APEv2 tags from MP3s (`--keep-metadata` to migrate first) | recursive, MP3-only |
+| [`slipcover.py`](#slipcoverpy) | Embeds folder cover images into audio files lacking embedded art (`--fetch` queries iTunes for missing covers) | recursive |
+| [`flac2opus.py`](#flac2opuspy) | Converts FLAC to Opus 128k and deletes the FLAC after verifying duration | recursive, FLAC-only |
 
 ### Importing New Music (The Circuit)
 
