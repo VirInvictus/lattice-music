@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest import mock
 
 from lattice import cli, tui, utils
+from lattice.modes.artwork import run_art_mismatch_audit
 from lattice.modes.audit import (
     run_album_consistency,
     run_health_score,
@@ -288,6 +289,23 @@ class CliTuiKwargsParityTests(unittest.TestCase):
                 "Report file": self.OUT,
             },
             main_menu=False,
+        )
+
+    def test_art_mismatch(self):
+        self._parity(
+            mode="run_art_mismatch_audit",
+            real=run_art_mismatch_audit,
+            cli_argv=[
+                "--auditArtMismatch",
+                "--root",
+                self.ROOTS[0],
+                "--output",
+                self.OUT,
+                "--verbose",
+            ],
+            selections=[(2, 3), tui._SEL_QUIT],
+            answers={"Output file": self.OUT, "matched albums": True},
+            main_menu=True,
         )
 
     def test_smart_playlist(self):

@@ -9,6 +9,8 @@ from pathlib import Path
 
 from lattice.modes.artwork import (
     _get_image_size,
+    compare_art,
+    run_art_mismatch_audit,
     run_art_quality_audit,
     run_extract_art,
 )
@@ -126,6 +128,100 @@ class ExtractArtDryRunTests(unittest.TestCase):
                 run_extract_art(tmp, quiet=False, dry_run=True)
             self.assertIn("[dry-run] Would extract art", out.getvalue())
             self.assertFalse(os.path.exists(os.path.join(album, "cover.jpg")))
+
+
+class CompareArtTests(unittest.TestCase):
+    def _folder(self, td, data, name="cover.jpg"):
+        p = Path(td) / name
+        p.write_bytes(data)
+        return str(p)
+
+    def test_match_same_bytes(self):
+        with tempfile.TemporaryDirectory() as td:
+            data = _png(400, 400)
+            path = self._folder(td, data)
+            self.assertEqual(compare_art(data, path), "MATCH")
+
+    def test_same_pixels_different_bytes(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = self._folder(td, _png(400, 400) + b"trailing")
+            self.assertEqual(compare_art(_png(400, 400), path), "SAME PIXELS")
+
+    def test_different_image(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = self._folder(td, _png(400, 400))
+            self.assertEqual(compare_art(_png(500, 500), path), "DIFFERENT IMAGE")
+
+    def test_unreadable_dimensions(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = self._folder(td, b"not-an-image")
+            self.assertEqual(compare_art(_png(500, 500), path), "UNREADABLE")
+
+    def test_missing_half_is_irrelevant(self):
+        self.assertEqual(compare_art(None, "/x/cover.jpg"), "IRRELEVANT")
+        self.assertEqual(compare_art(b"data", None), "IRRELEVANT")
+
+
+class ArtMismatchAuditTests(unittest.TestCase):
+    def test_report_buckets(self):
+        with tempfile.TemporaryDirectory() as td:
+            # Matched album: the folder cover is byte-identical to the
+            # embedded art.
+            good = Path(td) / "Good Album"
+            good.mkdir()
+            good_track = str(good / "01.mp3")
+            shutil.copy2(
+                Path(__file__).parent
+                / "fixtures"
+                / "library"
+                / "Cursive"
+                / "Domestica"
+                / "01 - The Casualty.mp3",
+                good_track,
+            )
+            from mutagen.id3 import APIC, ID3
+
+            id3 = ID3(good_track)
+            art = _jpeg(600, 600)
+            id3.add(APIC(encoding=3, mime="image/jpeg", type=3, desc="Cover", data=art))
+            id3.save(good_track)
+            (good / "cover.jpg").write_bytes(art)
+
+            # Drifted album: a real but different image on disk.
+            drift = Path(td) / "Drift Album"
+            drift.mkdir()
+            drift_track = str(drift / "01.mp3")
+            shutil.copy2(
+                Path(__file__).parent
+                / "fixtures"
+                / "library"
+                / "Cursive"
+                / "Domestica"
+                / "01 - The Casualty.mp3",
+                drift_track,
+            )
+            id3 = ID3(drift_track)
+            id3.add(
+                APIC(
+                    encoding=3,
+                    mime="image/jpeg",
+                    type=3,
+                    desc="Cover",
+                    data=_jpeg(600, 600),
+                )
+            )
+            id3.save(drift_track)
+            (drift / "cover.jpg").write_bytes(_jpeg(300, 300))
+
+            out = Path(td) / "mismatch.txt"
+            rc = run_art_mismatch_audit([td], str(out), verbose=True, quiet=True)
+            self.assertEqual(rc, 0)
+            report = out.read_text(encoding="utf-8")
+            self.assertIn("ART MISMATCH AUDIT REPORT", report)
+            self.assertIn("DIFFERENT IMAGE (1)", report)
+            self.assertIn("embedded 600x600", report)
+            self.assertIn("300x300 cover.jpg", report)
+            self.assertIn("MATCHED (1)", report)
 
 
 if __name__ == "__main__":

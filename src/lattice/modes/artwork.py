@@ -6,6 +6,7 @@ from collections import defaultdict
 
 from lattice.config import (
     ART_FORMAT_PRIORITY,
+    DEFAULT_ART_MISMATCH_OUTPUT,
     DEFAULT_ART_QUALITY_OUTPUT,
     DEFAULT_MISSING_ART_OUTPUT,
 )
@@ -23,6 +24,7 @@ from lattice.utils import (
     _has_cover_file,
     _make_pbar,
     as_roots,
+    count_audio_files,
     is_audio,
     iter_audio_dirs,
     relpath_under,
@@ -419,3 +421,146 @@ def run_art_quality_audit(
         print(f"Results written to: {out_path}")
 
     return 0
+
+
+# =====================================
+# Mode: Art mismatch audit
+# =====================================
+
+
+def compare_art(embedded: bytes | None, folder_path: str | None) -> str:
+    """One album folder's art verdict. MATCH means byte-identical (the same
+    file embedded and on disk); SAME PIXELS means different bytes at the
+    same dimensions, the signature of a re-encoded copy and benign;
+    DIFFERENT IMAGE means both exist and disagree on dimensions, so a
+    player's silent pick decides which one you see."""
+    if embedded is None or folder_path is None:
+        return "IRRELEVANT"
+    try:
+        with open(folder_path, "rb") as fh:
+            folder_bytes = fh.read()
+    except OSError:
+        return "UNREADABLE"
+    if embedded == folder_bytes:
+        return "MATCH"
+    embedded_dims = _get_image_size(embedded)
+    folder_dims = _get_image_size(folder_bytes)
+    if embedded_dims is None or folder_dims is None:
+        return "UNREADABLE"
+    if embedded_dims == folder_dims:
+        return "SAME PIXELS"
+    return "DIFFERENT IMAGE"
+
+
+def run_art_mismatch_audit(
+    root: str | list[str],
+    output: str,
+    *,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> int:
+    """Compare each album folder's embedded art against its folder image.
+    Players resolve a disagreement silently (most prefer the embedded
+    picture), so a folder cover that drifts from the embedded one is
+    invisible exactly when it matters. Read-only: folders carrying only one
+    of the two are not findings, only folders with both."""
+    roots = as_roots(root)
+    if not quiet:
+        print(f"Auditing art consistency under: {', '.join(roots)}")
+
+    total = count_audio_files(roots)
+    pbar = _make_pbar(total, "Auditing art consistency", quiet)
+
+    buckets: dict[str, list[tuple[str, str]]] = {
+        "DIFFERENT IMAGE": [],
+        "SAME PIXELS": [],
+        "UNREADABLE": [],
+        "MATCH": [],
+    }
+    n_albums = 0
+
+    for _src_root, dirpath, _subdirs, files in iter_audio_dirs(roots):
+        audio = sorted(f for f in files if is_audio(f))
+        if not audio:
+            continue
+        for _f in audio:
+            pbar.update(1)
+        n_albums += 1
+        folder_path = _find_cover_file(dirpath)
+        embedded = _extract_best_art(dirpath)
+        verdict = compare_art(embedded, folder_path)
+        if verdict == "IRRELEVANT":
+            continue
+        if verdict == "MATCH":
+            buckets["MATCH"].append((dirpath, "embedded and folder art are identical"))
+            continue
+        detail = (
+            f"embedded {describe_art(embedded)} vs folder "
+            f"{describe_art_file(folder_path)}"
+        )
+        buckets[verdict].append((dirpath, detail))
+
+    pbar.close()
+
+    out_path = os.path.abspath(output or DEFAULT_ART_MISMATCH_OUTPUT)
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write("ART MISMATCH AUDIT REPORT\n")
+        f.write(f"Root: {', '.join(roots)}\n")
+        f.write(
+            f"Albums: {n_albums}   Different image: {len(buckets['DIFFERENT IMAGE'])}   "
+            f"Same pixels: {len(buckets['SAME PIXELS'])}   "
+            f"Unreadable: {len(buckets['UNREADABLE'])}   "
+            f"Matched: {len(buckets['MATCH'])}\n"
+        )
+        f.write("=" * 64 + "\n\n")
+        for title in ("DIFFERENT IMAGE", "SAME PIXELS", "UNREADABLE"):
+            pairs = buckets[title]
+            if not pairs:
+                continue
+            f.write(f"{title} ({len(pairs)})\n")
+            f.write("-" * 40 + "\n")
+            for album, detail in pairs:
+                f.write(f"  {relpath_under(album, roots)}\n")
+                f.write(f"    {detail}\n")
+            f.write("\n")
+        if verbose:
+            pairs = buckets["MATCH"]
+            f.write(f"MATCHED ({len(pairs)})\n")
+            f.write("-" * 40 + "\n")
+            for album, _detail in pairs:
+                f.write(f"  {relpath_under(album, roots)}\n")
+            f.write("\n")
+
+    if not quiet:
+        print(f"\nAudited {n_albums} albums.")
+        print(f"  Different image: {len(buckets['DIFFERENT IMAGE'])}")
+        print(f"  Same pixels:     {len(buckets['SAME PIXELS'])}")
+        print(f"  Unreadable:      {len(buckets['UNREADABLE'])}")
+        print(f"  Matched:         {len(buckets['MATCH'])}")
+        print(f"Results written to: {out_path}")
+
+    return 0
+
+
+def describe_art(data: bytes | None) -> str:
+    """Short dimension summary for a report line ('600x600'), or the reason
+    the art cannot be described."""
+    dims = _get_image_size(data) if data else None
+    return f"{dims[0]}x{dims[1]}" if dims else "unreadable"
+
+
+def describe_art_file(path: str | None) -> str:
+    if not path:
+        return "no folder image"
+    try:
+        with open(path, "rb") as fh:
+            data = fh.read()
+    except OSError:
+        return f"unreadable {os.path.basename(path)}"
+    dims = _get_image_size(data)
+    return (
+        f"{dims[0]}x{dims[1]} {os.path.basename(path)}"
+        if dims
+        else f"unreadable {os.path.basename(path)}"
+    )

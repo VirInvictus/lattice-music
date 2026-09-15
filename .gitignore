@@ -45,6 +45,7 @@ wav_scan_results.txt
 wma_scan_results.txt
 missing_art.txt
 art_quality_audit.txt
+art_mismatch.txt
 duplicates.txt
 audio_dupes.txt
 health_score.txt

@@ -54,6 +54,7 @@ Modern music players often hide your library behind proprietary databases. latti
 | **Cover art extraction** | `--extractArt` | Extracts embedded art to `cover.jpg` with format priority ranking |
 | **Missing art report** | `--missingArt` | Lists directories with no cover art (folder or embedded) to text |
 | **Art quality audit** | `--auditArtQuality` | Reports extracted/folder covers below a resolution threshold |
+| **Art mismatch audit** | `--auditArtMismatch` | Compares embedded art against folder covers: byte-identical, same-pixels re-encodes, and real mismatches |
 | **Duplicate detection** | `--duplicates` | Four-section report: exact album dupes across directories, within-folder multi-format pairs, fuzzy similar-name candidates, and track-level dupes filtered by duration |
 | **Content-hash duplicate audit** | `--auditAudioDupes` | Byte-level duplicate detection: exact-file sha256, audio-stream sha256 (tags parsed out, so retagged copies match), and head/tail 64KB sampling; catches renamed and retagged dupes the tag-based report misses |
 | **Tag audit** | `--auditTags` | Reports files missing title, artist, track number, or genre to text |
@@ -163,6 +164,9 @@ lattice --extractArt --dry-run
 
 # Report directories missing cover art
 lattice --missingArt --output missing_art.txt
+
+# Where embedded art and the folder cover disagree (players pick silently)
+lattice --auditArtMismatch --output art_mismatch.txt
 
 # Find duplicates: exact, multi-format, similar-name, track-level
 lattice --duplicates --output duplicates.txt
@@ -323,10 +327,10 @@ The filesystem is the source of truth: lattice-music walks the tree on every inv
 ```
 usage: lattice [-h] [--version] [--library | --ai-library | --all-wings | --ai-wings | --testFLAC | --testMP3 |
                --testOpus | --testWAV | --testWMA | --extractArt | --missingArt | --auditArtQuality |
-               --duplicates | --auditAudioDupes | --auditTags | --auditAlbums | --auditBitrate |
-               --auditReplayGain | --verifyReplayGain | --auditStrays | --healthScore | --playlist |
-               --checkPlaylists | --stats | --snapshot | --diff SNAPSHOT | --clean | --apestrip] [--root DIR]
-               [--output OUTPUT] [--rule RULE] [--layout LAYOUT] [--min-art-res MIN_ART_RES]
+               --auditArtMismatch | --duplicates | --auditAudioDupes | --auditTags | --auditAlbums |
+               --auditBitrate | --auditReplayGain | --verifyReplayGain | --auditStrays | --healthScore |
+               --playlist | --checkPlaylists | --stats | --snapshot | --diff SNAPSHOT | --clean | --apestrip]
+               [--root DIR] [--output OUTPUT] [--rule RULE] [--layout LAYOUT] [--min-art-res MIN_ART_RES]
                [--min-bitrate MIN_BITRATE] [--target-lufs TARGET_LUFS] [--tolerance TOLERANCE]
                [--workers WORKERS] [--prefer {flac,ffmpeg}] [--quiet] [--genres] [--paths] [--dry-run] [--apply]
                [--normalize-names] [--normalize-filenames] [--normalize-tags] [--all] [--keep-metadata]
@@ -354,6 +358,8 @@ options:
   --extractArt          Extract embedded cover art to folder
   --missingArt          Report directories missing cover art
   --auditArtQuality     Report extracted/folder covers below a resolution threshold
+  --auditArtMismatch    Compare embedded art against folder covers: byte-identical, same-pixels re-encodes, and
+                        real mismatches
   --duplicates          Four-section dupe report: exact albums, within-folder multi-format, similar names, track-
                         level
   --auditAudioDupes     Content-hash duplicate detection: exact sha256, audio-stream, and head/tail sampled

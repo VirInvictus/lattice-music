@@ -4,6 +4,7 @@ import sys
 
 from lattice.config import (
     DEFAULT_AI_LIBRARY_OUTPUT,
+    DEFAULT_ART_MISMATCH_OUTPUT,
     DEFAULT_ART_QUALITY_OUTPUT,
     DEFAULT_ALBUM_CONSISTENCY_OUTPUT,
     DEFAULT_AUDIO_DUPES_OUTPUT,
@@ -30,6 +31,7 @@ from lattice.config import (
 )
 from lattice.modes.apestrip import run_apestrip
 from lattice.modes.artwork import (
+    run_art_mismatch_audit,
     run_art_quality_audit,
     run_extract_art,
     run_missing_art,
@@ -114,6 +116,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--auditArtQuality",
         action="store_true",
         help="Report extracted/folder covers below a resolution threshold",
+    )
+    group.add_argument(
+        "--auditArtMismatch",
+        dest="audit_art_mismatch",
+        action="store_true",
+        help="Compare embedded art against folder covers: byte-identical, "
+        "same-pixels re-encodes, and real mismatches",
     )
     group.add_argument(
         "--duplicates",
@@ -503,6 +512,12 @@ def main(argv: list[str] | None = None) -> int:
             output = args.output or DEFAULT_ART_QUALITY_OUTPUT
             return run_art_quality_audit(
                 root, output, args.min_art_res, quiet=args.quiet
+            )
+
+        if args.audit_art_mismatch:
+            output = args.output or DEFAULT_ART_MISMATCH_OUTPUT
+            return run_art_mismatch_audit(
+                root, output, verbose=args.verbose, quiet=args.quiet
             )
 
         if args.duplicates:

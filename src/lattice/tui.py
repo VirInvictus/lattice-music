@@ -25,6 +25,7 @@ from lattice.config import (
 )
 from lattice.modes.apestrip import run_apestrip
 from lattice.modes.artwork import (
+    run_art_mismatch_audit,
     run_art_quality_audit,
     run_extract_art,
     run_missing_art,
@@ -71,6 +72,7 @@ DEFAULT_WAV_OUTPUT = "lattice_wav_errors.txt"
 DEFAULT_WMA_OUTPUT = "lattice_wma_errors.txt"
 DEFAULT_MISSING_ART_OUTPUT = "lattice_missing_art.txt"
 DEFAULT_ART_QUALITY_OUTPUT = "lattice_art_quality.txt"
+DEFAULT_ART_MISMATCH_OUTPUT = "lattice_art_mismatch.txt"
 DEFAULT_DUPLICATES_OUTPUT = "lattice_duplicates.txt"
 DEFAULT_AUDIO_DUPES_OUTPUT = "lattice_audio_dupes.txt"
 DEFAULT_HEALTH_SCORE_OUTPUT = "lattice_health_score.txt"
@@ -109,6 +111,7 @@ _MAIN_SECTIONS = [
             "Extract cover art",
             "Report missing art",
             "Audit art quality",
+            "Audit art mismatch",
         ],
     ),
     (
@@ -180,6 +183,7 @@ _MAIN_ALIASES: dict[str, tuple | None] = {
     "extract": (2, 0),
     "missing": (2, 1),
     "quality": (2, 2),
+    "mismatch": (2, 3),
     "dup": (3, 0),
     "dupes": (3, 0),
     "adupes": (3, 1),
@@ -558,6 +562,19 @@ def _menu_session() -> int:
                     roots,
                     output,
                     min_res,
+                    quiet=False,
+                    footer=out_note(output),
+                )
+
+            elif result == (2, 3):
+                output = prompt_out("Output file", DEFAULT_ART_MISMATCH_OUTPUT)
+                include_ok = ask_yn("List matched albums too? (y/N)")
+                run_with_capture(
+                    "Audit art mismatch",
+                    run_art_mismatch_audit,
+                    roots,
+                    output,
+                    verbose=include_ok,
                     quiet=False,
                     footer=out_note(output),
                 )
