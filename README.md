@@ -8,7 +8,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/tui.png" alt="lattice-music's curses TUI: a menu grouped into Library, Integrity, Artwork, Metadata, and Settings sections">
+  <img src="docs/screenshots/tui.png" alt="lattice-music's curses TUI: a menu grouped into Library, Integrity, Artwork, Metadata, Maintenance, and Settings sections">
 </p>
 
 A CLI/TUI toolkit for music collectors who manage their own libraries. lattice-music handles library visualization, integrity verification, cover art extraction, and metadata auditing, built on `mutagen` and `tqdm`, with the shared `vir-tui` library powering its terminal UI and `flac` and `ffmpeg` shelled out for integrity checks.
