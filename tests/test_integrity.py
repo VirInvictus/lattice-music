@@ -334,7 +334,18 @@ class ProgressPersistenceTests(unittest.TestCase):
                     row["reason"] = "decode failed (test fixture)"
                 return row
 
-            with mock.patch.object(integrity_mod, "_scan_one_file", scan):
+            with (
+                # A decoder must resolve for the scan to run at all (the
+                # missing-decoder refusal fires first these days); the decode
+                # itself is stubbed so the test never needs a real ffmpeg.
+                mock.patch.object(
+                    integrity_mod, "_find_ffmpeg", return_value="/fake/ffmpeg"
+                ),
+                mock.patch.object(
+                    integrity_mod, "_ffmpeg_decode_check", return_value=(0, "")
+                ),
+                mock.patch.object(integrity_mod, "_scan_one_file", scan),
+            ):
                 rc1 = run_mp3_mode(
                     [td], str(out), 1, None, only_errors=True, verbose=False, quiet=True
                 )
@@ -343,7 +354,18 @@ class ProgressPersistenceTests(unittest.TestCase):
 
             armed[0] = False
             before = len(calls)
-            with mock.patch.object(integrity_mod, "_scan_one_file", scan):
+            with (
+                # Same decoder stub as run 1: the resume scan_id carries the
+                # resolved ffmpeg path, so the two runs must resolve it the
+                # same way or the recorded state is discarded as foreign.
+                mock.patch.object(
+                    integrity_mod, "_find_ffmpeg", return_value="/fake/ffmpeg"
+                ),
+                mock.patch.object(
+                    integrity_mod, "_ffmpeg_decode_check", return_value=(0, "")
+                ),
+                mock.patch.object(integrity_mod, "_scan_one_file", scan),
+            ):
                 rc2 = run_mp3_mode(
                     [td],
                     str(out),

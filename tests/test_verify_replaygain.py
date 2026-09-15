@@ -161,6 +161,7 @@ class RunVerifyReplayGainTests(unittest.TestCase):
 
         with (
             mock.patch.object(audit_mod, "read_replaygain_values", side_effect=values),
+            mock.patch.object(audit_mod.shutil, "which", return_value="/usr/bin/rsgain"),
             mock.patch.object(audit_mod.subprocess, "run", side_effect=run_proc),
         ):
             return run_verify_replaygain([td], str(out), quiet=True, **kw)
