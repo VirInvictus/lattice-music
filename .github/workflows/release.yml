@@ -2,10 +2,12 @@ name: Release
 
 # A v* tag auto-publishes to PyPI (publish.yml) and opens the GitHub Release
 # here. The Release body is the tag's own message, which is the verbatim
-# patchnotes entry per the house tagging procedure. Stock gh CLI only: no
-# third-party action, and the checkout the other workflows need is not
-# required to talk to the releases API. Tags cut before this file existed
-# used the manual `gh release create vX --notes-from-tag`.
+# patchnotes entry per the house tagging procedure. The checkout is required:
+# `gh release create --notes-from-tag` refuses to combine with --repo, so the
+# step runs inside the repository and lets the remote infer it (v5.5.0's run
+# failed on exactly that). Stock gh CLI only; no third-party action. Tags cut
+# before this file existed used the manual `gh release create vX
+# --notes-from-tag`.
 on:
   push:
     tags: ["v*"]
@@ -18,11 +20,11 @@ jobs:
     name: Create the GitHub Release
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          sparse-checkout: .
       - name: Create the release from the tag message
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --repo "$GITHUB_REPOSITORY" \
-            --notes-from-tag \
-            --verify-tag
+          gh release create "$GITHUB_REF_NAME" --notes-from-tag --verify-tag
