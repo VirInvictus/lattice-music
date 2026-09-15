@@ -122,6 +122,8 @@ supplies default roots; the first-run prompt persists only the single
 | Stray-file audit | `--auditStrays` | Report audio at the wrong depth for the configured layout, loose tracks beside album folders, hidden-dir audio, and unrecognized non-audio files in album folders |
 | Smart playlist | `--playlist` | Generate an `.m3u` from a dynamic rule (e.g. `rating >= 4 and genre == 'Jazz'`) |
 | Playlist check | `--checkPlaylists` | Verify the library's `.m3u`/`.m3u8` playlists: missing `#EXTM3U` headers and entries whose target no longer exists (relative entries resolve against the playlist's own directory) |
+| Snapshot | `--snapshot` | Write a per-file library snapshot TSV (path, size, mtime, track/rating/genre/year, ReplayGain presence); the `--diff` baseline |
+| Snapshot diff | `--diff SNAPSHOT` | Replay a snapshot against the current tree: MOVED (size+mtime preserved at a new path), RETAGGED (per-field old -> new), RESIZED, ADDED, REMOVED |
 | Clean | `--clean` | Consolidate fragmented album folders (quote/dash/case variants) with opt-in name (`--normalize-names`, `--normalize-filenames`) and tag (`--normalize-tags`) normalization passes; write mode, dry-run by default |
 | APEv2 strip | `--apestrip` | Remove stray APEv2 tags from MP3s (`--keep-metadata` to migrate sole-source fields first, `--repair-malformed` for tags mutagen cannot parse); write mode, dry-run by default |
 

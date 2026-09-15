@@ -24,6 +24,8 @@ DEFAULT_STRAY_AUDIT_OUTPUT = "stray_audit.txt"
 DEFAULT_AI_LIBRARY_OUTPUT = "library_ai.txt"
 DEFAULT_PLAYLIST_OUTPUT = "smart_playlist.m3u"
 DEFAULT_PLAYLIST_CHECK_OUTPUT = "playlist_check.txt"
+DEFAULT_SNAPSHOT_OUTPUT = "library_snapshot.tsv"
+DEFAULT_SNAPSHOT_DIFF_OUTPUT = "snapshot_diff.txt"
 
 # Path-extraction layout used to recover artist/album/genre from a file's path
 # when its tags are missing. The default suits an Artist/Album library; a

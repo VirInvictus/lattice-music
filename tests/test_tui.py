@@ -22,10 +22,12 @@ from lattice.modes.audit import (
 )
 from lattice.modes.integrity import run_flac_mode
 from lattice.modes.library import (
+    diff_snapshot,
     write_ai_library,
     write_ai_wings,
     write_all_wings,
     write_music_library_tree,
+    write_snapshot,
 )
 from lattice.modes.playlists import generate_playlist, run_check_playlists
 from lattice.modes.stats import run_stats
@@ -254,6 +256,36 @@ class CliTuiKwargsParityTests(unittest.TestCase):
             answers={
                 "Output directory": "wings_ai_parity",
                 "layout": self.LAYOUT,
+            },
+            main_menu=False,
+        )
+
+    def test_snapshot(self):
+        self._parity(
+            mode="write_snapshot",
+            real=write_snapshot,
+            cli_argv=["--snapshot", "--root", self.ROOTS[0], "--output", self.OUT],
+            selections=[(0, 5), tui._SEL_LIB_BACK],
+            answers={"Snapshot file": self.OUT},
+            main_menu=False,
+        )
+
+    def test_diff_snapshot(self):
+        self._parity(
+            mode="diff_snapshot",
+            real=diff_snapshot,
+            cli_argv=[
+                "--diff",
+                "snap.tsv",
+                "--root",
+                self.ROOTS[0],
+                "--output",
+                self.OUT,
+            ],
+            selections=[(0, 6), tui._SEL_LIB_BACK],
+            answers={
+                "Snapshot file to diff against": "snap.tsv",
+                "Report file": self.OUT,
             },
             main_menu=False,
         )

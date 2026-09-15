@@ -49,10 +49,12 @@ from lattice.modes.integrity import (
     run_wma_mode,
 )
 from lattice.modes.library import (
+    diff_snapshot,
     write_ai_library,
     write_ai_wings,
     write_all_wings,
     write_music_library_tree,
+    write_snapshot,
 )
 from lattice.modes.playlists import generate_playlist, run_check_playlists
 from lattice.modes.stats import run_stats
@@ -79,6 +81,8 @@ DEFAULT_REPLAYGAIN_VERIFY_OUTPUT = "lattice_replaygain_verify.txt"
 DEFAULT_PLAYLIST_CHECK_OUTPUT = "lattice_playlist_check.txt"
 DEFAULT_ALBUM_CONSISTENCY_OUTPUT = "lattice_album_consistency.txt"
 DEFAULT_STRAY_AUDIT_OUTPUT = "lattice_stray_audit.txt"
+DEFAULT_SNAPSHOT_OUTPUT = "lattice_library_snapshot.tsv"
+DEFAULT_SNAPSHOT_DIFF_OUTPUT = "lattice_snapshot_diff.txt"
 
 
 _MAIN_SECTIONS = [
@@ -147,6 +151,8 @@ _LIB_SECTIONS = [
             "Generate all wings (per-genre)",
             "Generate AI wings (per-genre flat)",
             "Generate smart playlist (.m3u)",
+            "Write library snapshot",
+            "Diff against a snapshot",
         ],
     ),
     ("", ["Back to main menu"]),
@@ -208,6 +214,8 @@ _LIB_ALIASES: dict[str, tuple | None] = {
     "wings": (0, 2),
     "ai-wings": (0, 3),
     "playlist": (0, 4),
+    "snapshot": (0, 5),
+    "diff": (0, 6),
     "back": None,
     "": None,
 }
@@ -328,6 +336,28 @@ def _library_submenu(roots: list[str]) -> None:
                     output,
                     rule,
                     layout=get_layout(),
+                    quiet=False,
+                    footer=out_note(output),
+                )
+            elif result == (0, 5):
+                output = prompt_out("Snapshot file", DEFAULT_SNAPSHOT_OUTPUT)
+                run_with_capture(
+                    "Write library snapshot",
+                    write_snapshot,
+                    roots,
+                    output,
+                    quiet=False,
+                    footer=out_note(output),
+                )
+            elif result == (0, 6):
+                snapshot = prompt_out("Snapshot file to diff against", "")
+                output = prompt_out("Report file", DEFAULT_SNAPSHOT_DIFF_OUTPUT)
+                run_with_capture(
+                    "Diff against a snapshot",
+                    diff_snapshot,
+                    roots,
+                    snapshot,
+                    output,
                     quiet=False,
                     footer=out_note(output),
                 )

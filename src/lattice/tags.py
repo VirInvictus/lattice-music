@@ -303,6 +303,9 @@ def get_all_tags(file_path: str) -> TagBundle:
     title = artist = album = genre = None
     trackno: int | None = None
     rating: float | None = None
+    # Bound before the try: the year pass after it runs even when MutagenFile
+    # raised on an unreadable file.
+    tags = None
     duration_s: float | None = None
     bitrate_kbps: int | None = None
 

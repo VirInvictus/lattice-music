@@ -65,6 +65,8 @@ Modern music players often hide your library behind proprietary databases. latti
 | **Library health score** | `--healthScore` | Per-album score out of 100 aggregating tag completeness, ReplayGain coverage, art, and the bitrate floor, with point-by-point deductions |
 | **Clean (write)** | `--clean` | Consolidates fragmented album folders; opt-in `--normalize-names`/`--normalize-filenames`/`--normalize-tags` passes. Dry-run by default, `--apply` to write |
 | **APEv2 strip (write)** | `--apestrip` | Removes stray APEv2 tags from MP3s (`--keep-metadata` to migrate first, `--repair-malformed` for broken tags). Dry-run by default, `--apply` to write |
+| **Snapshot** | `--snapshot` | Writes a per-file library snapshot TSV (path, size, mtime, key tags, ReplayGain presence) for before/after evidence |
+| **Snapshot diff** | `--diff SNAPSHOT` | Replays a snapshot against the current tree: moved, retagged, resized, added, and removed files |
 | **Version** | `--version` | Prints version and exits |
 
 Running with no arguments launches an interactive TUI: a full-screen curses interface with arrow-key navigation, color-coded section groups (Library, Integrity, Artwork, Metadata, Maintenance), and a highlighted selection cursor. Menus, parameter prompts, and pause screens all render inside styled Unicode boxes for a consistent experience. Library tree, AI export, and genre wings live in a dedicated submenu; the two write modes live under Maintenance behind yes/no confirms. Long reports open in a scrollable, pannable results pager with `/` search and `n`/`N` match jumping. Falls back to typed input if curses is unavailable.
@@ -190,6 +192,11 @@ lattice --verifyReplayGain --output replaygain_verify.txt
 
 # Check the library's playlists for entries the movers have orphaned
 lattice --checkPlaylists --output playlist_check.txt
+
+# Snapshot before a maintenance pass, diff after: the full change record
+lattice --snapshot --output before.tsv
+lattice --clean ~/Music --apply
+lattice --diff before.tsv --output changes.txt
 
 # Audit files that don't fit the layout: strays, loose tracks, hidden-dir
 # audio, and non-audio junk in album folders
@@ -318,12 +325,12 @@ usage: lattice [-h] [--version] [--library | --ai-library | --all-wings | --ai-w
                --testOpus | --testWAV | --testWMA | --extractArt | --missingArt | --auditArtQuality |
                --duplicates | --auditAudioDupes | --auditTags | --auditAlbums | --auditBitrate |
                --auditReplayGain | --verifyReplayGain | --auditStrays | --healthScore | --playlist |
-               --checkPlaylists | --stats | --clean | --apestrip] [--root DIR] [--output OUTPUT] [--rule RULE]
-               [--layout LAYOUT] [--min-art-res MIN_ART_RES] [--min-bitrate MIN_BITRATE]
-               [--target-lufs TARGET_LUFS] [--tolerance TOLERANCE] [--workers WORKERS] [--prefer {flac,ffmpeg}]
-               [--quiet] [--genres] [--paths] [--dry-run] [--apply] [--normalize-names] [--normalize-filenames]
-               [--normalize-tags] [--all] [--keep-metadata] [--repair-malformed] [--resume]
-               [--only-errors | --no-only-errors] [--ffmpeg FFMPEG] [--verbose]
+               --checkPlaylists | --stats | --snapshot | --diff SNAPSHOT | --clean | --apestrip] [--root DIR]
+               [--output OUTPUT] [--rule RULE] [--layout LAYOUT] [--min-art-res MIN_ART_RES]
+               [--min-bitrate MIN_BITRATE] [--target-lufs TARGET_LUFS] [--tolerance TOLERANCE]
+               [--workers WORKERS] [--prefer {flac,ffmpeg}] [--quiet] [--genres] [--paths] [--dry-run] [--apply]
+               [--normalize-names] [--normalize-filenames] [--normalize-tags] [--all] [--keep-metadata]
+               [--repair-malformed] [--resume] [--only-errors | --no-only-errors] [--ffmpeg FFMPEG] [--verbose]
                [pos_root]
 
 Filesystem-first music library toolkit: trees, integrity, audits, content-hash duplicate detection, health score,
@@ -366,6 +373,9 @@ options:
   --checkPlaylists      Verify the library's .m3u playlists: missing #EXTM3U headers and entries whose target no
                         longer exists
   --stats               Library-wide statistics summary
+  --snapshot            Write a per-file library snapshot TSV (the --diff baseline)
+  --diff SNAPSHOT       Replay a --snapshot TSV against the current tree: moved, retagged, resized, added, and
+                        removed files
   --clean               Consolidate fragmented album folders; optionally normalize names and tags (write mode:
                         dry-run by default, --apply to write)
   --apestrip            Strip stray APEv2 tags from MP3s (write mode: dry-run by default, --apply to write)

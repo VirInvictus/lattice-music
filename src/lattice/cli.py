@@ -18,6 +18,8 @@ from lattice.config import (
     DEFAULT_PLAYLIST_OUTPUT,
     DEFAULT_PLAYLIST_CHECK_OUTPUT,
     DEFAULT_REPLAYGAIN_AUDIT_OUTPUT,
+    DEFAULT_SNAPSHOT_DIFF_OUTPUT,
+    DEFAULT_SNAPSHOT_OUTPUT,
     DEFAULT_REPLAYGAIN_VERIFY_OUTPUT,
     DEFAULT_STRAY_AUDIT_OUTPUT,
     DEFAULT_TAG_AUDIT_OUTPUT,
@@ -52,10 +54,12 @@ from lattice.modes.integrity import (
     run_wma_mode,
 )
 from lattice.modes.library import (
+    diff_snapshot,
     write_ai_library,
     write_ai_wings,
     write_all_wings,
     write_music_library_tree,
+    write_snapshot,
 )
 from lattice.modes.playlists import generate_playlist, run_check_playlists
 from lattice.modes.stats import run_stats
@@ -178,6 +182,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     group.add_argument(
         "--stats", action="store_true", help="Library-wide statistics summary"
+    )
+    group.add_argument(
+        "--snapshot",
+        action="store_true",
+        help="Write a per-file library snapshot TSV (the --diff baseline)",
+    )
+    group.add_argument(
+        "--diff",
+        dest="diff_snapshot",
+        metavar="SNAPSHOT",
+        default=None,
+        help="Replay a --snapshot TSV against the current tree: moved, "
+        "retagged, resized, added, and removed files",
     )
     group.add_argument(
         "--clean",
@@ -557,6 +574,14 @@ def main(argv: list[str] | None = None) -> int:
         if args.stats:
             run_stats(root, args.output, layout=args.layout, quiet=args.quiet)
             return 0
+
+        if args.snapshot:
+            output = args.output or DEFAULT_SNAPSHOT_OUTPUT
+            return write_snapshot(root, output, quiet=args.quiet)
+
+        if args.diff_snapshot:
+            output = args.output or DEFAULT_SNAPSHOT_DIFF_OUTPUT
+            return diff_snapshot(root, args.diff_snapshot, output, quiet=args.quiet)
 
         # The write modes operate on exactly one tree (like the companion
         # scripts they replace), not on an aggregated root list.
