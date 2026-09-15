@@ -14,6 +14,7 @@ from unittest import mock
 
 from lattice import cli, tui, utils
 from lattice.modes.audit import (
+    run_album_consistency,
     run_health_score,
     run_replaygain_audit,
     run_stray_audit,
@@ -372,6 +373,23 @@ class CliTuiKwargsParityTests(unittest.TestCase):
             main_menu=True,
         )
 
+    def test_album_consistency(self):
+        self._parity(
+            mode="run_album_consistency",
+            real=run_album_consistency,
+            cli_argv=[
+                "--auditAlbums",
+                "--root",
+                self.ROOTS[0],
+                "--output",
+                self.OUT,
+                "--verbose",
+            ],
+            selections=[(3, 7), tui._SEL_QUIT],
+            answers={"Output file": self.OUT, "no findings": True},
+            main_menu=True,
+        )
+
     def test_stray_audit(self):
         self._parity(
             mode="run_stray_audit",
@@ -385,7 +403,7 @@ class CliTuiKwargsParityTests(unittest.TestCase):
                 "--layout",
                 self.LAYOUT,
             ],
-            selections=[(3, 7), tui._SEL_QUIT],
+            selections=[(3, 8), tui._SEL_QUIT],
             answers={"Output file": self.OUT, "layout": self.LAYOUT},
             main_menu=True,
         )
@@ -419,7 +437,7 @@ class CliTuiKwargsParityTests(unittest.TestCase):
                 self.OUT,
                 "--verbose",
             ],
-            selections=[(3, 8), tui._SEL_QUIT],
+            selections=[(3, 9), tui._SEL_QUIT],
             answers={
                 "Output file": self.OUT,
                 "bitrate floor": 192,

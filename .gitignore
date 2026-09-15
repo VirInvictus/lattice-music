@@ -49,6 +49,7 @@ duplicates.txt
 audio_dupes.txt
 health_score.txt
 tag_audit.txt
+album_consistency.txt
 bitrate_audit.txt
 replaygain_audit.txt
 replaygain_verify.txt

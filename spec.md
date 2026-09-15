@@ -115,6 +115,7 @@ supplies default roots; the first-run prompt persists only the single
 | Content-hash duplicate audit | `--auditAudioDupes` | Byte-level duplicate detection, tags never read: exact-file sha256, audio-stream sha256 (container tag regions parsed out: ID3v2/ID3v1/APEv2 on MP3, FLAC metadata blocks, MP4 mdat boxes), and raw first/last 64KB sampled matches for the remaining formats |
 | Library health score | `--healthScore` | Per-album score out of 100 aggregating tag completeness, ReplayGain coverage, art presence/resolution, and the bitrate floor, with per-bucket deductions; read-only, no decode scans |
 | Tag audit | `--auditTags` | Report files missing title, artist, track number, or genre |
+| Album consistency audit | `--auditAlbums` | Per-album consistency: mixed codecs in one folder, track-number gaps and duplicates over 1..max, and missing, partial, or divergent year tags (the year read is part of `TagBundle`) |
 | Bitrate audit | `--auditBitrate` | Report files below a configurable bitrate floor |
 | ReplayGain audit | `--auditReplayGain` | Report per-album ReplayGain coverage (missing / partial / no album gain / OK); Opus R128 gain counts as tagged |
 | ReplayGain verification | `--verifyReplayGain` | Re-measure each album read-only via `rsgain custom -O -s s` (the writer's own engine) and report stored gains disagreeing with the fresh measurement by more than `--tolerance` at the assumed `--target-lufs`; clip-adjusted rows are reported, never flagged OFF; requires `rsgain` |

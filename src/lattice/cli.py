@@ -5,6 +5,7 @@ import sys
 from lattice.config import (
     DEFAULT_AI_LIBRARY_OUTPUT,
     DEFAULT_ART_QUALITY_OUTPUT,
+    DEFAULT_ALBUM_CONSISTENCY_OUTPUT,
     DEFAULT_AUDIO_DUPES_OUTPUT,
     DEFAULT_BITRATE_AUDIT_OUTPUT,
     DEFAULT_DUPLICATES_OUTPUT,
@@ -32,6 +33,7 @@ from lattice.modes.artwork import (
     run_missing_art,
 )
 from lattice.modes.audit import (
+    run_album_consistency,
     run_audio_dupes,
     run_bitrate_audit,
     run_duplicates,
@@ -123,6 +125,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     group.add_argument(
         "--auditTags", action="store_true", help="Report files with incomplete tags"
+    )
+    group.add_argument(
+        "--auditAlbums",
+        dest="audit_albums",
+        action="store_true",
+        help="Per-album consistency audit: mixed codecs, track-number gaps and "
+        "duplicates, and missing or divergent year tags",
     )
     group.add_argument(
         "--auditBitrate",
@@ -490,6 +499,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.auditTags:
             output = args.output or DEFAULT_TAG_AUDIT_OUTPUT
             return run_tag_audit(root, output, quiet=args.quiet)
+
+        if args.audit_albums:
+            output = args.output or DEFAULT_ALBUM_CONSISTENCY_OUTPUT
+            return run_album_consistency(
+                root, output, verbose=args.verbose, quiet=args.quiet
+            )
 
         if args.auditBitrate:
             output = args.output or DEFAULT_BITRATE_AUDIT_OUTPUT

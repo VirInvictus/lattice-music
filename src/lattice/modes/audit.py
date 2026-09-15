@@ -13,6 +13,7 @@ from typing import NamedTuple
 
 from lattice.config import (
     AUDIO_EXTENSIONS,
+    DEFAULT_ALBUM_CONSISTENCY_OUTPUT,
     DEFAULT_AUDIO_DUPES_OUTPUT,
     DEFAULT_BITRATE_AUDIT_OUTPUT,
     DEFAULT_DUPLICATES_OUTPUT,
@@ -1521,6 +1522,147 @@ def _off_detail(
         f"{label}: stored {_fmt_db(stored)} vs expected {expected:+.2f} dB "
         f"(measured {loudness:.2f} LUFS, off by {delta:+.2f} dB)"
     )
+
+
+# =====================================
+# Mode: Album consistency audit
+# =====================================
+
+
+def _track_number_findings(numbers: list[int], n_files: int) -> list[str]:
+    """Gaps, duplicates, and untagged files in a folder's track numbers.
+    Gaps run over 1..max: a 9-track album numbered 1,2,5 reports 3 and 4,
+    which is exactly what a botched conversion or a partial delete leaves."""
+    findings: list[str] = []
+    counts = Counter(numbers)
+    unique = sorted(counts)
+    dupes = sorted(n for n, c in counts.items() if c > 1)
+    gaps = [n for n in range(1, max(unique) + 1) if n not in counts] if unique else []
+    if gaps:
+        findings.append(f"missing track numbers: {', '.join(map(str, gaps))}")
+    if dupes:
+        findings.append(f"duplicate track numbers: {', '.join(map(str, dupes))}")
+    untagged = n_files - len(numbers)
+    if untagged:
+        findings.append(f"{untagged} of {n_files} file(s) carry no track number")
+    return findings
+
+
+def run_album_consistency(
+    root: str | list[str],
+    output: str,
+    *,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> int:
+    """Per-album consistency audit: the debris the repo's own writers and
+    imports create. One read-only pass over every album folder checking
+    three lenses: mixed codecs (the leftover .mp3 beside the .flac after a
+    conversion), track-number gaps and duplicates, and year tags (missing,
+    partial, or diverging across files -- the year read is TagBundle's)."""
+    roots = as_roots(root)
+    if not quiet:
+        print(f"Auditing album consistency under: {', '.join(roots)}")
+
+    total = count_audio_files(roots)
+    pbar = _make_pbar(total, "Auditing album consistency", quiet)
+
+    mixed: list[tuple[str, str]] = []
+    track_issues: list[tuple[str, str]] = []
+    year_issues: list[tuple[str, str]] = []
+    clean: list[str] = []
+    n_albums = 0
+
+    for _src_root, dirpath, _subdirs, files in iter_audio_dirs(roots):
+        audio = sorted(f for f in files if is_audio(f))
+        if not audio:
+            continue
+        n_albums += 1
+        paths = [os.path.join(dirpath, f) for f in audio]
+        bundles = read_tags_concurrent(paths, pbar=pbar)
+        album_bundles = [bundles[p] for p in paths]
+
+        album_findings: list[tuple[str, str]] = []
+
+        exts = sorted({os.path.splitext(f)[1].lower() for f in audio})
+        if len(exts) > 1:
+            album_findings.append(
+                ("mixed codecs", f"mixed codecs in one folder: {' + '.join(exts)}")
+            )
+
+        numbers = [b.trackno for b in album_bundles if b.trackno is not None]
+        for finding in _track_number_findings(numbers, len(paths)):
+            album_findings.append(("track numbers", finding))
+
+        years = sorted({b.year for b in album_bundles if b.year is not None})
+        n_with_year = sum(1 for b in album_bundles if b.year is not None)
+        if not years:
+            album_findings.append(("year", "no year tags"))
+        elif len(years) > 1:
+            without = len(paths) - n_with_year
+            detail = f"divergent years: {', '.join(map(str, years))}"
+            if without:
+                detail += f" ({without} of {len(paths)} files without a year)"
+            album_findings.append(("year", detail))
+        elif n_with_year < len(paths):
+            album_findings.append(
+                ("year", f"year {years[0]} on only {n_with_year} of {len(paths)} files")
+            )
+
+        if album_findings:
+            for lens, detail in album_findings:
+                if lens == "mixed codecs":
+                    mixed.append((dirpath, detail))
+                elif lens == "track numbers":
+                    track_issues.append((dirpath, detail))
+                else:
+                    year_issues.append((dirpath, detail))
+        else:
+            clean.append(dirpath)
+
+    pbar.close()
+
+    out_path = os.path.abspath(output or DEFAULT_ALBUM_CONSISTENCY_OUTPUT)
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write("ALBUM CONSISTENCY REPORT\n")
+        f.write(f"Root: {', '.join(roots)}\n")
+        f.write(
+            f"Albums: {n_albums}   Mixed codecs: {len(mixed)}   "
+            f"Track-number issues: {len(track_issues)}   "
+            f"Year issues: {len(year_issues)}\n"
+        )
+        f.write("=" * 64 + "\n\n")
+
+        def section(title: str, pairs: list[tuple[str, str]]) -> None:
+            if not pairs:
+                return
+            f.write(f"{title} ({len(pairs)})\n")
+            f.write("-" * 40 + "\n")
+            for album, detail in pairs:
+                f.write(f"  {relpath_under(album, roots)}\n")
+                f.write(f"    {detail}\n")
+            f.write("\n")
+
+        section("MIXED CODECS", mixed)
+        section("TRACK NUMBERS", track_issues)
+        section("YEARS", year_issues)
+        if verbose:
+            f.write(f"CLEAN ({len(clean)})\n")
+            f.write("-" * 40 + "\n")
+            for album in clean:
+                f.write(f"  {relpath_under(album, roots)}\n")
+            f.write("\n")
+
+    if not quiet:
+        print(f"\nAudited {n_albums} albums.")
+        print(f"  Mixed codecs:       {len(mixed)}")
+        print(f"  Track-number issues: {len(track_issues)}")
+        print(f"  Year issues:        {len(year_issues)}")
+        print(f"Results written to: {out_path}")
+
+    return 0
 
 
 # =====================================

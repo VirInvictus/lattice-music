@@ -30,6 +30,7 @@ from lattice.modes.artwork import (
     run_missing_art,
 )
 from lattice.modes.audit import (
+    run_album_consistency,
     run_audio_dupes,
     run_bitrate_audit,
     run_duplicates,
@@ -76,6 +77,7 @@ DEFAULT_BITRATE_AUDIT_OUTPUT = "lattice_bitrate_audit.txt"
 DEFAULT_REPLAYGAIN_AUDIT_OUTPUT = "lattice_replaygain_audit.txt"
 DEFAULT_REPLAYGAIN_VERIFY_OUTPUT = "lattice_replaygain_verify.txt"
 DEFAULT_PLAYLIST_CHECK_OUTPUT = "lattice_playlist_check.txt"
+DEFAULT_ALBUM_CONSISTENCY_OUTPUT = "lattice_album_consistency.txt"
 DEFAULT_STRAY_AUDIT_OUTPUT = "lattice_stray_audit.txt"
 
 
@@ -115,6 +117,7 @@ _MAIN_SECTIONS = [
             "Audit ReplayGain",
             "Verify ReplayGain (rsgain)",
             "Check playlists",
+            "Audit album consistency",
             "Audit stray files",
             "Library health score",
         ],
@@ -184,8 +187,10 @@ _MAIN_ALIASES: dict[str, tuple | None] = {
     "rgverify": (3, 5),
     "playlists": (3, 6),
     "pl": (3, 6),
-    "strays": (3, 7),
-    "health": (3, 8),
+    "consistency": (3, 7),
+    "albums": (3, 7),
+    "strays": (3, 8),
+    "health": (3, 9),
     "clean": (4, 0),
     "apestrip": (4, 1),
     "ape": (4, 1),
@@ -621,6 +626,19 @@ def _menu_session() -> int:
                 )
 
             elif result == (3, 7):
+                output = prompt_out("Output file", DEFAULT_ALBUM_CONSISTENCY_OUTPUT)
+                include_ok = ask_yn("List albums with no findings? (y/N)")
+                run_with_capture(
+                    "Audit album consistency",
+                    run_album_consistency,
+                    roots,
+                    output,
+                    verbose=include_ok,
+                    quiet=False,
+                    footer=out_note(output),
+                )
+
+            elif result == (3, 8):
                 output = prompt_out("Output file", DEFAULT_STRAY_AUDIT_OUTPUT)
                 layout = ask("Path layout", get_layout())
                 run_with_capture(
@@ -633,7 +651,7 @@ def _menu_session() -> int:
                     footer=out_note(output),
                 )
 
-            elif result == (3, 8):
+            elif result == (3, 9):
                 output = prompt_out("Output file", DEFAULT_HEALTH_SCORE_OUTPUT)
                 min_kbps = prompt_int("Minimum bitrate floor (kbps)", 192)
                 min_res = prompt_int("Minimum cover resolution (px)", 500)

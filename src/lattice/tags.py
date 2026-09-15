@@ -1,4 +1,5 @@
 import os
+import re
 from typing import NamedTuple
 
 from lattice.utils import _looks_numeric, normalize_rating
@@ -15,6 +16,7 @@ class TagBundle(NamedTuple):
     rating: float | None = None
     duration_s: float | None = None
     bitrate_kbps: int | None = None
+    year: int | None = None
 
 
 class ReplayGainStatus(NamedTuple):
@@ -249,6 +251,50 @@ def _parse_track_number(val) -> int | None:
         return None
 
 
+# Year-bearing tag keys, matched on the key's lowercase suffix like the
+# ReplayGain flags: ID3 frames (TDRC/TYER), Vorbis date keys (date, and the
+# originaldate/releasedate variants), MP4's ©day atom, ASF WM/Year.
+_YEAR_KEY_SUFFIXES = ("tdrc", "tyer", "date", "year", "\xa9day")
+
+
+def _parse_year(val) -> int | None:
+    """First plausible year in a date-ish value ('1985', '1985-03-01',
+    '1985-03-01T12:00:00'). Anything else parses as no year rather than
+    guessing; plausible means a 1200-2100 integer."""
+    s = _first_text(val)
+    if not s:
+        return None
+    s = s.strip()
+    m = re.match(r"(\d{4})(?:\D|$)", s)
+    if not m:
+        return None
+    y = int(m.group(1))
+    return y if 1200 <= y <= 2100 else None
+
+
+def _year_from_tags(tags) -> int | None:
+    """The file's year from the first year-bearing key that yields one.
+    MusicBrainz keys are skipped: their '...Date' descs carry TXXX frames
+    whose values are MBIDs, and a hex string can contain four digits."""
+    if not hasattr(tags, "items"):
+        return None
+    candidates: list[tuple[str, object]] = []
+    try:
+        for k, v in tags.items():
+            kl = str(k).lower()
+            if "musicbrainz" in kl:
+                continue
+            if kl.endswith(_YEAR_KEY_SUFFIXES):
+                candidates.append((kl, v))
+    except Exception:
+        return None
+    for _kl, v in sorted(candidates, key=lambda c: c[0]):
+        y = _parse_year(v)
+        if y is not None:
+            return y
+    return None
+
+
 def get_all_tags(file_path: str) -> TagBundle:
     """Extract all metadata in a single file open."""
     if not HAVE_MUTAGEN_BASE:
@@ -414,6 +460,11 @@ def get_all_tags(file_path: str) -> TagBundle:
     except Exception:
         pass
 
+    # The year read is a late generic pass (unlike the per-container fields):
+    # year keys share no frame/atom machinery, only naming, so suffix matching
+    # over the raw tag dict covers every container in one place.
+    year = _year_from_tags(tags) if tags else None
+
     return TagBundle(
-        title, artist, trackno, album, genre, rating, duration_s, bitrate_kbps
+        title, artist, trackno, album, genre, rating, duration_s, bitrate_kbps, year
     )

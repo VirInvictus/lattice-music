@@ -23,8 +23,10 @@ from lattice.modes.audit import (
     _loose_key,
     _norm_key,
     _rg_bucket,
+    _track_number_findings,
     _trailing_tags_len,
     classify_stray,
+    run_album_consistency,
     run_audio_dupes,
     run_health_score,
     run_stray_audit,
@@ -791,6 +793,84 @@ class HealthScoreWiringTests(unittest.TestCase):
         self.assertIn(label, sections["METADATA"])
         idx = sections["METADATA"].index(label)
         self.assertEqual(tui._MAIN_ALIASES["health"], (3, idx))
+
+
+class TrackNumberFindingsTests(unittest.TestCase):
+    def test_gap_is_found(self):
+        self.assertEqual(
+            _track_number_findings([1, 2, 5], 3),
+            ["missing track numbers: 3, 4"],
+        )
+
+    def test_duplicates_are_found(self):
+        self.assertEqual(
+            _track_number_findings([1, 1, 2], 3),
+            ["duplicate track numbers: 1"],
+        )
+
+    def test_untagged_files_are_counted(self):
+        self.assertEqual(
+            _track_number_findings([1, 2], 4),
+            ["2 of 4 file(s) carry no track number"],
+        )
+
+    def test_complete_run_is_clean(self):
+        self.assertEqual(_track_number_findings([1, 2, 3], 3), [])
+
+
+class AlbumConsistencyTests(unittest.TestCase):
+    def _tree(self, td: str):
+        # Album A: mixed codecs, a track gap, divergent years.
+        # Album B: fully consistent.
+        mixed = Path(td) / "Album A"
+        mixed.mkdir()
+        (mixed / "01.flac").write_bytes(b"")
+        (mixed / "02.mp3").write_bytes(b"")
+        clean = Path(td) / "Album B"
+        clean.mkdir()
+        (clean / "01.flac").write_bytes(b"")
+        (clean / "02.flac").write_bytes(b"")
+        return mixed, clean
+
+    def _bundles(self, mixed, clean):
+        def bundle(trackno, year):
+            return TagBundle(title="t", trackno=trackno, year=year)
+
+        return {
+            str(mixed / "01.flac"): bundle(1, 1985),
+            str(mixed / "02.mp3"): bundle(5, 1986),
+            str(clean / "01.flac"): bundle(1, 1990),
+            str(clean / "02.flac"): bundle(2, 1990),
+        }
+
+    def _run(self, td, mixed, clean, **kw):
+        bundles = self._bundles(mixed, clean)
+        with mock.patch.object(
+            audit_module, "read_tags_concurrent", return_value=bundles
+        ):
+            out = Path(td) / "consistency.txt"
+            rc = run_album_consistency([td], str(out), quiet=True, **kw)
+            return rc, out.read_text(encoding="utf-8")
+
+    def test_findings_land_in_their_sections(self):
+        with tempfile.TemporaryDirectory() as td:
+            mixed, clean = self._tree(td)
+            rc, report = self._run(td, mixed, clean)
+            self.assertEqual(rc, 0)
+            self.assertIn("ALBUM CONSISTENCY REPORT", report)
+            self.assertIn("MIXED CODECS (1)", report)
+            self.assertIn(".flac + .mp3", report)
+            self.assertIn("missing track numbers: 2, 3, 4", report)
+            self.assertIn("divergent years: 1985, 1986", report)
+            # Album B has no findings, so it only shows in the counts.
+            self.assertNotIn("Album B", report.split("CLEAN")[0])
+
+    def test_verbose_lists_clean_albums(self):
+        with tempfile.TemporaryDirectory() as td:
+            mixed, clean = self._tree(td)
+            _rc, report = self._run(td, mixed, clean, verbose=True)
+            self.assertIn("CLEAN (1)", report)
+            self.assertIn("Album B", report)
 
 
 if __name__ == "__main__":
