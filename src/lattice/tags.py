@@ -184,6 +184,7 @@ HAVE_MUTAGEN_BASE = False
 try:
     from mutagen import File as MutagenFile
     from mutagen.asf import ASF
+    from mutagen.id3 import ID3 as MUTAGEN_ID3  # noqa: F401  (re-export)
     from mutagen.flac import FLAC, Picture  # noqa: F401  (re-export)
     from mutagen.mp4 import MP4
     from mutagen.oggvorbis import OggVorbis

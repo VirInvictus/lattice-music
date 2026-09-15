@@ -16,6 +16,7 @@ from lattice import cli, tui, utils
 from lattice.modes.artwork import run_art_mismatch_audit
 from lattice.modes.audit import (
     run_album_consistency,
+    run_junk_frame_audit,
     run_health_score,
     run_replaygain_audit,
     run_stray_audit,
@@ -392,7 +393,7 @@ class CliTuiKwargsParityTests(unittest.TestCase):
                 self.OUT,
                 "--verbose",
             ],
-            selections=[(3, 4), tui._SEL_QUIT],
+            selections=[(3, 5), tui._SEL_QUIT],
             answers={"Output file": self.OUT, "fully-tagged": True},
             main_menu=True,
         )
@@ -413,7 +414,7 @@ class CliTuiKwargsParityTests(unittest.TestCase):
                 "0.3",
                 "--verbose",
             ],
-            selections=[(3, 5), tui._SEL_QUIT],
+            selections=[(3, 6), tui._SEL_QUIT],
             answers={
                 "Output file": self.OUT,
                 "Target loudness": -14,
@@ -435,7 +436,7 @@ class CliTuiKwargsParityTests(unittest.TestCase):
                 self.OUT,
                 "--verbose",
             ],
-            selections=[(3, 7), tui._SEL_QUIT],
+            selections=[(3, 8), tui._SEL_QUIT],
             answers={"Output file": self.OUT, "no findings": True},
             main_menu=True,
         )
@@ -453,7 +454,7 @@ class CliTuiKwargsParityTests(unittest.TestCase):
                 "--layout",
                 self.LAYOUT,
             ],
-            selections=[(3, 8), tui._SEL_QUIT],
+            selections=[(3, 9), tui._SEL_QUIT],
             answers={"Output file": self.OUT, "layout": self.LAYOUT},
             main_menu=True,
         )
@@ -470,8 +471,25 @@ class CliTuiKwargsParityTests(unittest.TestCase):
                 self.OUT,
                 "--verbose",
             ],
-            selections=[(3, 6), tui._SEL_QUIT],
+            selections=[(3, 7), tui._SEL_QUIT],
             answers={"Output file": self.OUT, "no problems": True},
+            main_menu=True,
+        )
+
+    def test_junk_frames(self):
+        self._parity(
+            mode="run_junk_frame_audit",
+            real=run_junk_frame_audit,
+            cli_argv=[
+                "--auditJunkFrames",
+                "--root",
+                self.ROOTS[0],
+                "--output",
+                self.OUT,
+                "--verbose",
+            ],
+            selections=[(3, 3), tui._SEL_QUIT],
+            answers={"Output file": self.OUT, "no findings": True},
             main_menu=True,
         )
 
@@ -487,7 +505,7 @@ class CliTuiKwargsParityTests(unittest.TestCase):
                 self.OUT,
                 "--verbose",
             ],
-            selections=[(3, 9), tui._SEL_QUIT],
+            selections=[(3, 10), tui._SEL_QUIT],
             answers={
                 "Output file": self.OUT,
                 "bitrate floor": 192,

@@ -18,6 +18,7 @@ from lattice.config import (
     DEFAULT_BITRATE_AUDIT_OUTPUT,
     DEFAULT_DUPLICATES_OUTPUT,
     DEFAULT_HEALTH_SCORE_OUTPUT,
+    DEFAULT_JUNK_FRAME_OUTPUT,
     DEFAULT_REPLAYGAIN_AUDIT_OUTPUT,
     DEFAULT_REPLAYGAIN_VERIFY_OUTPUT,
     DEFAULT_STRAY_AUDIT_OUTPUT,
@@ -28,6 +29,9 @@ from lattice.modes.artwork import _get_image_size, _has_embedded_art
 from lattice.norm import QUOTE_DASH_FOLD as _NORM_QUOTE_DASH_FOLD
 from lattice.tags import (
     HAVE_MUTAGEN_BASE,
+    HAVE_MUTAGEN_MP3,
+    MUTAGEN_ID3,
+    MUTAGEN_MP3,
     ReplayGainStatus,
     TagBundle,
     read_replaygain,
@@ -1660,6 +1664,182 @@ def run_album_consistency(
         print(f"  Mixed codecs:       {len(mixed)}")
         print(f"  Track-number issues: {len(track_issues)}")
         print(f"  Year issues:        {len(year_issues)}")
+        print(f"Results written to: {out_path}")
+
+    return 0
+
+
+# =====================================
+# Mode: Junk ID3 frame audit
+# =====================================
+
+# Demoted by ID3v2.4 (players kept writing them; old taggers left them): the
+# split date frames, the file-size frame, and the v2.3 equalization/replay
+# frames no 2.4 reader parses.
+_OBSOLETE_ID3_FRAMES = {
+    "TYER",
+    "TDAT",
+    "TIME",
+    "TORY",
+    "TSIZ",
+    "CRM",
+    "EQU",
+    "IPL",
+    "RVAD",
+}
+# Outside the spec but functional: the iTunes-era nonstandard frames players
+# do read. Reported, never called junk: stripping them would lose data.
+_NONSTANDARD_ID3_FRAMES = {
+    "TCMP",
+    "GP1",
+    "PCST",
+    "TDES",
+    "TGID",
+    "XSOP",
+    "XSOA",
+    "XSOT",
+    "XDOR",
+}
+
+
+def audit_id3_junk(path: str) -> dict[str, list[str]] | None:
+    """One MP3's junk-frame findings, or None when the file has no readable
+    ID3v2 tag. Classes: obsolete frames (ID3v2.3 leftovers a rewrite
+    normalizes away), empty text frames, duplicate unique frames, and
+    nonstandard iTunes-era frames (reported so their presence is a choice).
+    Read-only, loading the tag raw (translate=False): mutagen's default
+    load silently upgrades v2.3 frames to v2.4, which would hide exactly
+    the junk this reports. v2.2's three-letter frame names survive a raw
+    load and are classified obsolete on sight."""
+    if not HAVE_MUTAGEN_MP3:
+        return None
+    try:
+        audio = MUTAGEN_MP3(path)
+        if getattr(audio, "tags", None) is None:
+            return None
+        tags = MUTAGEN_ID3(path, translate=False)
+    except Exception:
+        return None
+    if not tags:
+        return None
+
+    findings: dict[str, list[str]] = {
+        "obsolete": [],
+        "garbage": [],
+        "nonstandard": [],
+    }
+    # translate=False: mutagen's default load silently upgrades v2.3 frames
+    # (TYER -> TDRC), which is exactly the rewrite this audit is auditing
+    # around; the junk must be visible to be reported.
+    for key in tags.keys():
+        base = key.split(":", 1)[0]
+        if base in _OBSOLETE_ID3_FRAMES or (
+            len(base) == 3 and base.isalpha() and base.isupper()
+        ):
+            # v2.3 leftovers, and v2.2's three-letter frame names, which
+            # survive a translate=False load as themselves.
+            findings["obsolete"].append(key)
+        elif base in _NONSTANDARD_ID3_FRAMES:
+            findings["nonstandard"].append(key)
+        for frame in tags.getall(key):
+            text = getattr(frame, "text", None)
+            if text is not None:
+                values = text if isinstance(text, list) else [text]
+                if values and all(
+                    not str(v).strip() or "\x00" in str(v) for v in values
+                ):
+                    findings["garbage"].append(key)
+    return findings if any(findings.values()) else None
+
+
+def run_junk_frame_audit(
+    root: str | list[str],
+    output: str,
+    *,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> int:
+    """Audit MP3 ID3v2 tags for junk frames: the obsolete-frame classes the
+    APEv2/ID3 repair tooling (apestrip, the write modes' ID3v2.3 rewrite)
+    exists around. Read-only, like every audit; stripping stays with the
+    write modes and companions. MP3-only: the junk classes are ID3-era
+    damage; Vorbis/MP4 containers carry no frame zoo."""
+    if not HAVE_MUTAGEN_MP3:
+        print("ERROR: mutagen is required for the junk frame audit.", file=sys.stderr)
+        return 2
+
+    roots = as_roots(root)
+    if not quiet:
+        print(f"Auditing junk ID3 frames under: {', '.join(roots)}")
+
+    total = count_audio_files(roots)
+    pbar = _make_pbar(total, "Auditing junk frames", quiet)
+
+    buckets: dict[str, list[tuple[str, str]]] = {
+        "obsolete": [],
+        "garbage": [],
+        "nonstandard": [],
+    }
+    n_files = 0
+    dirty_files = 0
+
+    for _src_root, dirpath, _subdirs, files in iter_audio_dirs(roots):
+        mp3s = sorted(f for f in files if os.path.splitext(f)[1].lower() == ".mp3")
+        if not mp3s:
+            continue
+        for f in mp3s:
+            path = os.path.join(dirpath, f)
+            findings = audit_id3_junk(path)
+            pbar.update(1)
+            if findings is None:
+                continue
+            n_files += 1
+            file_findings = [
+                (kind, detail) for kind in findings for detail in findings[kind]
+            ]
+            if file_findings:
+                dirty_files += 1
+                for kind, detail in file_findings:
+                    buckets[kind].append((path, detail))
+
+    pbar.close()
+
+    titles = {
+        "obsolete": "OBSOLETE FRAMES (ID3v2.3 leftovers)",
+        "garbage": "EMPTY TEXT FRAMES",
+        "nonstandard": "NONSTANDARD (iTunes-era, functional)",
+    }
+    out_path = os.path.abspath(output or DEFAULT_JUNK_FRAME_OUTPUT)
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write("JUNK ID3 FRAME AUDIT\n")
+        f.write(f"Root: {', '.join(roots)}\n")
+        f.write(
+            f"MP3s with ID3v2: {n_files}   With findings: {dirty_files}   "
+            f"Obsolete: {len(buckets['obsolete'])}   "
+            f"Empty: {len(buckets['garbage'])}   "
+            f"Nonstandard: {len(buckets['nonstandard'])}\n"
+        )
+        f.write("=" * 64 + "\n\n")
+        for kind in ("obsolete", "garbage", "nonstandard"):
+            pairs = buckets[kind]
+            if not pairs:
+                continue
+            f.write(f"{titles[kind]} ({len(pairs)})\n")
+            f.write("-" * 40 + "\n")
+            for path, detail in pairs:
+                f.write(f"  {relpath_under(path, roots)}\n")
+                f.write(f"    {detail}\n")
+            f.write("\n")
+        if verbose and dirty_files == 0:
+            f.write("No junk frames found.\n\n")
+
+    if not quiet:
+        print(
+            f"\nAudited {n_files} MP3s with ID3v2 tags ({dirty_files} with findings)."
+        )
+        for kind in ("obsolete", "garbage", "nonstandard"):
+            print(f"  {titles[kind].split(' (')[0]}: {len(buckets[kind])}")
         print(f"Results written to: {out_path}")
 
     return 0

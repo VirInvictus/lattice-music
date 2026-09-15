@@ -58,6 +58,7 @@ Modern music players often hide your library behind proprietary databases. latti
 | **Duplicate detection** | `--duplicates` | Four-section report: exact album dupes across directories, within-folder multi-format pairs, fuzzy similar-name candidates, and track-level dupes filtered by duration |
 | **Content-hash duplicate audit** | `--auditAudioDupes` | Byte-level duplicate detection: exact-file sha256, audio-stream sha256 (tags parsed out, so retagged copies match), and head/tail 64KB sampling; catches renamed and retagged dupes the tag-based report misses |
 | **Tag audit** | `--auditTags` | Reports files missing title, artist, track number, or genre to text |
+| **Junk frame audit** | `--auditJunkFrames` | Audits MP3 ID3v2 tags for junk: obsolete v2.3/v2.2 frames, empty text frames, and nonstandard iTunes-era frames (reported, never called junk) |
 | **Album consistency audit** | `--auditAlbums` | Per-album consistency: mixed codecs in one folder, track-number gaps and duplicates, and missing or divergent year tags |
 | **Bitrate audit** | `--auditBitrate` | Reports files falling below a minimum bitrate floor |
 | **ReplayGain audit** | `--auditReplayGain` | Reports per-album ReplayGain coverage (missing, partial, no album gain, OK); Opus R128 gain counts as tagged |
@@ -183,6 +184,9 @@ lattice --healthScore --output health_score.txt
 
 # Audit tags for missing metadata
 lattice --auditTags --output tag_audit.txt
+
+# Find obsolete and empty ID3 frames the taggers left behind (MP3)
+lattice --auditJunkFrames --output junk_frames.txt
 
 # Per-album consistency: mixed codecs, track gaps, year divergence
 lattice --auditAlbums --output album_consistency.txt
@@ -327,14 +331,15 @@ The filesystem is the source of truth: lattice-music walks the tree on every inv
 ```
 usage: lattice [-h] [--version] [--library | --ai-library | --all-wings | --ai-wings | --testFLAC | --testMP3 |
                --testOpus | --testWAV | --testWMA | --extractArt | --missingArt | --auditArtQuality |
-               --auditArtMismatch | --duplicates | --auditAudioDupes | --auditTags | --auditAlbums |
-               --auditBitrate | --auditReplayGain | --verifyReplayGain | --auditStrays | --healthScore |
-               --playlist | --checkPlaylists | --stats | --snapshot | --diff SNAPSHOT | --clean | --apestrip]
-               [--root DIR] [--output OUTPUT] [--rule RULE] [--layout LAYOUT] [--min-art-res MIN_ART_RES]
-               [--min-bitrate MIN_BITRATE] [--target-lufs TARGET_LUFS] [--tolerance TOLERANCE]
-               [--workers WORKERS] [--prefer {flac,ffmpeg}] [--quiet] [--genres] [--paths] [--dry-run] [--apply]
-               [--normalize-names] [--normalize-filenames] [--normalize-tags] [--all] [--keep-metadata]
-               [--repair-malformed] [--resume] [--only-errors | --no-only-errors] [--ffmpeg FFMPEG] [--verbose]
+               --auditArtMismatch | --duplicates | --auditAudioDupes | --auditTags | --auditJunkFrames |
+               --auditAlbums | --auditBitrate | --auditReplayGain | --verifyReplayGain | --auditStrays |
+               --healthScore | --playlist | --checkPlaylists | --stats | --snapshot | --diff SNAPSHOT | --clean |
+               --apestrip] [--root DIR] [--output OUTPUT] [--rule RULE] [--layout LAYOUT]
+               [--min-art-res MIN_ART_RES] [--min-bitrate MIN_BITRATE] [--target-lufs TARGET_LUFS]
+               [--tolerance TOLERANCE] [--workers WORKERS] [--prefer {flac,ffmpeg}] [--quiet] [--genres]
+               [--paths] [--dry-run] [--apply] [--normalize-names] [--normalize-filenames] [--normalize-tags]
+               [--all] [--keep-metadata] [--repair-malformed] [--resume] [--only-errors | --no-only-errors]
+               [--ffmpeg FFMPEG] [--verbose]
                [pos_root]
 
 Filesystem-first music library toolkit: trees, integrity, audits, content-hash duplicate detection, health score,
@@ -365,6 +370,8 @@ options:
   --auditAudioDupes     Content-hash duplicate detection: exact sha256, audio-stream, and head/tail sampled
                         matches (catches retagged or renamed dupes)
   --auditTags           Report files with incomplete tags
+  --auditJunkFrames     Audit MP3 ID3v2 tags for junk frames: obsolete v2.3 leftovers, empty text frames,
+                        duplicate unique frames, and nonstandard iTunes-era frames
   --auditAlbums         Per-album consistency audit: mixed codecs, track-number gaps and duplicates, and missing
                         or divergent year tags
   --auditBitrate        Report files below a certain bitrate floor

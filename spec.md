@@ -116,6 +116,7 @@ supplies default roots; the first-run prompt persists only the single
 | Content-hash duplicate audit | `--auditAudioDupes` | Byte-level duplicate detection, tags never read: exact-file sha256, audio-stream sha256 (container tag regions parsed out: ID3v2/ID3v1/APEv2 on MP3, FLAC metadata blocks, MP4 mdat boxes), and raw first/last 64KB sampled matches for the remaining formats |
 | Library health score | `--healthScore` | Per-album score out of 100 aggregating tag completeness, ReplayGain coverage, art presence/resolution, and the bitrate floor, with per-bucket deductions; read-only, no decode scans |
 | Tag audit | `--auditTags` | Report files missing title, artist, track number, or genre |
+| Junk frame audit | `--auditJunkFrames` | Audit MP3 ID3v2 tags read-only for obsolete frames (v2.3 leftovers and v2.2 three-letter names, loaded raw so mutagen's upgrade cannot hide them), empty text frames, and nonstandard iTunes-era frames (reported so keeping them is a choice) |
 | Album consistency audit | `--auditAlbums` | Per-album consistency: mixed codecs in one folder, track-number gaps and duplicates over 1..max, and missing, partial, or divergent year tags (the year read is part of `TagBundle`) |
 | Bitrate audit | `--auditBitrate` | Report files below a configurable bitrate floor |
 | ReplayGain audit | `--auditReplayGain` | Report per-album ReplayGain coverage (missing / partial / no album gain / OK); Opus R128 gain counts as tagged |

@@ -13,6 +13,7 @@ from lattice import cli, tui
 from lattice.modes import audit as audit_module
 from lattice.modes.audit import (
     _album_health,
+    audit_id3_junk,
     _audio_regions,
     _cluster_by_duration,
     _DirInfo,
@@ -27,6 +28,7 @@ from lattice.modes.audit import (
     _trailing_tags_len,
     classify_stray,
     run_album_consistency,
+    run_junk_frame_audit,
     run_audio_dupes,
     run_health_score,
     run_stray_audit,
@@ -871,6 +873,83 @@ class AlbumConsistencyTests(unittest.TestCase):
             _rc, report = self._run(td, mixed, clean, verbose=True)
             self.assertIn("CLEAN (1)", report)
             self.assertIn("Album B", report)
+
+
+class AuditId3JunkTests(unittest.TestCase):
+    MP3_SRC = (
+        Path(__file__).parent
+        / "fixtures"
+        / "library"
+        / "Cursive"
+        / "Domestica"
+        / "01 - The Casualty.mp3"
+    )
+
+    def _mp3(self, td, frames=()):
+        from mutagen.id3 import ID3
+
+        p = Path(td) / "t.mp3"
+        shutil.copy(self.MP3_SRC, p)
+        id3 = ID3(str(p))
+        for frame in frames:
+            id3.add(frame)
+        id3.save(str(p), v2_version=3)
+        return p
+
+    def test_obsolete_frame_is_flagged(self):
+        from mutagen.id3 import TYER
+
+        with tempfile.TemporaryDirectory() as td:
+            p = self._mp3(td, [TYER(encoding=3, text="2003")])
+            findings = audit_id3_junk(str(p))
+            self.assertIn("TYER", findings["obsolete"])
+
+    def test_empty_text_frame_is_flagged(self):
+        from mutagen.id3 import ID3, TIT2
+
+        with tempfile.TemporaryDirectory() as td:
+            p = self._mp3(td, [])
+            # Overwrite the title with whitespace-only text.
+            id3 = ID3(str(p))
+            id3.add(TIT2(encoding=3, text=["  "]))
+            id3.save(str(p), v2_version=3)
+            findings = audit_id3_junk(str(p))
+            self.assertTrue(any("TIT2" in k for k in findings["garbage"]))
+
+    def test_nonstandard_frame_is_reported_not_judged(self):
+        from mutagen.id3 import TCMP
+
+        with tempfile.TemporaryDirectory() as td:
+            p = self._mp3(td, [TCMP(encoding=3, text="1")])
+            findings = audit_id3_junk(str(p))
+            self.assertIn("TCMP", findings["nonstandard"])
+
+    def test_clean_fixture_has_no_findings(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = self._mp3(td, [])
+            self.assertIsNone(audit_id3_junk(str(p)))
+
+
+class RunJunkFrameAuditTests(unittest.TestCase):
+    def test_end_to_end_report(self):
+        from mutagen.id3 import ID3, TYER
+
+        mp3_src = AuditId3JunkTests.MP3_SRC
+        with tempfile.TemporaryDirectory() as td:
+            album = Path(td) / "Album"
+            album.mkdir()
+            track = album / "01.mp3"
+            shutil.copy(mp3_src, track)
+            id3 = ID3(str(track))
+            id3.add(TYER(encoding=3, text="2003"))
+            id3.save(str(track), v2_version=3)
+            out = Path(td) / "junk.txt"
+            rc = run_junk_frame_audit([td], str(out), quiet=True)
+            self.assertEqual(rc, 0)
+            report = out.read_text(encoding="utf-8")
+            self.assertIn("JUNK ID3 FRAME AUDIT", report)
+            self.assertIn("OBSOLETE FRAMES (ID3v2.3 leftovers) (1)", report)
+            self.assertIn("TYER", report)
 
 
 if __name__ == "__main__":

@@ -32,6 +32,7 @@ from lattice.modes.artwork import (
 )
 from lattice.modes.audit import (
     run_album_consistency,
+    run_junk_frame_audit,
     run_audio_dupes,
     run_bitrate_audit,
     run_duplicates,
@@ -77,6 +78,7 @@ DEFAULT_DUPLICATES_OUTPUT = "lattice_duplicates.txt"
 DEFAULT_AUDIO_DUPES_OUTPUT = "lattice_audio_dupes.txt"
 DEFAULT_HEALTH_SCORE_OUTPUT = "lattice_health_score.txt"
 DEFAULT_TAG_AUDIT_OUTPUT = "lattice_tag_audit.txt"
+DEFAULT_JUNK_FRAME_OUTPUT = "lattice_junk_frames.txt"
 DEFAULT_BITRATE_AUDIT_OUTPUT = "lattice_bitrate_audit.txt"
 DEFAULT_REPLAYGAIN_AUDIT_OUTPUT = "lattice_replaygain_audit.txt"
 DEFAULT_REPLAYGAIN_VERIFY_OUTPUT = "lattice_replaygain_verify.txt"
@@ -120,6 +122,7 @@ _MAIN_SECTIONS = [
             "Find duplicate albums",
             "Find duplicate audio (content hash)",
             "Audit tags",
+            "Audit junk frames (MP3)",
             "Audit bitrates",
             "Audit ReplayGain",
             "Verify ReplayGain (rsgain)",
@@ -190,17 +193,18 @@ _MAIN_ALIASES: dict[str, tuple | None] = {
     "audiodupes": (3, 1),
     "tags": (3, 2),
     "audit": (3, 2),
-    "bitrate": (3, 3),
-    "rg": (3, 4),
-    "replaygain": (3, 4),
-    "verify": (3, 5),
-    "rgverify": (3, 5),
-    "playlists": (3, 6),
-    "pl": (3, 6),
-    "consistency": (3, 7),
-    "albums": (3, 7),
-    "strays": (3, 8),
-    "health": (3, 9),
+    "junk": (3, 3),
+    "bitrate": (3, 4),
+    "rg": (3, 5),
+    "replaygain": (3, 5),
+    "verify": (3, 6),
+    "rgverify": (3, 6),
+    "playlists": (3, 7),
+    "pl": (3, 7),
+    "consistency": (3, 8),
+    "albums": (3, 8),
+    "strays": (3, 9),
+    "health": (3, 10),
     "clean": (4, 0),
     "apestrip": (4, 1),
     "ape": (4, 1),
@@ -613,6 +617,19 @@ def _menu_session() -> int:
                 )
 
             elif result == (3, 3):
+                output = prompt_out("Output file", DEFAULT_JUNK_FRAME_OUTPUT)
+                include_ok = ask_yn("List MP3s with no findings? (y/N)")
+                run_with_capture(
+                    "Audit junk frames (MP3)",
+                    run_junk_frame_audit,
+                    roots,
+                    output,
+                    verbose=include_ok,
+                    quiet=False,
+                    footer=out_note(output),
+                )
+
+            elif result == (3, 4):
                 output = prompt_out("Output file", DEFAULT_BITRATE_AUDIT_OUTPUT)
                 min_kbps = prompt_int("Minimum bitrate floor (kbps)", 192)
                 run_with_capture(
@@ -625,7 +642,7 @@ def _menu_session() -> int:
                     footer=out_note(output),
                 )
 
-            elif result == (3, 4):
+            elif result == (3, 5):
                 output = prompt_out("Output file", DEFAULT_REPLAYGAIN_AUDIT_OUTPUT)
                 include_ok = ask_yn("List fully-tagged albums? (y/N)")
                 run_with_capture(
@@ -638,7 +655,7 @@ def _menu_session() -> int:
                     footer=out_note(output),
                 )
 
-            elif result == (3, 5):
+            elif result == (3, 6):
                 output = prompt_out("Output file", DEFAULT_REPLAYGAIN_VERIFY_OUTPUT)
                 target_lufs = prompt_int("Target loudness (LUFS)", -18)
                 tol_raw = ask("Tolerance in dB", "0.5").strip()
@@ -659,7 +676,7 @@ def _menu_session() -> int:
                     footer=out_note(output),
                 )
 
-            elif result == (3, 6):
+            elif result == (3, 7):
                 output = prompt_out("Output file", DEFAULT_PLAYLIST_CHECK_OUTPUT)
                 include_ok = ask_yn("List playlists with no problems? (y/N)")
                 run_with_capture(
@@ -672,7 +689,7 @@ def _menu_session() -> int:
                     footer=out_note(output),
                 )
 
-            elif result == (3, 7):
+            elif result == (3, 8):
                 output = prompt_out("Output file", DEFAULT_ALBUM_CONSISTENCY_OUTPUT)
                 include_ok = ask_yn("List albums with no findings? (y/N)")
                 run_with_capture(
@@ -685,7 +702,7 @@ def _menu_session() -> int:
                     footer=out_note(output),
                 )
 
-            elif result == (3, 8):
+            elif result == (3, 9):
                 output = prompt_out("Output file", DEFAULT_STRAY_AUDIT_OUTPUT)
                 layout = ask("Path layout", get_layout())
                 run_with_capture(
@@ -698,7 +715,7 @@ def _menu_session() -> int:
                     footer=out_note(output),
                 )
 
-            elif result == (3, 9):
+            elif result == (3, 10):
                 output = prompt_out("Output file", DEFAULT_HEALTH_SCORE_OUTPUT)
                 min_kbps = prompt_int("Minimum bitrate floor (kbps)", 192)
                 min_res = prompt_int("Minimum cover resolution (px)", 500)

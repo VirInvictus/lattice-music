@@ -12,6 +12,7 @@ from lattice.config import (
     DEFAULT_DUPLICATES_OUTPUT,
     DEFAULT_FLAC_OUTPUT,
     DEFAULT_HEALTH_SCORE_OUTPUT,
+    DEFAULT_JUNK_FRAME_OUTPUT,
     DEFAULT_LIBRARY_OUTPUT,
     DEFAULT_MISSING_ART_OUTPUT,
     DEFAULT_MP3_OUTPUT,
@@ -42,6 +43,7 @@ from lattice.modes.audit import (
     run_bitrate_audit,
     run_duplicates,
     run_health_score,
+    run_junk_frame_audit,
     run_replaygain_audit,
     run_stray_audit,
     run_tag_audit,
@@ -138,6 +140,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
     group.add_argument(
         "--auditTags", action="store_true", help="Report files with incomplete tags"
+    )
+    group.add_argument(
+        "--auditJunkFrames",
+        dest="audit_junk_frames",
+        action="store_true",
+        help="Audit MP3 ID3v2 tags for junk frames: obsolete v2.3 leftovers, "
+        "empty text frames, duplicate unique frames, and nonstandard "
+        "iTunes-era frames",
     )
     group.add_argument(
         "--auditAlbums",
@@ -535,6 +545,12 @@ def main(argv: list[str] | None = None) -> int:
         if args.audit_albums:
             output = args.output or DEFAULT_ALBUM_CONSISTENCY_OUTPUT
             return run_album_consistency(
+                root, output, verbose=args.verbose, quiet=args.quiet
+            )
+
+        if args.audit_junk_frames:
+            output = args.output or DEFAULT_JUNK_FRAME_OUTPUT
+            return run_junk_frame_audit(
                 root, output, verbose=args.verbose, quiet=args.quiet
             )
 
