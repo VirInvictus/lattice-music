@@ -16,6 +16,7 @@ from lattice.config import (
     DEFAULT_OPUS_OUTPUT,
     DEFAULT_PLAYLIST_OUTPUT,
     DEFAULT_REPLAYGAIN_AUDIT_OUTPUT,
+    DEFAULT_REPLAYGAIN_VERIFY_OUTPUT,
     DEFAULT_STRAY_AUDIT_OUTPUT,
     DEFAULT_TAG_AUDIT_OUTPUT,
     DEFAULT_WAV_OUTPUT,
@@ -37,6 +38,7 @@ from lattice.modes.audit import (
     run_replaygain_audit,
     run_stray_audit,
     run_tag_audit,
+    run_verify_replaygain,
 )
 from lattice.modes.clean import run_clean
 from lattice.modes.integrity import (
@@ -132,6 +134,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Report per-album ReplayGain coverage (missing, partial, no album gain)",
     )
     group.add_argument(
+        "--verifyReplayGain",
+        dest="verify_replaygain",
+        action="store_true",
+        help="Verify stored ReplayGain values against a fresh read-only rsgain "
+        "measurement (requires rsgain; nothing is written)",
+    )
+    group.add_argument(
         "--auditStrays",
         dest="audit_strays",
         action="store_true",
@@ -201,6 +210,21 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=192,
         help="Minimum bitrate in kbps for --auditBitrate (default: 192)",
+    )
+    p.add_argument(
+        "--target-lufs",
+        dest="target_lufs",
+        type=float,
+        default=-18.0,
+        help="Assumed ReplayGain write target in LUFS for --verifyReplayGain "
+        "(default: -18, the ReplayGain 2.0 reference; verify a -14-targeted "
+        "library at -14)",
+    )
+    p.add_argument(
+        "--tolerance",
+        type=float,
+        default=0.5,
+        help="Allowed |stored - expected| in dB for --verifyReplayGain (default: 0.5)",
     )
     p.add_argument(
         "--workers", type=int, default=4, help="Parallel workers (integrity modes)"
@@ -467,6 +491,17 @@ def main(argv: list[str] | None = None) -> int:
             output = args.output or DEFAULT_REPLAYGAIN_AUDIT_OUTPUT
             return run_replaygain_audit(
                 root, output, verbose=args.verbose, quiet=args.quiet
+            )
+
+        if args.verify_replaygain:
+            output = args.output or DEFAULT_REPLAYGAIN_VERIFY_OUTPUT
+            return run_verify_replaygain(
+                root,
+                output,
+                target_lufs=args.target_lufs,
+                tolerance=args.tolerance,
+                verbose=args.verbose,
+                quiet=args.quiet,
             )
 
         if args.audit_strays:

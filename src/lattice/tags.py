@@ -121,6 +121,59 @@ def read_replaygain(file_path: str) -> ReplayGainStatus:
         return ReplayGainStatus()
 
 
+def read_replaygain_values(file_path: str) -> tuple[float | None, float | None]:
+    """(track_gain_db, album_gain_db), the value reader behind
+    --verifyReplayGain. Key-aware about the two write conventions: standard
+    replaygain_* keys parse as float dB, while Opus R128 keys are Q7.8
+    integers (/256, bounded by ~0.004 dB of quantization). Unreadable or
+    untagged files report (None, None), which the verifier buckets as
+    ungauged."""
+    if not HAVE_MUTAGEN_BASE:
+        return (None, None)
+    try:
+        audio = MutagenFile(file_path)
+    except Exception:
+        return (None, None)
+    tags = getattr(audio, "tags", None) if audio is not None else None
+    if not tags:
+        return (None, None)
+    try:
+        items = list(tags.items())
+    except Exception:
+        return (None, None)
+
+    def gain_of(key: str, val) -> float | None:
+        if key.endswith("r128_track_gain") or key.endswith("r128_album_gain"):
+            s = _unwrap(val)
+            s = getattr(s, "text", s)
+            s = _unwrap(s)
+            if isinstance(s, bytes):
+                s = s.decode("utf-8", "replace")
+            try:
+                return int(str(s).strip()) / 256.0
+            except ValueError:
+                return None
+        s = _unwrap(val)
+        text = getattr(s, "text", s)
+        text = _unwrap(text)
+        if isinstance(text, bytes):
+            text = text.decode("utf-8", "replace")
+        raw = str(text).strip().removesuffix("dB").strip()
+        try:
+            return float(raw)
+        except ValueError:
+            return None
+
+    track = album = None
+    for k, v in items:
+        kl = str(k).lower()
+        if kl.endswith("replaygain_track_gain") or kl.endswith("r128_track_gain"):
+            track = gain_of(kl, v)
+        elif kl.endswith("replaygain_album_gain") or kl.endswith("r128_album_gain"):
+            album = gain_of(kl, v)
+    return (track, album)
+
+
 # --- Mutagen imports ---
 # This module centralizes mutagen imports for the package; `Picture` and
 # `MUTAGEN_MP3` are unused here but re-exported for modes/artwork.py,

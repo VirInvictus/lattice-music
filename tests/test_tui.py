@@ -13,7 +13,12 @@ from pathlib import Path
 from unittest import mock
 
 from lattice import cli, tui, utils
-from lattice.modes.audit import run_health_score, run_replaygain_audit, run_stray_audit
+from lattice.modes.audit import (
+    run_health_score,
+    run_replaygain_audit,
+    run_stray_audit,
+    run_verify_replaygain,
+)
 from lattice.modes.integrity import run_flac_mode
 from lattice.modes.library import (
     write_ai_library,
@@ -341,6 +346,32 @@ class CliTuiKwargsParityTests(unittest.TestCase):
             main_menu=True,
         )
 
+    def test_verify_replaygain(self):
+        self._parity(
+            mode="run_verify_replaygain",
+            real=run_verify_replaygain,
+            cli_argv=[
+                "--verifyReplayGain",
+                "--root",
+                self.ROOTS[0],
+                "--output",
+                self.OUT,
+                "--target-lufs",
+                "-14",
+                "--tolerance",
+                "0.3",
+                "--verbose",
+            ],
+            selections=[(3, 5), tui._SEL_QUIT],
+            answers={
+                "Output file": self.OUT,
+                "Target loudness": -14,
+                "Tolerance": "0.3",
+                "fully-correct": True,
+            },
+            main_menu=True,
+        )
+
     def test_stray_audit(self):
         self._parity(
             mode="run_stray_audit",
@@ -354,7 +385,7 @@ class CliTuiKwargsParityTests(unittest.TestCase):
                 "--layout",
                 self.LAYOUT,
             ],
-            selections=[(3, 5), tui._SEL_QUIT],
+            selections=[(3, 6), tui._SEL_QUIT],
             answers={"Output file": self.OUT, "layout": self.LAYOUT},
             main_menu=True,
         )
@@ -371,7 +402,7 @@ class CliTuiKwargsParityTests(unittest.TestCase):
                 self.OUT,
                 "--verbose",
             ],
-            selections=[(3, 6), tui._SEL_QUIT],
+            selections=[(3, 7), tui._SEL_QUIT],
             answers={
                 "Output file": self.OUT,
                 "bitrate floor": 192,

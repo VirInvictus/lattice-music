@@ -48,8 +48,6 @@ import subprocess
 import sys
 from datetime import datetime
 
-from mutagen import File as MutagenFile
-
 __version__ = "1.2.2"
 
 RSGAIN = "rsgain"
@@ -165,37 +163,19 @@ def album_coverage(
 
 
 def read_gain_strings(path: str) -> tuple[str | None, str | None]:
-    """Best-effort (track_gain, album_gain) as written, for logging/verification.
-    Tolerant across containers: MP3 stores the value in a TXXX frame's .text,
-    Vorbis/Opus in a plain list. R128 gains read back as their integer form."""
-    try:
-        audio = MutagenFile(path)
-    except Exception:
-        return (None, None)
-    tags = getattr(audio, "tags", None)
-    if not tags:
-        return (None, None)
-    try:
-        items = list(tags.items())
-    except Exception:
-        return (None, None)
+    """Best-effort (track_gain, album_gain) for the post-write read-back log,
+    as strings. The tag walk lives in lattice.tags.read_replaygain_values
+    (the value reader --verifyReplayGain uses, key-aware about the standard
+    and R128 conventions); this formats its floats for the log, so the two
+    cannot drift. Real runs have already imported lattice through
+    _import_lattice by the time this is called."""
+    from lattice.tags import read_replaygain_values
 
-    track = album = None
-    for k, v in items:
-        kl = str(k).lower()
-        val = v[0] if isinstance(v, list) and v else v
-        if hasattr(val, "text"):  # ID3 frame
-            t = val.text
-            val = t[0] if isinstance(t, list) and t else t
-        if isinstance(val, bytes):  # MP4FreeForm is a bytes subclass
-            s = val.decode("utf-8", "replace")
-        else:
-            s = str(val)
-        if kl.endswith(("replaygain_track_gain", "r128_track_gain")):
-            track = s
-        elif kl.endswith(("replaygain_album_gain", "r128_album_gain")):
-            album = s
-    return (track, album)
+    def fmt(db):
+        return None if db is None else f"{db:.2f} dB"
+
+    track_db, album_db = read_replaygain_values(path)
+    return (fmt(track_db), fmt(album_db))
 
 
 def scan_album(

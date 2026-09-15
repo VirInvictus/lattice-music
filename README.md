@@ -58,6 +58,7 @@ Modern music players often hide your library behind proprietary databases. latti
 | **Tag audit** | `--auditTags` | Reports files missing title, artist, track number, or genre to text |
 | **Bitrate audit** | `--auditBitrate` | Reports files falling below a minimum bitrate floor |
 | **ReplayGain audit** | `--auditReplayGain` | Reports per-album ReplayGain coverage (missing, partial, no album gain, OK); Opus R128 gain counts as tagged |
+| **ReplayGain verification** | `--verifyReplayGain` | Re-measures every album read-only with `rsgain` and reports stored gains that disagree with the fresh measurement (with a per-row clip-protection exemption) |
 | **Stray-file audit** | `--auditStrays` | Reports audio outside the layout's album depth, loose tracks, hidden-dir audio the scanners prune silently, and unrecognized non-audio files in album folders |
 | **Library health score** | `--healthScore` | Per-album score out of 100 aggregating tag completeness, ReplayGain coverage, art, and the bitrate floor, with point-by-point deductions |
 | **Clean (write)** | `--clean` | Consolidates fragmented album folders; opt-in `--normalize-names`/`--normalize-filenames`/`--normalize-tags` passes. Dry-run by default, `--apply` to write |
@@ -103,6 +104,7 @@ Runtime dependencies are `mutagen`, `tqdm`, and `vir-tui` (installed automatical
 
 - [`flac`](https://xiph.org/flac/): used by `--testFLAC` (preferred)
 - [`ffmpeg`](https://ffmpeg.org/): used by `--testMP3`, `--testOpus`, `--testWAV`, `--testWMA`, and as a fallback for `--testFLAC`
+- [`rsgain`](https://github.com/complexlogic/rsgain): used by `--verifyReplayGain` (scan-only; also used by the [`replaygain.py`](#replaygainpy) companion to write tags)
 
 ```bash
 # Fedora/RHEL
@@ -176,6 +178,10 @@ lattice --auditTags --output tag_audit.txt
 
 # Audit ReplayGain coverage per album (add --verbose to also list fully-tagged albums)
 lattice --auditReplayGain --output replaygain_audit.txt
+
+# Verify the stored gains themselves: re-measure read-only with rsgain
+# (verify a -14-targeted library with --target-lufs -14)
+lattice --verifyReplayGain --output replaygain_verify.txt
 
 # Audit files that don't fit the layout: strays, loose tracks, hidden-dir
 # audio, and non-audio junk in album folders
@@ -303,12 +309,12 @@ The filesystem is the source of truth: lattice-music walks the tree on every inv
 usage: lattice [-h] [--version] [--library | --ai-library | --all-wings | --ai-wings | --testFLAC | --testMP3 |
                --testOpus | --testWAV | --testWMA | --extractArt | --missingArt | --auditArtQuality |
                --duplicates | --auditAudioDupes | --auditTags | --auditBitrate | --auditReplayGain |
-               --auditStrays | --healthScore | --playlist | --stats | --clean | --apestrip] [--root DIR]
-               [--output OUTPUT] [--rule RULE] [--layout LAYOUT] [--min-art-res MIN_ART_RES]
-               [--min-bitrate MIN_BITRATE] [--workers WORKERS] [--prefer {flac,ffmpeg}] [--quiet] [--genres]
-               [--paths] [--dry-run] [--apply] [--normalize-names] [--normalize-filenames] [--normalize-tags]
-               [--all] [--keep-metadata] [--repair-malformed] [--resume] [--only-errors | --no-only-errors]
-               [--ffmpeg FFMPEG] [--verbose]
+               --verifyReplayGain | --auditStrays | --healthScore | --playlist | --stats | --clean | --apestrip]
+               [--root DIR] [--output OUTPUT] [--rule RULE] [--layout LAYOUT] [--min-art-res MIN_ART_RES]
+               [--min-bitrate MIN_BITRATE] [--target-lufs TARGET_LUFS] [--tolerance TOLERANCE]
+               [--workers WORKERS] [--prefer {flac,ffmpeg}] [--quiet] [--genres] [--paths] [--dry-run] [--apply]
+               [--normalize-names] [--normalize-filenames] [--normalize-tags] [--all] [--keep-metadata]
+               [--repair-malformed] [--resume] [--only-errors | --no-only-errors] [--ffmpeg FFMPEG] [--verbose]
                [pos_root]
 
 Filesystem-first music library toolkit: trees, integrity, audits, content-hash duplicate detection, health score,
@@ -339,6 +345,8 @@ options:
   --auditTags           Report files with incomplete tags
   --auditBitrate        Report files below a certain bitrate floor
   --auditReplayGain     Report per-album ReplayGain coverage (missing, partial, no album gain)
+  --verifyReplayGain    Verify stored ReplayGain values against a fresh read-only rsgain measurement (requires
+                        rsgain; nothing is written)
   --auditStrays         Report audio outside the layout's album depth, loose tracks, hidden-dir audio, and
                         unrecognized non-audio files in album folders
   --healthScore         Per-album health score aggregating tag completeness, ReplayGain coverage, art, and the
@@ -358,6 +366,11 @@ options:
                         Minimum resolution in pixels for --auditArtQuality (default: 500)
   --min-bitrate MIN_BITRATE
                         Minimum bitrate in kbps for --auditBitrate (default: 192)
+  --target-lufs TARGET_LUFS
+                        Assumed ReplayGain write target in LUFS for --verifyReplayGain (default: -18, the
+                        ReplayGain 2.0 reference; verify a -14-targeted library at -14)
+  --tolerance TOLERANCE
+                        Allowed |stored - expected| in dB for --verifyReplayGain (default: 0.5)
   --workers WORKERS     Parallel workers (integrity modes)
   --prefer {flac,ffmpeg}
                         Preferred tool (FLAC mode)

@@ -1,7 +1,9 @@
 import hashlib
 import os
 import re
+import shutil
 import struct
+import subprocess
 import sys
 import unicodedata
 from collections import Counter, defaultdict
@@ -16,13 +18,20 @@ from lattice.config import (
     DEFAULT_DUPLICATES_OUTPUT,
     DEFAULT_HEALTH_SCORE_OUTPUT,
     DEFAULT_REPLAYGAIN_AUDIT_OUTPUT,
+    DEFAULT_REPLAYGAIN_VERIFY_OUTPUT,
     DEFAULT_STRAY_AUDIT_OUTPUT,
     DEFAULT_TAG_AUDIT_OUTPUT,
     get_layout,
 )
 from lattice.modes.artwork import _get_image_size, _has_embedded_art
 from lattice.norm import QUOTE_DASH_FOLD as _NORM_QUOTE_DASH_FOLD
-from lattice.tags import HAVE_MUTAGEN_BASE, ReplayGainStatus, TagBundle, read_replaygain
+from lattice.tags import (
+    HAVE_MUTAGEN_BASE,
+    ReplayGainStatus,
+    TagBundle,
+    read_replaygain,
+    read_replaygain_values,
+)
 from lattice.utils import (
     _find_cover_file,
     _make_pbar,
@@ -1225,6 +1234,293 @@ def run_replaygain_audit(
         print(f"Results written to: {out_path}")
 
     return 0
+
+
+# =====================================
+# Mode: ReplayGain verification
+# =====================================
+
+# The verification engine is rsgain itself, scan-only: `rsgain custom -l N
+# -a -O -q -s s` measures each file (and, with -a, the album aggregate) with
+# the same libebur128 that computed the stored tags, writes nothing (-s s),
+# and prints tab-delimited scan data (-O). Engine consistency is the whole
+# value of verification: expected stored gain == target - measured loudness
+# holds exactly, so a delta beyond tolerance means a wrong or mismatched
+# tag, not jitter (an engine-identical re-measure lands within ~0.01 dB;
+# the default 0.5 dB tolerance forgives cross-version libebur128 drift).
+RSGAIN = "rsgain"
+
+
+def rsgain_verify_command(files: list[str], target_lufs: float) -> list[str]:
+    """The read-only verification command for one album's files."""
+    return [
+        RSGAIN,
+        "custom",
+        "-l",
+        str(target_lufs),
+        "-a",
+        "-O",
+        "-q",
+        "-s",
+        "s",
+        *files,
+    ]
+
+
+def parse_rsgain_scan(text: str) -> tuple[dict[str, dict], dict | None]:
+    """Parse `-O` output: a header row naming the columns, one row per file,
+    and (with -a) a final aggregate row whose filename column is 'Album'.
+    Returns (rows keyed by filename, album row or None). The parser keys on
+    the header's column names (rsgain has changed its column set before) and
+    skips rows it cannot read rather than failing the audit."""
+    lines = [ln for ln in text.splitlines() if ln.strip()]
+    if len(lines) < 2:
+        return {}, None
+    header = lines[0].split("\t")
+    if len(header) < 2:  # not the -O table shape (a banner or error text)
+        return {}, None
+
+    def _slot(needle: str) -> int | None:
+        return next((i for i, h in enumerate(header) if needle in h.lower()), None)
+
+    name_i = _slot("filename")
+    loud_i = _slot("loudness")
+    clip_i = _slot("clipping")
+    if name_i is None or loud_i is None:
+        return {}, None
+
+    def _row(line: str) -> dict | None:
+        cells = line.split("\t")
+        if len(cells) == 1:
+            cells = line.split()
+        if len(cells) <= max(name_i, loud_i):
+            return None
+        try:
+            loudness = float(cells[loud_i])
+        except ValueError:
+            return None
+        return {
+            "filename": cells[name_i],
+            "loudness": loudness,
+            "clip": clip_i is not None
+            and len(cells) > clip_i
+            and cells[clip_i].strip().upper().startswith("Y"),
+        }
+
+    rows: dict[str, dict] = {}
+    album_row: dict | None = None
+    for line in lines[1:]:
+        row = _row(line)
+        if row is None:
+            continue
+        if row["filename"].strip().lower() == "album":
+            album_row = row
+        else:
+            rows[row["filename"]] = row
+    return rows, album_row
+
+
+def _verify_bucket(
+    stored: float | None, loudness: float, target: float, tol: float
+) -> str:
+    """OK / OFF / UNGAUGED for one gain value against the fresh measurement."""
+    if stored is None:
+        return "UNGAUGED"
+    if abs(stored - (target - loudness)) <= tol:
+        return "OK"
+    return "OFF"
+
+
+def run_verify_replaygain(
+    root: str | list[str],
+    output: str,
+    *,
+    target_lufs: float = -18.0,
+    tolerance: float = 0.5,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> int:
+    """Verify stored ReplayGain values against a fresh rsgain measurement,
+    read-only (scan-only tagmode). The one audit that checks correctness
+    rather than presence: the companion --auditReplayGain reports coverage,
+    this one reports whether the stored numbers are still right for the
+    assumed write target (gains written for a different --target-lufs
+    verify clean only when verified at that target). Requires rsgain on
+    PATH, like scripts/replaygain.py."""
+    if shutil.which(RSGAIN) is None:
+        print(
+            f"ERROR: {RSGAIN} not found on PATH. Required for ReplayGain "
+            f"verification (sudo dnf install rsgain on Fedora).",
+            file=sys.stderr,
+        )
+        return 2
+
+    roots = as_roots(root)
+    if not quiet:
+        print(f"Verifying ReplayGain under: {', '.join(roots)}")
+
+    total = count_audio_files(roots)
+    pbar = _make_pbar(total, "Verifying ReplayGain", quiet)
+
+    # One rsgain call per album folder, the writer's own unit of work.
+    off_rows: list[tuple[str, str]] = []  # (album, detail line)
+    ungauged_rows: list[tuple[str, str]] = []
+    clip_rows: list[tuple[str, str]] = []
+    ok_albums: list[str] = []
+    failed_albums: list[tuple[str, str]] = []
+    n_albums = 0
+
+    for _src_root, dirpath, _subdirs, files in iter_audio_dirs(roots):
+        audio_files = sorted(f for f in files if is_audio(f))
+        if not audio_files:
+            continue
+        n_albums += 1
+        paths = [os.path.join(dirpath, f) for f in audio_files]
+        stored = map_concurrent(read_replaygain_values, paths, pbar=None)
+
+        proc = subprocess.run(
+            rsgain_verify_command(paths, target_lufs),
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            failed_albums.append(
+                (dirpath, (proc.stderr or proc.stdout or "rsgain failed").strip()[:200])
+            )
+            pbar.update(len(paths))
+            continue
+        rows, album_row = parse_rsgain_scan(proc.stdout)
+
+        # Album gain is one value per album; check it once against the
+        # album aggregate row, from the first file that carries it.
+        album_db = next((a for _t, a in stored.values() if a is not None), None)
+        album_tagged = any(a is not None for _t, a in stored.values())
+
+        album_off: list[str] = []
+        album_ungauged: list[str] = []
+        album_clip: list[str] = []
+        for path in paths:
+            row = rows.get(os.path.basename(path))
+            if row is None:
+                album_ungauged.append(f"{relpath_under(path, roots)} (not measured)")
+                continue
+            track_db, _album_db = stored.get(path, (None, None))
+            if row["clip"]:
+                album_clip.append(
+                    f"{relpath_under(path, roots)}: stored track gain "
+                    f"{_fmt_db(track_db)} (clip protection applied at write "
+                    "time; exempt from the target comparison)"
+                )
+                continue
+            if (
+                _verify_bucket(track_db, row["loudness"], target_lufs, tolerance)
+                == "OFF"
+            ):
+                album_off.append(
+                    _off_detail(
+                        relpath_under(path, roots),
+                        track_db,
+                        row["loudness"],
+                        target_lufs,
+                    )
+                )
+            elif track_db is None:
+                album_ungauged.append(
+                    f"{relpath_under(path, roots)} (no track gain tag)"
+                )
+
+        if album_row is not None:
+            verdict = _verify_bucket(
+                album_db, album_row["loudness"], target_lufs, tolerance
+            )
+            if verdict == "OFF":
+                album_off.append(
+                    _off_detail(
+                        "(album gain)", album_db, album_row["loudness"], target_lufs
+                    )
+                )
+            elif verdict == "UNGAUGED" and album_tagged is False:
+                album_ungauged.append("(no album gain tag)")
+
+        if album_off:
+            off_rows.extend((dirpath, d) for d in album_off)
+        if album_ungauged:
+            ungauged_rows.extend((dirpath, d) for d in album_ungauged)
+        if album_clip:
+            clip_rows.extend((dirpath, d) for d in album_clip)
+        if not (album_off or album_ungauged or album_clip):
+            ok_albums.append(dirpath)
+        pbar.update(len(paths))
+
+    pbar.close()
+
+    out_path = os.path.abspath(output or DEFAULT_REPLAYGAIN_VERIFY_OUTPUT)
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write("REPLAYGAIN VERIFICATION REPORT\n")
+        f.write(f"Root: {', '.join(roots)}\n")
+        f.write(
+            f"Target: {target_lufs} LUFS   Tolerance: {tolerance} dB   "
+            f"Engine: rsgain (scan-only, no tags written)\n"
+        )
+        f.write(
+            f"Albums: {n_albums}   OK: {len(ok_albums)}   Off: {len({a for a, _ in off_rows})}   "
+            f"Ungauged: {len({a for a, _ in ungauged_rows})}   "
+            f"Clip-adjusted: {len({a for a, _ in clip_rows})}   "
+            f"Scan failed: {len(failed_albums)}\n"
+        )
+        f.write("=" * 64 + "\n\n")
+
+        def section(title: str, pairs: list[tuple[str, str]]) -> None:
+            if not pairs:
+                return
+            f.write(f"{title} ({len(pairs)})\n")
+            f.write("-" * 40 + "\n")
+            for album, detail in pairs:
+                f.write(f"  {relpath_under(album, roots)}\n")
+                f.write(f"    {detail}\n")
+            f.write("\n")
+
+        section(f"GAIN OFF BY > {tolerance} dB", off_rows)
+        section("UNTAGGED / NOT MEASURED", ungauged_rows)
+        section("CLIP-ADJUSTED (reported, never OFF)", clip_rows)
+        for album, why in failed_albums:
+            f.write(f"SCAN FAILED: {relpath_under(album, roots)}\n    {why}\n")
+            f.write("\n")
+        if verbose:
+            f.write(f"OK ({len(ok_albums)})\n")
+            f.write("-" * 40 + "\n")
+            for album in ok_albums:
+                f.write(f"  {relpath_under(album, roots)}\n")
+            f.write("\n")
+
+    if not quiet:
+        print(f"\nVerified {n_albums} albums.")
+        print(f"  Correct:        {len(ok_albums)}")
+        print(f"  Gain off:       {len({a for a, _ in off_rows})}")
+        print(f"  Ungauged:       {len({a for a, _ in ungauged_rows})}")
+        print(f"  Clip-adjusted:  {len({a for a, _ in clip_rows})}")
+        if failed_albums:
+            print(f"  Scan failed:    {len(failed_albums)}")
+        print(f"Results written to: {out_path}")
+
+    return 0
+
+
+def _fmt_db(value: float | None) -> str:
+    return "none" if value is None else f"{value:+.2f} dB"
+
+
+def _off_detail(
+    label: str, stored: float | None, loudness: float, target: float
+) -> str:
+    expected = target - loudness
+    delta = 0.0 if stored is None else stored - expected
+    return (
+        f"{label}: stored {_fmt_db(stored)} vs expected {expected:+.2f} dB "
+        f"(measured {loudness:.2f} LUFS, off by {delta:+.2f} dB)"
+    )
 
 
 # =====================================

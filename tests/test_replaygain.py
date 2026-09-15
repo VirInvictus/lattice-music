@@ -14,6 +14,7 @@ from unittest import mock
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
 import replaygain
+import lattice.tags as tags_mod
 from mutagen.flac import FLAC
 from mutagen.id3 import ID3, TXXX
 
@@ -104,7 +105,8 @@ class ReadGainStringsTests(unittest.TestCase):
 
     def test_m4a_freeform_bytes_decode(self):
         # R3: MP4FreeForm is a bytes subclass; the read-back must decode it
-        # instead of logging repr(b'-6.66 dB').
+        # instead of logging repr(b'-6.66 dB'). The walk lives in
+        # lattice.tags.read_replaygain_values now, so that is what gets mocked.
         from mutagen.mp4 import MP4FreeForm
 
         fake = mock.Mock(
@@ -117,7 +119,7 @@ class ReadGainStringsTests(unittest.TestCase):
                 ],
             }
         )
-        with mock.patch.object(replaygain, "MutagenFile", return_value=fake):
+        with mock.patch.object(tags_mod, "MutagenFile", return_value=fake):
             self.assertEqual(
                 replaygain.read_gain_strings("/x.m4a"), ("-6.66 dB", "-7.00 dB")
             )

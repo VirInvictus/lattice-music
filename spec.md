@@ -117,6 +117,7 @@ supplies default roots; the first-run prompt persists only the single
 | Tag audit | `--auditTags` | Report files missing title, artist, track number, or genre |
 | Bitrate audit | `--auditBitrate` | Report files below a configurable bitrate floor |
 | ReplayGain audit | `--auditReplayGain` | Report per-album ReplayGain coverage (missing / partial / no album gain / OK); Opus R128 gain counts as tagged |
+| ReplayGain verification | `--verifyReplayGain` | Re-measure each album read-only via `rsgain custom -O -s s` (the writer's own engine) and report stored gains disagreeing with the fresh measurement by more than `--tolerance` at the assumed `--target-lufs`; clip-adjusted rows are reported, never flagged OFF; requires `rsgain` |
 | Stray-file audit | `--auditStrays` | Report audio at the wrong depth for the configured layout, loose tracks beside album folders, hidden-dir audio, and unrecognized non-audio files in album folders |
 | Smart playlist | `--playlist` | Generate an `.m3u` from a dynamic rule (e.g. `rating >= 4 and genre == 'Jazz'`) |
 | Clean | `--clean` | Consolidate fragmented album folders (quote/dash/case variants) with opt-in name (`--normalize-names`, `--normalize-filenames`) and tag (`--normalize-tags`) normalization passes; write mode, dry-run by default |
