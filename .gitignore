@@ -6,7 +6,14 @@ __pycache__/
 dist/
 build/
 .venv/
+.venv_ci/
 /lattice
+
+# Tool caches (self-masked today; belt-and-braces for fresh clones)
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.claude/
 
 # Editor files
 *.swp
@@ -25,6 +32,9 @@ pick-it-up.md
 # Local test album copies for the replaygain.py companion (real audio, never committed)
 .testing/
 
+# Transient resume state for --testFLAC / --testMP3 (deleted when a scan completes)
+*.progress.json
+
 # Default report outputs (modes write to the cwd; keep runs out of git)
 music_library.txt
 library_ai.txt
@@ -36,9 +46,12 @@ wma_scan_results.txt
 missing_art.txt
 art_quality_audit.txt
 duplicates.txt
+audio_dupes.txt
+health_score.txt
 tag_audit.txt
 bitrate_audit.txt
 replaygain_audit.txt
+stray_audit.txt
 library_stats.txt
 smart_playlist.m3u
 wings/
