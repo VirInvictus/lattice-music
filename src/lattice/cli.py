@@ -380,6 +380,7 @@ def main(argv: list[str] | None = None) -> int:
                 output,
                 args.workers,
                 args.prefer,
+                ffmpeg=args.ffmpeg,
                 resume=args.resume,
                 quiet=args.quiet,
             )

@@ -1,3 +1,5 @@
+import contextlib
+import io
 import json
 import os
 import tempfile
@@ -185,7 +187,10 @@ class DecodeReportOrderTests(unittest.TestCase):
 
         def slow(path, ffmpeg_path, *, enrich=False):
             time.sleep(delay.get(Path(path).parent.name, 0.0))
-            return real(path, ffmpeg_path, enrich=enrich)
+            row = real(path, ffmpeg_path, enrich=enrich)
+            row["tier"] = TIER_OK
+            row["reason"] = "decode check skipped (test forces OK)"
+            return row
 
         with tempfile.TemporaryDirectory() as td:
             for name in names:
@@ -193,14 +198,20 @@ class DecodeReportOrderTests(unittest.TestCase):
                 p.parent.mkdir(parents=True)
                 p.write_bytes(b"")
             out = Path(td) / "report.txt"
-            # A nonexistent --ffmpeg makes every file skip its decode and land
-            # in OK, which --no-only-errors then lists; no decoder needed.
-            with mock.patch.object(integrity_mod, "_scan_one_file", slow):
+            # A decoder is never invoked: _find_ffmpeg fakes one (the scan
+            # refuses without it) and the wrapped _scan_one_file returns OK
+            # rows directly, which --no-only-errors then lists.
+            with (
+                mock.patch.object(
+                    integrity_mod, "_find_ffmpeg", return_value="/fake/ffmpeg"
+                ),
+                mock.patch.object(integrity_mod, "_scan_one_file", slow),
+            ):
                 rc = run_mp3_mode(
                     [td],
                     str(out),
                     len(names),
-                    os.path.join(td, "no-such-ffmpeg"),
+                    None,
                     only_errors=False,
                     verbose=False,
                     quiet=True,
@@ -366,6 +377,147 @@ class ProgressPersistenceTests(unittest.TestCase):
             self.assertIsNone(
                 integrity_mod._load_progress(pfile, {"kind": "flac", "use_flac": False})
             )
+
+
+class FlacToolHonestyTests(unittest.TestCase):
+    """--prefer ffmpeg that cannot be honored warns instead of silently
+    switching decoders, and an explicit --ffmpeg path is actually used (it
+    never reached the FLAC mode before)."""
+
+    def _tree(self, td: str, names=("A", "B")) -> list[Path]:
+        files = []
+        for name in names:
+            p = Path(td) / name / "01.flac"
+            p.parent.mkdir(parents=True)
+            p.write_bytes(b"")
+            files.append(p)
+        return files
+
+    def test_unhonorable_prefer_ffmpeg_warns_and_falls_back(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._tree(td)
+            out = Path(td) / "flac_errors.txt"
+            calls: list[bool] = []
+
+            def verdict(path, *, use_flac, ffmpeg_path):
+                calls.append(use_flac)
+                return ("flac", TIER_OK, "clean")
+
+            err = io.StringIO()
+            with (
+                mock.patch.object(
+                    integrity_mod, "has_tool", side_effect=lambda t: t == "flac"
+                ),
+                mock.patch.object(integrity_mod, "_find_ffmpeg", return_value=None),
+                mock.patch.object(integrity_mod, "_flac_verdict", verdict),
+                contextlib.redirect_stderr(err),
+            ):
+                rc = run_flac_mode([td], str(out), 1, "ffmpeg", quiet=False)
+            self.assertEqual(rc, 0)
+            # The scan ran on libFLAC, and the stderr page says so.
+            self.assertTrue(calls and all(calls))
+            self.assertIn("falling back to flac", err.getvalue())
+
+    def test_explicit_ffmpeg_path_is_honored(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._tree(td)
+            fake_ffmpeg = Path(td) / "bin" / "ffmpeg"
+            fake_ffmpeg.parent.mkdir()
+            fake_ffmpeg.write_bytes(b"")
+            out = Path(td) / "flac_errors.txt"
+            calls: list[tuple[bool, str]] = []
+
+            def verdict(path, *, use_flac, ffmpeg_path):
+                calls.append((use_flac, ffmpeg_path))
+                return ("ffmpeg", TIER_OK, "clean")
+
+            with (
+                mock.patch.object(integrity_mod, "has_tool", return_value=False),
+                mock.patch.object(integrity_mod, "_flac_verdict", verdict),
+            ):
+                rc = run_flac_mode(
+                    [td], str(out), 1, "ffmpeg", ffmpeg=str(fake_ffmpeg), quiet=True
+                )
+            self.assertEqual(rc, 0)
+            self.assertTrue(calls)
+            self.assertFalse(calls[0][0])  # ffmpeg, not flac
+            self.assertEqual(calls[0][1], str(fake_ffmpeg))
+
+    def test_resume_survives_a_damaged_cached_record(self):
+        # The state file is best-effort by contract: a record truncated by the
+        # interrupt (tier key gone) must degrade to OK, not KeyError the run.
+        with tempfile.TemporaryDirectory() as td:
+            files = self._tree(td, names=("A",))
+            out = Path(td) / "flac_errors.txt"
+            pfile = Path(str(out) + ".progress.json")
+            scan_id = {"kind": "flac", "use_flac": True}
+            pfile.parent.mkdir(parents=True, exist_ok=True)
+            integrity_mod._save_progress(
+                pfile, scan_id, {str(files[0]): {"tool": "flac"}}
+            )
+
+            def verdict(path, *, use_flac, ffmpeg_path):
+                raise AssertionError("the damaged record must not be rescanned")
+
+            with (
+                mock.patch.object(integrity_mod, "has_tool", return_value=True),
+                mock.patch.object(integrity_mod, "_flac_verdict", verdict),
+            ):
+                rc = run_flac_mode([td], str(out), 1, "flac", resume=True, quiet=True)
+            self.assertEqual(rc, 0)
+            report = out.read_text(encoding="utf-8")
+            self.assertIn("Scanned: 1", report)
+            self.assertFalse(pfile.exists())
+
+
+class MissingDecoderRefusalTests(unittest.TestCase):
+    """A decode scan with no decoder available must refuse (exit 2), not
+    grade every file OK with 'decode check skipped' and exit 0: a scan that
+    verified nothing reporting success is the worst possible report."""
+
+    def _tree(self, td: str, ext: str) -> Path:
+        p = Path(td) / "Album" / f"01{ext}"
+        p.parent.mkdir(parents=True)
+        p.write_bytes(b"")
+        return p
+
+    def test_mp3_without_ffmpeg_refuses(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._tree(td, ".mp3")
+            out = Path(td) / "mp3_errors.txt"
+            scanned: list[str] = []
+
+            def scan(path, ffmpeg_path, *, enrich=False):
+                scanned.append(str(path))
+                return {"path": str(path), "tier": TIER_OK, "reason": ""}
+
+            with (
+                mock.patch.object(integrity_mod, "_find_ffmpeg", return_value=None),
+                mock.patch.object(integrity_mod, "_scan_one_file", scan),
+            ):
+                rc = run_mp3_mode(
+                    [td], str(out), 1, None, only_errors=True, verbose=False, quiet=True
+                )
+            self.assertEqual(rc, 2)
+            self.assertEqual(scanned, [])
+            self.assertFalse(out.exists())
+
+    def test_opus_without_ffmpeg_still_refuses(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._tree(td, ".opus")
+            out = Path(td) / "opus_errors.txt"
+            with mock.patch.object(integrity_mod, "_find_ffmpeg", return_value=None):
+                rc = integrity_mod.run_opus_mode(
+                    [td],
+                    str(out),
+                    1,
+                    None,
+                    only_errors=True,
+                    verbose=False,
+                    quiet=True,
+                )
+            self.assertEqual(rc, 2)
+            self.assertFalse(out.exists())
 
 
 if __name__ == "__main__":

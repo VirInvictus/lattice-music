@@ -401,6 +401,9 @@ def _menu_session() -> int:
                         .strip()
                         .lower()
                     )
+                ffmpeg_path = ""
+                if pref == "ffmpeg":
+                    ffmpeg_path = ask("ffmpeg path (blank = PATH)", "").strip()
                 resume = ask_yn("Resume an interrupted scan? (y/N)")
                 run_with_capture(
                     "Test FLAC files",
@@ -409,6 +412,7 @@ def _menu_session() -> int:
                     output,
                     workers,
                     pref,
+                    ffmpeg=ffmpeg_path or None,
                     resume=resume,
                     quiet=False,
                     footer=out_note(output),

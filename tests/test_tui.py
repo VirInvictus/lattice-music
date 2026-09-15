@@ -14,6 +14,7 @@ from unittest import mock
 
 from lattice import cli, tui, utils
 from lattice.modes.audit import run_health_score, run_replaygain_audit, run_stray_audit
+from lattice.modes.integrity import run_flac_mode
 from lattice.modes.library import (
     write_ai_library,
     write_ai_wings,
@@ -275,6 +276,34 @@ class CliTuiKwargsParityTests(unittest.TestCase):
                 "layout": self.LAYOUT,
             },
             main_menu=False,
+        )
+
+    def test_flac_integrity(self):
+        # The FLAC entry is parity-pinned too: prefer + the ffmpeg path (the
+        # CLI's --ffmpeg never reached run_flac_mode before) + resume.
+        self._parity(
+            mode="run_flac_mode",
+            real=run_flac_mode,
+            cli_argv=[
+                "--testFLAC",
+                "--root",
+                self.ROOTS[0],
+                "--output",
+                self.OUT,
+                "--prefer",
+                "ffmpeg",
+                "--ffmpeg",
+                "/usr/bin/ffmpeg",
+            ],
+            selections=[(1, 0), tui._SEL_QUIT],
+            answers={
+                "Output file": self.OUT,
+                "Workers": 4,
+                "Preferred tool": "ffmpeg",
+                "ffmpeg path": "/usr/bin/ffmpeg",
+                "Resume": False,
+            },
+            main_menu=True,
         )
 
     def test_stats(self):

@@ -221,6 +221,7 @@ def run_flac_mode(
     workers: int,
     prefer: str,
     *,
+    ffmpeg: str | None = None,
     resume: bool = False,
     quiet: bool = False,
 ) -> int:
@@ -233,8 +234,10 @@ def run_flac_mode(
             print(f"No FLAC files found under: {', '.join(roots)}")
         return 0
 
+    # An explicit --ffmpeg path wins over PATH lookup, same as the decode modes.
+    ffmpeg_path = _find_ffmpeg(ffmpeg)
     have_flac = has_tool("flac")
-    have_ffmpeg = has_tool("ffmpeg")
+    have_ffmpeg = ffmpeg_path is not None
     if not (have_flac or have_ffmpeg):
         if not quiet:
             print("ERROR: Neither 'flac' nor 'ffmpeg' found in PATH.", file=sys.stderr)
@@ -242,11 +245,20 @@ def run_flac_mode(
 
     # libFLAC is preferred and authoritative; ffmpeg is the fallback.
     use_flac = (not have_ffmpeg) if prefer == "ffmpeg" else have_flac
-    ffmpeg_path = shutil.which("ffmpeg")
     if not use_flac and prefer != "ffmpeg" and not quiet:
         print(
             "[warn] 'flac' not found; using ffmpeg for FLAC verification. "
             "ffmpeg's decoder is stricter and may flag valid files.",
+            file=sys.stderr,
+        )
+    if prefer == "ffmpeg" and use_flac and not quiet:
+        # An explicit preference that cannot be honored is reported, never
+        # silent: the two decoders classify differently, so the switch is
+        # a change in verdicts, not just in tools.
+        where = f" at {ffmpeg}" if ffmpeg else ""
+        print(
+            f"[warn] --prefer ffmpeg but no usable ffmpeg was found{where}; "
+            "falling back to flac.",
             file=sys.stderr,
         )
 
@@ -271,10 +283,16 @@ def run_flac_mode(
 
     counts = {tier: 0 for tier in TIER_ORDER}
     flagged: list[tuple[str, str, str, str]] = []  # (path, tool, tier, reason)
-    for path_s, rec in cached.items():
-        counts[rec["tier"]] = counts.get(rec["tier"], 0) + 1
-        if rec["tier"] in (TIER_CORRUPT, TIER_SUSPECT):
-            flagged.append((path_s, rec["tool"], rec["tier"], rec["reason"]))
+    # .get, not []: the state file is best-effort by contract, so a record
+    # damaged by the interrupt degrades to an OK row instead of crashing the
+    # resumed scan (the decode path below makes the same trade).
+    for path_s, rec in sorted(cached.items()):
+        rec_tier = rec.get("tier", TIER_OK)
+        counts[rec_tier] = counts.get(rec_tier, 0) + 1
+        if rec_tier in (TIER_CORRUPT, TIER_SUSPECT):
+            flagged.append(
+                (path_s, rec.get("tool", "?"), rec_tier, rec.get("reason", ""))
+            )
 
     def worker(path: Path) -> tuple[str, str, str, str]:
         try:
@@ -507,7 +525,6 @@ def _run_decode_scan(
     ext: str,
     report_title: str,
     default_output: str,
-    ffmpeg_required: bool,
     enrich: bool,
     only_errors: bool,
     verbose: bool,
@@ -521,18 +538,17 @@ def _run_decode_scan(
     ffmpeg_path = _find_ffmpeg(ffmpeg)
 
     if not ffmpeg_path:
-        if ffmpeg_required:
-            if not quiet:
-                print(
-                    f"[warn] FFmpeg not found. Required for {ext.strip('.')} decode testing.",
-                    file=sys.stderr,
-                )
-            return 2
-        elif not quiet:
+        # No decoder means zero decodes can run. Proceeding once graded
+        # every file OK ("decode check skipped") with exit 0, so a typo'd
+        # --ffmpeg path produced an all-clean report that verified nothing;
+        # refuse instead.
+        if not quiet:
             print(
-                "[warn] FFmpeg not found. Install it or pass --ffmpeg /path/to/ffmpeg",
+                f"ERROR: FFmpeg not found. Required for {ext.strip('.')} decode "
+                "testing. Install it or pass --ffmpeg /path/to/ffmpeg",
                 file=sys.stderr,
             )
+        return 2
 
     targets = _find_files_by_ext_path(roots, ext)
 
@@ -700,7 +716,6 @@ def run_mp3_mode(
         ext=".mp3",
         report_title="MP3 INTEGRITY REPORT",
         default_output=DEFAULT_MP3_OUTPUT,
-        ffmpeg_required=False,
         enrich=True,
         only_errors=only_errors,
         verbose=verbose,
@@ -727,7 +742,6 @@ def run_opus_mode(
         ext=".opus",
         report_title="OPUS INTEGRITY REPORT",
         default_output=DEFAULT_OPUS_OUTPUT,
-        ffmpeg_required=True,
         enrich=False,
         only_errors=only_errors,
         verbose=verbose,
@@ -753,7 +767,6 @@ def run_wav_mode(
         ext=".wav",
         report_title="WAV INTEGRITY REPORT",
         default_output=DEFAULT_WAV_OUTPUT,
-        ffmpeg_required=True,
         enrich=False,
         only_errors=only_errors,
         verbose=verbose,
@@ -779,7 +792,6 @@ def run_wma_mode(
         ext=".wma",
         report_title="WMA INTEGRITY REPORT",
         default_output=DEFAULT_WMA_OUTPUT,
-        ffmpeg_required=True,
         enrich=False,
         only_errors=only_errors,
         verbose=verbose,
