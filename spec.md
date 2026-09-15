@@ -71,7 +71,7 @@ modes and is unaffected.
 ### 2.4 Standalone Binary
 
 lattice-music can be compiled into a standalone native executable using **PyInstaller**.
-This encapsulates the Python interpreter, dependencies (`mutagen`, `tqdm`), and the package code into a single self-contained binary, eliminating the need for end-users to install Python or configure `pip`.
+This encapsulates the Python interpreter, dependencies (`mutagen`, `tqdm`, `vir-tui`), and the package code into a single self-contained binary, eliminating the need for end-users to install Python or configure `pip`.
 
 ### 2.5 Interactive TUI
 

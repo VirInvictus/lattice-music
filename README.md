@@ -97,7 +97,7 @@ pip install lattice-music
 
 ## Requirements
 
-Runtime dependencies are `mutagen` and `tqdm` (installed automatically). The integrity modes shell out to system tools:
+Runtime dependencies are `mutagen`, `tqdm`, and `vir-tui` (installed automatically; `vir-tui` powers the interactive TUI). The integrity modes shell out to system tools:
 
 - [`flac`](https://xiph.org/flac/): used by `--testFLAC` (preferred)
 - [`ffmpeg`](https://ffmpeg.org/): used by `--testMP3`, `--testOpus`, `--testWAV`, `--testWMA`, and as a fallback for `--testFLAC`
@@ -776,6 +776,7 @@ lattice-music is built upon several excellent open-source libraries and tools:
 
 - **[Mutagen](https://github.com/quodlibet/mutagen)**: Handles all audio metadata extraction and tagging logic.
 - **[tqdm](https://github.com/tqdm/tqdm)**: Powers the extensible progress bars for library scanning and integrity checks.
+- **[vir-tui](https://github.com/VirInvictus/vir-tui)**: The shared terminal-UI toolkit behind the interactive mode (menus, prompts, progress boxes, pager).
 - **[FFmpeg](https://ffmpeg.org/)**: The heavy lifter for multi-format audio decoding and integrity verification.
 - **[FLAC](https://xiph.org/flac/)**: Used for high-speed native FLAC verification.
 
