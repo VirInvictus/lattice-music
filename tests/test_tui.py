@@ -26,7 +26,7 @@ from lattice.modes.library import (
     write_all_wings,
     write_music_library_tree,
 )
-from lattice.modes.playlists import generate_playlist
+from lattice.modes.playlists import generate_playlist, run_check_playlists
 from lattice.modes.stats import run_stats
 
 
@@ -385,8 +385,25 @@ class CliTuiKwargsParityTests(unittest.TestCase):
                 "--layout",
                 self.LAYOUT,
             ],
-            selections=[(3, 6), tui._SEL_QUIT],
+            selections=[(3, 7), tui._SEL_QUIT],
             answers={"Output file": self.OUT, "layout": self.LAYOUT},
+            main_menu=True,
+        )
+
+    def test_check_playlists(self):
+        self._parity(
+            mode="run_check_playlists",
+            real=run_check_playlists,
+            cli_argv=[
+                "--checkPlaylists",
+                "--root",
+                self.ROOTS[0],
+                "--output",
+                self.OUT,
+                "--verbose",
+            ],
+            selections=[(3, 6), tui._SEL_QUIT],
+            answers={"Output file": self.OUT, "no problems": True},
             main_menu=True,
         )
 
@@ -402,7 +419,7 @@ class CliTuiKwargsParityTests(unittest.TestCase):
                 self.OUT,
                 "--verbose",
             ],
-            selections=[(3, 7), tui._SEL_QUIT],
+            selections=[(3, 8), tui._SEL_QUIT],
             answers={
                 "Output file": self.OUT,
                 "bitrate floor": 192,

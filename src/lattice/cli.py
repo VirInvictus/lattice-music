@@ -15,6 +15,7 @@ from lattice.config import (
     DEFAULT_MP3_OUTPUT,
     DEFAULT_OPUS_OUTPUT,
     DEFAULT_PLAYLIST_OUTPUT,
+    DEFAULT_PLAYLIST_CHECK_OUTPUT,
     DEFAULT_REPLAYGAIN_AUDIT_OUTPUT,
     DEFAULT_REPLAYGAIN_VERIFY_OUTPUT,
     DEFAULT_STRAY_AUDIT_OUTPUT,
@@ -54,7 +55,7 @@ from lattice.modes.library import (
     write_all_wings,
     write_music_library_tree,
 )
-from lattice.modes.playlists import generate_playlist
+from lattice.modes.playlists import generate_playlist, run_check_playlists
 from lattice.modes.stats import run_stats
 from lattice.tui import interactive_menu
 
@@ -158,6 +159,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--playlist",
         action="store_true",
         help="Generate a smart .m3u playlist based on a rule",
+    )
+    group.add_argument(
+        "--checkPlaylists",
+        dest="check_playlists",
+        action="store_true",
+        help="Verify the library's .m3u playlists: missing #EXTM3U headers and "
+        "entries whose target no longer exists",
     )
     group.add_argument(
         "--stats", action="store_true", help="Library-wide statistics summary"
@@ -523,6 +531,12 @@ def main(argv: list[str] | None = None) -> int:
             output = args.output or DEFAULT_PLAYLIST_OUTPUT
             return generate_playlist(
                 root, output, args.rule, layout=args.layout, quiet=args.quiet
+            )
+
+        if args.check_playlists:
+            output = args.output or DEFAULT_PLAYLIST_CHECK_OUTPUT
+            return run_check_playlists(
+                root, output, verbose=args.verbose, quiet=args.quiet
             )
 
         if args.stats:

@@ -120,6 +120,7 @@ supplies default roots; the first-run prompt persists only the single
 | ReplayGain verification | `--verifyReplayGain` | Re-measure each album read-only via `rsgain custom -O -s s` (the writer's own engine) and report stored gains disagreeing with the fresh measurement by more than `--tolerance` at the assumed `--target-lufs`; clip-adjusted rows are reported, never flagged OFF; requires `rsgain` |
 | Stray-file audit | `--auditStrays` | Report audio at the wrong depth for the configured layout, loose tracks beside album folders, hidden-dir audio, and unrecognized non-audio files in album folders |
 | Smart playlist | `--playlist` | Generate an `.m3u` from a dynamic rule (e.g. `rating >= 4 and genre == 'Jazz'`) |
+| Playlist check | `--checkPlaylists` | Verify the library's `.m3u`/`.m3u8` playlists: missing `#EXTM3U` headers and entries whose target no longer exists (relative entries resolve against the playlist's own directory) |
 | Clean | `--clean` | Consolidate fragmented album folders (quote/dash/case variants) with opt-in name (`--normalize-names`, `--normalize-filenames`) and tag (`--normalize-tags`) normalization passes; write mode, dry-run by default |
 | APEv2 strip | `--apestrip` | Remove stray APEv2 tags from MP3s (`--keep-metadata` to migrate sole-source fields first, `--repair-malformed` for tags mutagen cannot parse); write mode, dry-run by default |
 

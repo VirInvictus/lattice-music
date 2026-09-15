@@ -4,8 +4,10 @@ import os
 import re
 import sys
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
+from lattice.config import DEFAULT_PLAYLIST_CHECK_OUTPUT
 from lattice.tags import get_all_tags
 from lattice.utils import (
     _make_pbar,
@@ -14,6 +16,7 @@ from lattice.utils import (
     is_audio,
     iter_audio_dirs,
     parse_layout,
+    relpath_under,
 )
 
 # =====================================
@@ -230,5 +233,130 @@ def generate_playlist(
     if not quiet:
         track_count = len(playlist_entries) // 2
         print(f"\nWrote playlist with {track_count} tracks to: {out_path}")
+
+    return 0
+
+
+# =====================================
+# Mode: Playlist check
+# =====================================
+
+PLAYLIST_EXTENSIONS = (".m3u", ".m3u8")
+
+
+def _find_playlists(roots: list[str]) -> list[Path]:
+    """Every .m3u/.m3u8 under the roots (or a single playlist passed as a
+    root), walked sorted with hidden directories pruned like the audio walk."""
+    out: list[Path] = []
+    for r in roots:
+        p = Path(r)
+        if p.is_file():
+            if p.suffix.lower() in PLAYLIST_EXTENSIONS:
+                out.append(p)
+            continue
+        for dirpath, dirs, files in os.walk(r):
+            dirs[:] = sorted(d for d in dirs if not d.startswith("."))
+            for fn in sorted(files):
+                if os.path.splitext(fn)[1].lower() in PLAYLIST_EXTENSIONS:
+                    out.append(Path(dirpath) / fn)
+    return out
+
+
+def check_playlist(path: Path) -> tuple[bool, int, int, list[tuple[int, str]]]:
+    """One playlist -> (has_extm3u, n_entries, n_missing, [(line_no, detail)]).
+    Comment and directive lines (#) are skipped; every other non-blank line is
+    an entry, resolved against the playlist's own directory so hand-made
+    relative playlists check the same as the absolute ones --playlist writes.
+    Missing detection is os.path.exists, nothing more: a path that exists but
+    is unreadable is not this mode's finding."""
+    has_header = False
+    entries = 0
+    missing: list[tuple[int, str]] = []
+    try:
+        with path.open(encoding="utf-8", errors="replace") as f:
+            for line_no, raw in enumerate(f, 1):
+                line = raw.strip()
+                if not line:
+                    continue
+                if line.startswith("#"):
+                    if line.upper().startswith("#EXTM3U"):
+                        has_header = True
+                    continue
+                entries += 1
+                target = Path(line)
+                if not target.is_absolute():
+                    target = (path.parent / target).resolve()
+                if not os.path.exists(target):
+                    missing.append((line_no, str(target)))
+    except OSError as e:
+        missing.append((0, f"unreadable playlist: {e}"))
+    return has_header, entries, len(missing), missing
+
+
+def run_check_playlists(
+    root: str | list[str],
+    output: str,
+    *,
+    verbose: bool = False,
+    quiet: bool = False,
+) -> int:
+    """Verify the library's playlists against the filesystem. --playlist
+    writes absolute-path .m3us that the movers (clean, genre_foldermap,
+    flac2opus) routinely orphan; this walks the roots for playlists and
+    reports, per playlist, the entries whose target no longer exists plus a
+    missing #EXTM3U header. Read-only; --verbose also lists the clean ones."""
+    roots = as_roots(root)
+    playlists = _find_playlists(roots)
+
+    if not quiet:
+        print(f"Checking playlists under: {', '.join(roots)}")
+
+    results: list[tuple[Path, bool, int, int, list[tuple[int, str]]]] = []
+    for p in playlists:
+        has_header, n_entries, n_missing, missing = check_playlist(p)
+        results.append((p, has_header, n_entries, n_missing, missing))
+
+    n_entries = sum(r[2] for r in results)
+    n_missing = sum(r[3] for r in results)
+    n_noheader = sum(1 for r in results if not r[1] and r[2] + r[3] > 0)
+    dirty = [r for r in results if r[3] or (not r[1] and r[2] + r[3] > 0)]
+
+    out_path = os.path.abspath(output or DEFAULT_PLAYLIST_CHECK_OUTPUT)
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write("PLAYLIST CHECK REPORT\n")
+        f.write(f"Root: {', '.join(roots)}\n")
+        f.write(
+            f"Playlists: {len(playlists)}   Entries: {n_entries}   "
+            f"Missing targets: {n_missing}   Without #EXTM3U: {n_noheader}\n"
+        )
+        f.write("=" * 64 + "\n\n")
+
+        if not results:
+            f.write("No .m3u/.m3u8 playlists found under the root(s).\n\n")
+        for p, has_header, n_entries_p, n_missing_p, missing in dirty:
+            f.write(
+                f"{relpath_under(str(p), roots)} ({n_missing_p} of {n_entries_p} missing)\n"
+            )
+            if not has_header:
+                f.write("    no #EXTM3U header line\n")
+            for line_no, detail in missing:
+                where = f"line {line_no}: " if line_no else ""
+                f.write(f"    {where}{detail}\n")
+            f.write("\n")
+        clean = [r for r in results if r not in dirty]
+        if verbose:
+            f.write(f"CLEAN ({len(clean)})\n")
+            f.write("-" * 40 + "\n")
+            for p, _h, n_entries_p, n_missing_p, _m in clean:
+                f.write(f"  {relpath_under(str(p), roots)} ({n_entries_p} entries)\n")
+            f.write("\n")
+
+    if not quiet:
+        print(f"\nChecked {len(playlists)} playlist(s), {n_entries} entries.")
+        print(f"  Missing targets: {n_missing}")
+        print(f"  Without #EXTM3U: {n_noheader}")
+        print(f"Results written to: {out_path}")
 
     return 0

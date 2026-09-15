@@ -44,6 +44,7 @@ Modern music players often hide your library behind proprietary databases. latti
 | **Genre wings** | `--all-wings` | Generates a separate library tree file for each genre |
 | **AI wings** | `--ai-wings` | Generates separate AI-friendly flat library files per genre |
 | **Smart Playlist** | `--playlist` | Generates an .m3u playlist based on a dynamic rule (e.g. `rating >= 4`) |
+| **Playlist check** | `--checkPlaylists` | Verifies the library's .m3u playlists: missing #EXTM3U headers and entries whose target no longer exists |
 | **Library statistics** | `--stats` | Library-wide statistics: format breakdown, bitrate, ratings, genres, top artists |
 | **FLAC integrity** | `--testFLAC` | Verifies FLAC via `flac -t` (authoritative) or FFmpeg; sorts files into severity tiers |
 | **MP3 integrity** | `--testMP3` | Decodes MP3 through FFmpeg (demuxer forced); sorts files into severity tiers |
@@ -183,6 +184,9 @@ lattice --auditReplayGain --output replaygain_audit.txt
 # (verify a -14-targeted library with --target-lufs -14)
 lattice --verifyReplayGain --output replaygain_verify.txt
 
+# Check the library's playlists for entries the movers have orphaned
+lattice --checkPlaylists --output playlist_check.txt
+
 # Audit files that don't fit the layout: strays, loose tracks, hidden-dir
 # audio, and non-audio junk in album folders
 lattice --auditStrays --output stray_audit.txt
@@ -309,12 +313,13 @@ The filesystem is the source of truth: lattice-music walks the tree on every inv
 usage: lattice [-h] [--version] [--library | --ai-library | --all-wings | --ai-wings | --testFLAC | --testMP3 |
                --testOpus | --testWAV | --testWMA | --extractArt | --missingArt | --auditArtQuality |
                --duplicates | --auditAudioDupes | --auditTags | --auditBitrate | --auditReplayGain |
-               --verifyReplayGain | --auditStrays | --healthScore | --playlist | --stats | --clean | --apestrip]
-               [--root DIR] [--output OUTPUT] [--rule RULE] [--layout LAYOUT] [--min-art-res MIN_ART_RES]
-               [--min-bitrate MIN_BITRATE] [--target-lufs TARGET_LUFS] [--tolerance TOLERANCE]
-               [--workers WORKERS] [--prefer {flac,ffmpeg}] [--quiet] [--genres] [--paths] [--dry-run] [--apply]
-               [--normalize-names] [--normalize-filenames] [--normalize-tags] [--all] [--keep-metadata]
-               [--repair-malformed] [--resume] [--only-errors | --no-only-errors] [--ffmpeg FFMPEG] [--verbose]
+               --verifyReplayGain | --auditStrays | --healthScore | --playlist | --checkPlaylists | --stats |
+               --clean | --apestrip] [--root DIR] [--output OUTPUT] [--rule RULE] [--layout LAYOUT]
+               [--min-art-res MIN_ART_RES] [--min-bitrate MIN_BITRATE] [--target-lufs TARGET_LUFS]
+               [--tolerance TOLERANCE] [--workers WORKERS] [--prefer {flac,ffmpeg}] [--quiet] [--genres]
+               [--paths] [--dry-run] [--apply] [--normalize-names] [--normalize-filenames] [--normalize-tags]
+               [--all] [--keep-metadata] [--repair-malformed] [--resume] [--only-errors | --no-only-errors]
+               [--ffmpeg FFMPEG] [--verbose]
                [pos_root]
 
 Filesystem-first music library toolkit: trees, integrity, audits, content-hash duplicate detection, health score,
@@ -352,6 +357,8 @@ options:
   --healthScore         Per-album health score aggregating tag completeness, ReplayGain coverage, art, and the
                         bitrate floor
   --playlist            Generate a smart .m3u playlist based on a rule
+  --checkPlaylists      Verify the library's .m3u playlists: missing #EXTM3U headers and entries whose target no
+                        longer exists
   --stats               Library-wide statistics summary
   --clean               Consolidate fragmented album folders; optionally normalize names and tags (write mode:
                         dry-run by default, --apply to write)

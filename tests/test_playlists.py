@@ -1,7 +1,14 @@
+import tempfile
 import unittest
 from collections import namedtuple
+from pathlib import Path
 
-from lattice.modes.playlists import _evaluate_rule, validate_rule
+from lattice.modes.playlists import (
+    _evaluate_rule,
+    check_playlist,
+    run_check_playlists,
+    validate_rule,
+)
 
 # Only the fields _evaluate_rule reads.
 FakeTag = namedtuple(
@@ -119,6 +126,101 @@ class RuleEvalTests(unittest.TestCase):
 
     def test_subscript_is_rejected(self):
         self.assertFalse(_evaluate_rule("genre[0] == 'J'", tag(genre="Jazz"), {}))
+
+
+class CheckPlaylistTests(unittest.TestCase):
+    def _pl(self, td: str, name: str = "mix.m3u", lines: list[str] = ()) -> Path:
+        p = Path(td) / name
+        p.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
+        return p
+
+    def test_clean_absolute_playlist(self):
+        with tempfile.TemporaryDirectory() as td:
+            track = Path(td) / "01.flac"
+            track.write_bytes(b"")
+            pl = self._pl(
+                td, lines=["#EXTM3U", "#EXTINF:120,Artist - Title", str(track)]
+            )
+            has_header, entries, missing, missing_rows = check_playlist(pl)
+            self.assertTrue(has_header)
+            self.assertEqual((entries, missing, missing_rows), (1, 0, []))
+
+    def test_missing_targets_are_listed_with_line_numbers(self):
+        with tempfile.TemporaryDirectory() as td:
+            pl = self._pl(
+                td,
+                lines=[
+                    "#EXTM3U",
+                    str(Path(td) / "gone.flac"),
+                    str(Path(td) / "also-gone.flac"),
+                ],
+            )
+            has_header, entries, missing, rows = check_playlist(pl)
+            self.assertEqual((has_header, entries, missing), (True, 2, 2))
+            self.assertEqual([r[0] for r in rows], [2, 3])
+
+    def test_missing_extm3u_header_is_flagged(self):
+        with tempfile.TemporaryDirectory() as td:
+            track = Path(td) / "01.flac"
+            track.write_bytes(b"")
+            pl = self._pl(td, lines=[str(track)])
+            has_header, entries, missing, _rows = check_playlist(pl)
+            self.assertFalse(has_header)
+            self.assertEqual((entries, missing), (1, 0))
+
+    def test_relative_entries_resolve_against_the_playlist(self):
+        with tempfile.TemporaryDirectory() as td:
+            sub = Path(td) / "playlists"
+            sub.mkdir()
+            track = Path(td) / "Album" / "01.flac"
+            track.parent.mkdir()
+            track.write_bytes(b"")
+            pl = sub / "rel.m3u"
+            pl.write_text("../Album/01.flac\n", encoding="utf-8")
+            _h, entries, missing, _rows = check_playlist(pl)
+            self.assertEqual((entries, missing), (1, 0))
+
+    def test_empty_playlist(self):
+        with tempfile.TemporaryDirectory() as td:
+            pl = self._pl(td, lines=["#EXTM3U"])
+            has_header, entries, missing, _rows = check_playlist(pl)
+            self.assertTrue(has_header)
+            self.assertEqual((entries, missing), (0, 0))
+
+
+class RunCheckPlaylistsTests(unittest.TestCase):
+    def test_report_and_verbose(self):
+        with tempfile.TemporaryDirectory() as td:
+            gone = Path(td) / "Album" / "01.flac"
+            gone.parent.mkdir()
+            gone.write_bytes(b"")
+            live = Path(td) / "Album" / "02.flac"
+            live.write_bytes(b"")
+            (Path(td) / "good.m3u").write_text(f"#EXTM3U\n{live}\n", encoding="utf-8")
+            (Path(td) / "stale.m3u").write_text(
+                f"#EXTM3U\n{gone}\n{Path(td) / 'vanished.flac'}\n",
+                encoding="utf-8",
+            )
+            out = Path(td) / "check.txt"
+            rc = run_check_playlists([td], str(out), quiet=True)
+            self.assertEqual(rc, 0)
+            report = out.read_text(encoding="utf-8")
+            self.assertIn("PLAYLIST CHECK REPORT", report)
+            self.assertIn("stale.m3u (1 of 2 missing)", report)
+            self.assertIn("vanished.flac", report)
+            self.assertNotIn("good.m3u", report)
+
+            out_v = Path(td) / "check_v.txt"
+            run_check_playlists([td], str(out_v), verbose=True, quiet=True)
+            self.assertIn("CLEAN (1)", out_v.read_text(encoding="utf-8"))
+            self.assertIn("good.m3u", out_v.read_text(encoding="utf-8"))
+
+    def test_no_playlists_found(self):
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td) / "check.txt"
+            rc = run_check_playlists([td], str(out), quiet=True)
+            self.assertEqual(rc, 0)
+            self.assertIn("No .m3u", out.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

@@ -55,5 +55,6 @@ replaygain_verify.txt
 stray_audit.txt
 library_stats.txt
 smart_playlist.m3u
+playlist_check.txt
 wings/
 wings_ai/
