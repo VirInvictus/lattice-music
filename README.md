@@ -5,6 +5,8 @@
 <p align="center">
   <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.14%2B-blue" alt="Python 3.14+"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://github.com/VirInvictus/lattice-music/actions/workflows/ci.yml"><img src="https://github.com/VirInvictus/lattice-music/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
+  <a href="https://pypi.org/project/lattice-music/"><img src="https://img.shields.io/pypi/v/lattice-music" alt="PyPI version"></a>
 </p>
 
 <p align="center">

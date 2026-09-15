@@ -1,0 +1,8 @@
+version: 2
+updates:
+  # Actions only: the runtime deps (mutagen, tqdm, vir-tui) are bumped
+  # deliberately at this repo's own release cadence, not by automation.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
