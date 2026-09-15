@@ -12,13 +12,19 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      # Actions are pinned by SHA, matching publish.yml; dependabot keeps
+      # the pins current.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.14"
       # Pin ruff so a future release adding a lint rule cannot turn a green
-      # build red on its own. mutagen and tqdm come in via `pip install .`.
+      # build red on its own. The same pin lives in the dev group, so local
+      # format output matches CI. mutagen and tqdm come in via
+      # `pip install .`.
       - run: pip install . ruff==0.15.14
       - run: ruff check src/ scripts/ tests/
       - run: ruff format --check src/ scripts/ tests/
-      - run: python -m unittest discover
+      # PYTHONPATH=src tests the tree, not the pip-installed copy, matching
+      # publish.yml: a tree-only failure must surface here, not at tag time.
+      - run: PYTHONPATH=src python -m unittest discover
