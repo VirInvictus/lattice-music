@@ -35,7 +35,7 @@ from lattice.tags import (
     ReplayGainStatus,
     TagBundle,
     read_replaygain,
-    read_replaygain_values,
+    read_replaygain_values_with_convention,
 )
 from lattice.utils import (
     _find_cover_file,
@@ -1325,6 +1325,12 @@ def parse_rsgain_scan(text: str) -> tuple[dict[str, dict], dict | None]:
     return rows, album_row
 
 
+# The Opus/R128 reference: R128 track/album gains are stored relative to a
+# -23 LUFS baseline by the Opus and BS.1770/R128 specs, independent of the
+# write-time target a replaygain_* tag would have been computed for.
+_R128_BASE = -23.0
+
+
 def _verify_bucket(
     stored: float | None, loudness: float, target: float, tol: float
 ) -> str:
@@ -1374,6 +1380,8 @@ def run_verify_replaygain(
     ok_albums: list[str] = []
     failed_albums: list[tuple[str, str]] = []
     n_albums = 0
+    r128_files = 0
+    rg_files = 0
 
     for _src_root, dirpath, _subdirs, files in iter_audio_dirs(roots):
         audio_files = sorted(f for f in files if is_audio(f))
@@ -1381,7 +1389,9 @@ def run_verify_replaygain(
             continue
         n_albums += 1
         paths = [os.path.join(dirpath, f) for f in audio_files]
-        stored = map_concurrent(read_replaygain_values, paths, pbar=None)
+        stored = map_concurrent(
+            read_replaygain_values_with_convention, paths, pbar=None
+        )
 
         proc = subprocess.run(
             rsgain_verify_command(paths, target_lufs),
@@ -1397,9 +1407,16 @@ def run_verify_replaygain(
         rows, album_row = parse_rsgain_scan(proc.stdout)
 
         # Album gain is one value per album; check it once against the
-        # album aggregate row, from the first file that carries it.
-        album_db = next((a for _t, a in stored.values() if a is not None), None)
-        album_tagged = any(a is not None for _t, a in stored.values())
+        # album aggregate row, from the first file that carries it. The
+        # album gain verifies against the reference its own key family
+        # implies (R128 keys are -23-referenced by the Opus/R128 spec,
+        # whatever --target-lufs says).
+        album_db = album_conv = None
+        album_tagged = False
+        for _t, a, conv in stored.values():
+            if a is not None:
+                album_db, album_conv, album_tagged = a, conv, True
+                break
 
         album_off: list[str] = []
         album_ungauged: list[str] = []
@@ -1409,7 +1426,12 @@ def run_verify_replaygain(
             if row is None:
                 album_ungauged.append(f"{relpath_under(path, roots)} (not measured)")
                 continue
-            track_db, _album_db = stored.get(path, (None, None))
+            track_db, _album_db, track_conv = stored.get(path, (None, None, None))
+            ref = _R128_BASE if track_conv == "r128" else target_lufs
+            if track_conv == "r128":
+                r128_files += 1
+            elif track_conv == "rg":
+                rg_files += 1
             if row["clip"]:
                 album_clip.append(
                     f"{relpath_under(path, roots)}: stored track gain "
@@ -1417,16 +1439,13 @@ def run_verify_replaygain(
                     "time; exempt from the target comparison)"
                 )
                 continue
-            if (
-                _verify_bucket(track_db, row["loudness"], target_lufs, tolerance)
-                == "OFF"
-            ):
+            if _verify_bucket(track_db, row["loudness"], ref, tolerance) == "OFF":
                 album_off.append(
                     _off_detail(
                         relpath_under(path, roots),
                         track_db,
                         row["loudness"],
-                        target_lufs,
+                        ref,
                     )
                 )
             elif track_db is None:
@@ -1436,7 +1455,10 @@ def run_verify_replaygain(
 
         if album_row is not None:
             verdict = _verify_bucket(
-                album_db, album_row["loudness"], target_lufs, tolerance
+                album_db,
+                album_row["loudness"],
+                _R128_BASE if album_conv == "r128" else target_lufs,
+                tolerance,
             )
             if verdict == "OFF":
                 album_off.append(
@@ -1469,6 +1491,13 @@ def run_verify_replaygain(
             f"Target: {target_lufs} LUFS   Tolerance: {tolerance} dB   "
             f"Engine: rsgain (scan-only, no tags written)\n"
         )
+        if r128_files or rg_files:
+            f.write(
+                f"References: {r128_files} file(s) carry R128 tags, verified at "
+                f"the R128 -23 LUFS baseline their format implies; "
+                f"{rg_files} file(s) carry replaygain_* tags, verified at the "
+                f"--target-lufs value.\n"
+            )
         f.write(
             f"Albums: {n_albums}   OK: {len(ok_albums)}   Off: {len({a for a, _ in off_rows})}   "
             f"Ungauged: {len({a for a, _ in ungauged_rows})}   "

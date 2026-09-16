@@ -320,13 +320,13 @@ keep today's apply-by-default so aliases and cron do not change.
   hidden-dir audio the scanners prune silently, and unrecognized
   non-audio files in album folders (sidecar/log/image ignore sets).
   Read-only; beets `unimported` analog. (v5.1.0)
-- [ ] **`--checkPlaylists`**: dead paths, #EXTM3U compliance,
+- [x] **`--checkPlaylists`**: dead paths, #EXTM3U compliance,
   relative-vs-absolute in generated m3us. S.
-- [ ] **Album-consistency audit**: mixed codec within an album,
+- [x] **Album-consistency audit**: mixed codec within an album,
   missing year/label, tracknumber gaps. S.
-- [ ] **`--auditMbids` + the Picard hand-off TSV**: MusicBrainz TXXX
+- [x] **`--auditMbids` + the Picard hand-off TSV**: MusicBrainz TXXX
   coverage from `--auditTags`. S.
-- [ ] **ReplayGain verification**: stored gain vs a fresh rsgain/
+- [x] **ReplayGain verification**: stored gain vs a fresh rsgain/
   ffmpeg ebur128 measurement, read-only. M. RESEARCHED 2026-09-13
   (RESEARCH-b7-replaygain-2026-09-13.md; probed live on synthetic
   audio): the harness gate is resolved - `rsgain custom -O -s s` is a
@@ -337,11 +337,11 @@ keep today's apply-by-default so aliases and cron do not change.
   promoted value reader are specced in the doc; M, ready to commission.
   Decisions (2026-09-13, Brandon): engine = rsgain -O; flag =
   --verifyReplayGain.
-- [ ] **`--auditJunkFrames`**: iTunNORM/private-TXXX reporting. S.
+- [x] **`--auditJunkFrames`**: iTunNORM/private-TXXX reporting. S.
   (The strip itself is a new-companion or retag.py extension, M.)
-- [ ] **Art mismatch audit**: embedded vs folder art, per-track art
+- [x] **Art mismatch audit**: embedded vs folder art, per-track art
   divergence. S.
-- [ ] **`--snapshot` / `--diff`**: tag+path fingerprint change
+- [x] **`--snapshot` / `--diff`**: tag+path fingerprint change
   detection between curation runs (no DB by design). S.
 
 Deliberately skipped (already covered or anti-contract): beets-style
@@ -418,5 +418,5 @@ Every ranked item executed in one pass, commit range aabb9c9..(release). Fix lan
 - [x] **B.9 `--auditArtMismatch`** shipped (embedded vs folder cover: MATCH / SAME PIXELS / DIFFERENT IMAGE / UNREADABLE).
 - [x] **B.8 `--auditJunkFrames`** shipped (loads the ID3 tag raw so mutagen's v2.3->v2.4 upgrade cannot hide TYER-class frames; duplicate frames documented as undetectable through mutagen's dict model).
 - [x] **B.6 `--auditMbids` + Picard TSV: evaluated and DECLINED** (Brandon, 2026-09-14: Picard is not in the tagging loop; retag/genre_tidy/cleaner are the tagging loop). Reopen only if that answer changes.
-- [x] Held rider, health-score RG-correctness bucket (penalize wrong gains, not just missing): HELD per its own gate, pending B.7's first real-library evidence; building it would break the pure-mutagen posture and silently change every existing score. Same gate covers closing the recorded replaygain nested-parent direct-file scan option.
+- [x] Held rider, health-score RG-correctness bucket (penalize wrong gains, not just missing): RESOLVED CLOSED 2026-09-16 (decision #110's gate): B.7's first real-library run found gains internally consistent per write reference (MP3s at -18, opus R128 at -23; constants, not jitter) -- no materially wrong gains, so the bucket stays unopened. The same run closed the replaygain nested-parent direct-file scan option (0 nested albums in the reference slice). The run also seeded --verifyReplayGain's reference-aware convention handling (v5.6.0): R128-tagged files verify at the -23 baseline their keys imply, replaygain_* files at --target-lufs.
 - Lyrics USLT companion and the spindle-threading measurement stay parked.

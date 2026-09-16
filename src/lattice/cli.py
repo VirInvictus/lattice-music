@@ -271,7 +271,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=-18.0,
         help="Assumed ReplayGain write target in LUFS for --verifyReplayGain "
         "(default: -18, the ReplayGain 2.0 reference; verify a -14-targeted "
-        "library at -14)",
+        "library at -14). Applies to replaygain_*-tagged files; R128-tagged "
+        "files verify at the R128 -23 LUFS baseline their format implies "
+        "either way",
     )
     p.add_argument(
         "--tolerance",

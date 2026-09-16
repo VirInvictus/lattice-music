@@ -130,19 +130,34 @@ def read_replaygain_values(file_path: str) -> tuple[float | None, float | None]:
     integers (/256, bounded by ~0.004 dB of quantization). Unreadable or
     untagged files report (None, None), which the verifier buckets as
     ungauged."""
+    track, album, _convention = read_replaygain_values_with_convention(file_path)
+    return (track, album)
+
+
+def read_replaygain_values_with_convention(
+    file_path: str,
+) -> tuple[float | None, float | None, str | None]:
+    """(track_gain_db, album_gain_db, convention) with the write convention
+    the stored keys imply: ``"r128"`` when the gains live in Opus R128 keys
+    (Q7.8 integers, referenced to the R128 -23 LUFS baseline), ``"rg"``
+    when they live in standard replaygain_* dB keys (referenced to the
+    write target), and None when the file carries no readable gains. The
+    convention is the reference the stored number was computed against --
+    verifying an R128 gain against anything other than -23 LUFS reports a
+    constant offset that is the convention, not a miswrite."""
     if not HAVE_MUTAGEN_BASE:
-        return (None, None)
+        return (None, None, None)
     try:
         audio = MutagenFile(file_path)
     except Exception:
-        return (None, None)
+        return (None, None, None)
     tags = getattr(audio, "tags", None) if audio is not None else None
     if not tags:
-        return (None, None)
+        return (None, None, None)
     try:
         items = list(tags.items())
     except Exception:
-        return (None, None)
+        return (None, None, None)
 
     def gain_of(key: str, val) -> float | None:
         if key.endswith("r128_track_gain") or key.endswith("r128_album_gain"):
@@ -167,13 +182,17 @@ def read_replaygain_values(file_path: str) -> tuple[float | None, float | None]:
             return None
 
     track = album = None
+    track_conv = album_conv = None
     for k, v in items:
         kl = str(k).lower()
         if kl.endswith("replaygain_track_gain") or kl.endswith("r128_track_gain"):
             track = gain_of(kl, v)
+            track_conv = "r128" if kl.endswith("r128_track_gain") else "rg"
         elif kl.endswith("replaygain_album_gain") or kl.endswith("r128_album_gain"):
             album = gain_of(kl, v)
-    return (track, album)
+            album_conv = "r128" if kl.endswith("r128_album_gain") else "rg"
+    convention = track_conv or album_conv
+    return (track, album, convention)
 
 
 # --- Mutagen imports ---

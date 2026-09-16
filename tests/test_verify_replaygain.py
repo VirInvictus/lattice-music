@@ -17,7 +17,7 @@ from lattice.modes.audit import (
     run_verify_replaygain,
     _verify_bucket,
 )
-from lattice.tags import read_replaygain_values
+from lattice.tags import read_replaygain_values, read_replaygain_values_with_convention
 
 FIXTURE = Path(__file__).parent / "fixtures" / "library"
 FLAC_SRC = FIXTURE / "Aphex Twin" / "Selected Ambient Works" / "01 - Xtal.flac"
@@ -151,7 +151,10 @@ class RunVerifyReplayGainTests(unittest.TestCase):
 
     def _run(self, td, out, stored_map, tsv=_TSV, **kw):
         def values(path):
-            return stored_map.get(str(path), (None, None))
+            # the stored maps in these tests describe replaygain_*-keyed
+            # files: the --target-lufs-referenced convention.
+            pair = stored_map.get(str(path), (None, None))
+            return (pair[0], pair[1], "rg")
 
         def run_proc(cmd, capture_output, text):
             assert cmd[:2] == ["rsgain", "custom"]
@@ -160,7 +163,11 @@ class RunVerifyReplayGainTests(unittest.TestCase):
             return mock.Mock(returncode=0, stdout=tsv, stderr="")
 
         with (
-            mock.patch.object(audit_mod, "read_replaygain_values", side_effect=values),
+            mock.patch.object(
+                audit_mod,
+                "read_replaygain_values_with_convention",
+                side_effect=values,
+            ),
             mock.patch.object(
                 audit_mod.shutil, "which", return_value="/usr/bin/rsgain"
             ),
@@ -249,3 +256,154 @@ class RunVerifyReplayGainTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ConventionReaderTests(unittest.TestCase):
+    """read_replaygain_values_with_convention surfaces which key family the
+    gains live in: the reference the stored number was computed against."""
+
+    def test_replaygain_keys_report_rg(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "t.flac")
+            shutil.copy(FLAC_SRC, p)
+            from mutagen.flac import FLAC
+
+            f = FLAC(p)
+            f["replaygain_track_gain"] = "-5.00 dB"
+            f.save()
+            track, album, conv = read_replaygain_values_with_convention(p)
+            self.assertEqual((track, conv), (-5.0, "rg"))
+
+    def test_r128_keys_report_r128(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "t.flac")
+            shutil.copy(FLAC_SRC, p)
+            from mutagen.flac import FLAC
+
+            f = FLAC(p)
+            f["r128_track_gain"] = "2327"
+            f.save()
+            track, _album, conv = read_replaygain_values_with_convention(p)
+            self.assertEqual(conv, "r128")
+            self.assertAlmostEqual(track, 2327 / 256.0)
+
+    def test_untagged_reports_none_convention(self):
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "t.flac")
+            shutil.copy(FLAC_SRC, p)
+            self.assertEqual(read_replaygain_values_with_convention(p), (None, None, None))
+
+    def test_unreadable_file_reports_none_convention(self):
+        self.assertEqual(
+            read_replaygain_values_with_convention("/no/such/file.flac"),
+            (None, None, None),
+        )
+
+
+class R128ConventionVerifyTests(unittest.TestCase):
+    """R128-tagged files are -23-LUFS-referenced by the Opus/R128 spec: the
+    verifier checks them against that baseline regardless of --target-lufs,
+    instead of reporting a constant -5.00 dB 'off' at the -18 default (the
+    false positive the 2026-09-16 verification run found on real opus
+    albums)."""
+
+    def _album(self, td: str) -> list[Path]:
+        files = []
+        for name in ("01.flac", "02.flac"):
+            p = Path(td) / "Album" / name
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(b"")
+            files.append(p)
+        return files
+
+    def _run(self, td, out, stored_map, tsv=_TSV, **kw):
+        def values(path):
+            triplet = stored_map.get(str(path), (None, None, None))
+            return triplet
+
+        def run_proc(cmd, capture_output, text):
+            assert cmd[:2] == ["rsgain", "custom"]
+            return mock.Mock(returncode=0, stdout=tsv, stderr="")
+
+        with (
+            mock.patch.object(
+                audit_mod,
+                "read_replaygain_values_with_convention",
+                side_effect=values,
+            ),
+            mock.patch.object(
+                audit_mod.shutil, "which", return_value="/usr/bin/rsgain"
+            ),
+            mock.patch.object(audit_mod.subprocess, "run", side_effect=run_proc),
+        ):
+            return run_verify_replaygain([td], str(out), quiet=True, **kw)
+
+    def test_r128_album_verifies_ok_at_default_target(self):
+        # the canned measurement says both tracks measure -23.09/-26.50 LUFS;
+        # R128 gains stored for the -23 baseline (9.09 / 5.50 == the exact
+        # expected values at -23) verify OK even though --target-lufs
+        # defaults to -18.
+        tsv = (
+            "Filename\tLoudness (LUFS)\tGain (dB)\tClipping Adjustment?\n"
+            "01.flac\t-23.09\t9.09\tN\n"
+            "02.flac\t-26.50\t5.50\tN\n"
+            "Album\t-23.09\t9.09\tN\n"
+        )
+        with tempfile.TemporaryDirectory() as td:
+            files = self._album(td)
+            out = Path(td) / "verify.txt"
+            stored = {
+                str(files[0]): (0.09, 0.09, "r128"),
+                str(files[1]): (3.50, 3.50, "r128"),
+            }
+            rc = self._run(td, out, stored, tsv=tsv)
+            self.assertEqual(rc, 0)
+            report = out.read_text(encoding="utf-8")
+            self.assertIn("OK: 1", report)
+            self.assertNotIn("GAIN OFF BY", report)
+            self.assertIn("R128 -23 LUFS baseline", report)
+            self.assertIn("2 file(s) carry R128 tags", report)
+
+    def test_wrong_r128_gain_still_flags(self):
+        tsv = (
+            "Filename\tLoudness (LUFS)\tGain (dB)\tClipping Adjustment?\n"
+            "01.flac\t-23.09\t9.09\tN\n"
+            "02.flac\t-26.50\t5.50\tN\n"
+            "Album\t-23.09\t9.09\tN\n"
+        )
+        with tempfile.TemporaryDirectory() as td:
+            files = self._album(td)
+            out = Path(td) / "verify.txt"
+            # file 01's stored gain is 3 dB off the -23 expectation
+            stored = {
+                str(files[0]): (3.09, 0.09, "r128"),
+                str(files[1]): (3.50, 3.50, "r128"),
+            }
+            self._run(td, out, stored, tsv=tsv)
+            report = out.read_text(encoding="utf-8")
+            self.assertIn("GAIN OFF BY > 0.5 dB", report)
+            self.assertIn("stored +3.09 dB vs expected +0.09 dB", report)
+            self.assertIn("off by +3.00 dB", report)
+
+    def test_mixed_conventions_each_verified_against_their_own(self):
+        tsv = (
+            "Filename\tLoudness (LUFS)\tGain (dB)\tClipping Adjustment?\n"
+            "01.flac\t-27.09\t9.09\tN\n"
+            "02.flac\t-26.50\t8.50\tN\n"
+            "Album\t-27.09\t9.09\tN\n"
+        )
+        with tempfile.TemporaryDirectory() as td:
+            files = self._album(td)
+            out = Path(td) / "verify.txt"
+            # file 01 is rg-written for -18 (9.09 exact); file 02 is R128
+            # written for -23 (5.50 exact).
+            stored = {
+                str(files[0]): (9.09, 9.09, "rg"),
+                str(files[1]): (3.50, 3.50, "r128"),
+            }
+            rc = self._run(td, out, stored, tsv=tsv)
+            self.assertEqual(rc, 0)
+            report = out.read_text(encoding="utf-8")
+            self.assertIn("OK: 1", report)
+            self.assertIn("1 file(s) carry R128 tags", report)
+            self.assertIn("1 file(s) carry replaygain_* tags", report)

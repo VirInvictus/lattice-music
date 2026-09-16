@@ -62,7 +62,7 @@ Modern music players often hide your library behind proprietary databases. latti
 | **Album consistency audit** | `--auditAlbums` | Per-album consistency: mixed codecs in one folder, track-number gaps and duplicates, and missing or divergent year tags |
 | **Bitrate audit** | `--auditBitrate` | Reports files falling below a minimum bitrate floor |
 | **ReplayGain audit** | `--auditReplayGain` | Reports per-album ReplayGain coverage (missing, partial, no album gain, OK); Opus R128 gain counts as tagged |
-| **ReplayGain verification** | `--verifyReplayGain` | Re-measures every album read-only with `rsgain` and reports stored gains that disagree with the fresh measurement (with a per-row clip-protection exemption) |
+| **ReplayGain verification** | `--verifyReplayGain` | Re-measures every album read-only with `rsgain` and reports stored gains that disagree with the fresh measurement (with a per-row clip-protection exemption). Reference-aware: R128-tagged files verify at the -23 LUFS baseline their format implies, replaygain_* files at `--target-lufs` |
 | **Stray-file audit** | `--auditStrays` | Reports audio outside the layout's album depth, loose tracks, hidden-dir audio the scanners prune silently, and unrecognized non-audio files in album folders |
 | **Library health score** | `--healthScore` | Per-album score out of 100 aggregating tag completeness, ReplayGain coverage, art, and the bitrate floor, with point-by-point deductions |
 | **Clean (write)** | `--clean` | Consolidates fragmented album folders; opt-in `--normalize-names`/`--normalize-filenames`/`--normalize-tags` passes. Dry-run by default, `--apply` to write |
