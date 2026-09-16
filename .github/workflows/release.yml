@@ -23,6 +23,11 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           sparse-checkout: .
+          # --notes-from-tag needs the ANNOTATED tag object in the clone;
+          # the default shallow fetch carries only the commit, and gh then
+          # falls back to the commit message (v5.6.0's first live fire did
+          # exactly that; repaired by hand afterwards).
+          fetch-depth: 0
       - name: Create the release from the tag message
         env:
           GH_TOKEN: ${{ github.token }}
