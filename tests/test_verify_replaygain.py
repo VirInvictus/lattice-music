@@ -291,7 +291,9 @@ class ConventionReaderTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             p = os.path.join(td, "t.flac")
             shutil.copy(FLAC_SRC, p)
-            self.assertEqual(read_replaygain_values_with_convention(p), (None, None, None))
+            self.assertEqual(
+                read_replaygain_values_with_convention(p), (None, None, None)
+            )
 
     def test_unreadable_file_reports_none_convention(self):
         self.assertEqual(
