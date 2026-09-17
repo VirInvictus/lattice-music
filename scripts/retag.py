@@ -26,7 +26,7 @@ from mutagen.id3 import ID3, TCON, ID3NoHeaderError, ParseID3v1
 from mutagen.mp4 import MP4
 from vir_tui import core as ui
 
-__version__ = "1.1.4"
+__version__ = "1.2.0"
 
 # Only formats whose genre containers are handled below. Raw ADTS .aac is
 # intentionally excluded: it has no standard tag container to write a genre to.
@@ -182,12 +182,112 @@ def apply_genres(filepath: str, new_genres: list[str]) -> bool:
         return False
 
 
+def strip_junk_frames(filepath: str) -> tuple[bool, str]:
+    """One MP3's junk-frame strip: (changed, summary).
+
+    The convert-or-drop companion to `lattice --auditJunkFrames`, which
+    classifies the frames (see lattice.modes.audit). Obsolete v2.3-era
+    frames go through mutagen's update_to_v24 (TYER/TDAT/TIME fold into
+    TDRC, TORY into TDOR, TSIZ dropped, v2.2 three-letter names
+    normalized) -- convert where a v2.4 home exists, drop where none
+    does -- and empty text frames are deleted outright. Nonstandard
+    iTunes-era frames are the audit's report-only class and stay: they
+    are functional, so removing them would lose data. Saves as ID3v2.4.
+    Read-only files and unreadable tags are reported, never raised.
+    """
+    try:
+        from lattice.modes.audit import audit_id3_junk
+
+        findings = audit_id3_junk(filepath)
+        if not findings:
+            return False, ""
+        tags = ID3(filepath, translate=False)
+        if not len(tags):
+            return False, ""
+        before = sorted(tags.keys())
+        tags.update_to_v24()
+        for key in list(tags.keys()):
+            frames = tags.getall(key)
+            values = [
+                str(v) for fr in frames for v in (getattr(fr, "text", None) or [])
+            ]
+            if values and all(not v.strip() or "\x00" in v for v in values):
+                del tags[key]
+        after = sorted(tags.keys())
+        if before == after:
+            # The upgrade normalized nothing this file carried (e.g. only
+            # nonstandard frames): nothing to write, stay a no-op.
+            return False, ""
+        dropped = [k for k in before if k not in after]
+        tags.save(filepath, v2_version=4)
+        parts = [f"{len(dropped)} junk frame(s) removed"]
+        if findings.get("nonstandard"):
+            parts.append(f"{len(findings['nonstandard'])} nonstandard kept")
+        return True, "; ".join(parts)
+    except Exception as e:
+        print(
+            ui.error(f"error: could not strip junk frames from {filepath}: {e}"),
+            file=sys.stderr,
+        )
+        return False, "error"
+
+
+def run_junk_strip(target_dir: str, *, dry_run: bool, log) -> int:
+    """--strip-junk: the junk-frame strip over one album directory,
+    MP3-only (the junk classes are ID3-era). Same loop shape as the
+    genre verb: sorted, shallow, per-file report, idempotent."""
+    updated = failed = unchanged = 0
+    for f in sorted(os.listdir(target_dir)):
+        ext = os.path.splitext(f)[1].lower()
+        if ext != ".mp3":
+            continue
+        filepath = os.path.join(target_dir, f)
+        if dry_run:
+            from lattice.modes.audit import audit_id3_junk
+
+            findings = audit_id3_junk(filepath)
+            if findings:
+                log(f"  would strip {f}: {', '.join(sorted(findings))}")
+                updated += 1
+            else:
+                unchanged += 1
+            continue
+        try:
+            changed, summary = strip_junk_frames(filepath)
+        except Exception as e:
+            print(
+                ui.error(f"error: {filepath}: {e}"),
+                file=sys.stderr,
+            )
+            failed += 1
+            continue
+        if changed:
+            log(f"  stripped {f}: {summary}")
+            updated += 1
+        else:
+            unchanged += 1
+    verb = "would strip" if dry_run else "stripped"
+    tail = f"  {failed} file(s) failed." if failed else ""
+    log(f"  -> {verb} {updated} file(s).  {unchanged} unchanged.{tail}")
+    return 1 if failed else 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Overwrite genre tags on every audio file in a directory."
     )
     parser.add_argument("directory", help="Path to the album directory")
-    parser.add_argument("genres", nargs="+", help="One or more genres to apply")
+    parser.add_argument(
+        "genres",
+        nargs="*",
+        help="One or more genres to apply (omit with --strip-junk)",
+    )
+    parser.add_argument(
+        "--strip-junk",
+        action="store_true",
+        help="Strip junk ID3 frames (obsolete v2.3-era, empty text) instead "
+        "of rewriting genres; takes no genre arguments",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -205,11 +305,18 @@ def main() -> int:
     args = parser.parse_args()
 
     ui.print_header(
-        "retag.py - Universal Genre Rewriter" + (" [DRY RUN]" if args.dry_run else "")
+        "retag.py - "
+        + ("Junk-Frame Stripper" if args.strip_junk else "Universal Genre Rewriter")
+        + (" [DRY RUN]" if args.dry_run else "")
     )
 
     target_dir = args.directory
     genres = args.genres
+
+    if args.strip_junk and genres:
+        parser.error("--strip-junk takes no genre arguments")
+    if not args.strip_junk and not genres:
+        parser.error("the genre verb needs one or more genres (or --strip-junk)")
 
     if not os.path.isdir(target_dir):
         print(ui.error(f"[!] Directory not found: {target_dir}"), file=sys.stderr)
@@ -236,6 +343,10 @@ def main() -> int:
             log_fh.write(f"[{ts}] {prefix}{msg}\n")
 
     try:
+        if args.strip_junk:
+            log(f"{'[DRY RUN] ' if args.dry_run else ''}Junk strip: {target_dir}")
+            return run_junk_strip(target_dir, dry_run=args.dry_run, log=log)
+
         log(f"{'[DRY RUN] ' if args.dry_run else ''}Tagging: {target_dir}")
         log(f"Genres:  {genres}")
 

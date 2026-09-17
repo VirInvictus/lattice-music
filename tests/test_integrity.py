@@ -548,5 +548,125 @@ class MissingDecoderRefusalTests(unittest.TestCase):
             self.assertFalse(out.exists())
 
 
+class WavWmaModeTests(unittest.TestCase):
+    """The WAV and WMA decode scans had zero coverage (P3-5): they are
+    thin _run_decode_scan wrappers, so the tiers are covered upstream;
+    what needs pinning here is the refusal (no decoder = exit 2, never a
+    successful-looking empty scan) and each wrapper's own plumbing (the
+    ffmpeg format name, the report default, the title)."""
+
+    def _tree(self, td: str, ext: str) -> Path:
+        p = Path(td) / "Album" / f"01{ext}"
+        p.parent.mkdir(parents=True)
+        p.write_bytes(b"")
+        return p
+
+    def test_wav_without_ffmpeg_refuses(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._tree(td, ".wav")
+            out = Path(td) / "wav_errors.txt"
+            scanned: list[str] = []
+
+            def scan(path, ffmpeg_path, *, enrich=False):
+                scanned.append(str(path))
+                return {"path": str(path), "tier": TIER_OK, "reason": ""}
+
+            with (
+                mock.patch.object(integrity_mod, "_find_ffmpeg", return_value=None),
+                mock.patch.object(integrity_mod, "_scan_one_file", scan),
+            ):
+                rc = integrity_mod.run_wav_mode(
+                    [td], str(out), 1, None, only_errors=True, verbose=False, quiet=True
+                )
+            self.assertEqual(rc, 2)
+            self.assertEqual(scanned, [])
+            self.assertFalse(out.exists())
+
+    def test_wma_without_ffmpeg_refuses(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._tree(td, ".wma")
+            out = Path(td) / "wma_errors.txt"
+            with mock.patch.object(integrity_mod, "_find_ffmpeg", return_value=None):
+                rc = integrity_mod.run_wma_mode(
+                    [td], str(out), 1, None, only_errors=True, verbose=False, quiet=True
+                )
+            self.assertEqual(rc, 2)
+            self.assertFalse(out.exists())
+
+    def test_wav_scan_writes_report_and_flags_corrupt(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._tree(td, ".wav")
+            out = Path(td) / "wav_errors.txt"
+
+            def scan(path, ffmpeg_path, *, enrich=False):
+                return {
+                    "path": str(path),
+                    "tier": TIER_CORRUPT,
+                    "reason": "decoder exit code 1",
+                }
+
+            with (
+                mock.patch.object(
+                    integrity_mod, "_find_ffmpeg", return_value="/usr/bin/ffmpeg"
+                ),
+                mock.patch.object(integrity_mod, "_scan_one_file", scan),
+            ):
+                rc = integrity_mod.run_wav_mode(
+                    [td], str(out), 1, None, only_errors=True, verbose=False, quiet=True
+                )
+            self.assertEqual(rc, 1)
+            body = out.read_text()
+            self.assertIn("WAV INTEGRITY REPORT", body)
+            self.assertIn("01.wav", body)
+
+    def test_wma_scan_writes_report_and_flags_corrupt(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._tree(td, ".wma")
+            out = Path(td) / "wma_errors.txt"
+
+            def scan(path, ffmpeg_path, *, enrich=False):
+                return {
+                    "path": str(path),
+                    "tier": TIER_CORRUPT,
+                    "reason": "decoder exit code 1",
+                }
+
+            with (
+                mock.patch.object(
+                    integrity_mod, "_find_ffmpeg", return_value="/usr/bin/ffmpeg"
+                ),
+                mock.patch.object(integrity_mod, "_scan_one_file", scan),
+            ):
+                rc = integrity_mod.run_wma_mode(
+                    [td], str(out), 1, None, only_errors=True, verbose=False, quiet=True
+                )
+            self.assertEqual(rc, 1)
+            body = out.read_text()
+            self.assertIn("WMA INTEGRITY REPORT", body)
+            self.assertIn("01.wma", body)
+
+    def test_wav_scan_all_clean_is_exit_zero(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._tree(td, ".wav")
+            out = Path(td) / "wav_errors.txt"
+
+            def scan(path, ffmpeg_path, *, enrich=False):
+                return {"path": str(path), "tier": TIER_OK, "reason": ""}
+
+            with (
+                mock.patch.object(
+                    integrity_mod, "_find_ffmpeg", return_value="/usr/bin/ffmpeg"
+                ),
+                mock.patch.object(integrity_mod, "_scan_one_file", scan),
+            ):
+                rc = integrity_mod.run_wav_mode(
+                    [td], str(out), 1, None, only_errors=True, verbose=False, quiet=True
+                )
+            # The report always writes (the summary is the record); the
+            # exit code is what a gate keys on.
+            self.assertEqual(rc, 0)
+            self.assertIn("Corrupt: 0", out.read_text())
+
+
 if __name__ == "__main__":
     unittest.main()

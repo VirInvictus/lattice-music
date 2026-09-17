@@ -14,7 +14,6 @@ from vir_tui import (
     tui_select,
 )
 
-from lattice import utils
 from lattice.config import (
     DEFAULT_AI_LIBRARY_OUTPUT,
     DEFAULT_PLAYLIST_OUTPUT,
@@ -252,16 +251,13 @@ def _select_library() -> tuple | None:
 
 def interactive_menu() -> int:
     try:
-        with interactive_session() as scr:
-            # IN_TUI switches modes from captured tqdm bars (invisible until
-            # the pager opens) to vir_tui's curses progress box, which draws
-            # into the session's own screen instead of starting one.
-            utils.IN_TUI = scr is not None
+        with interactive_session():
+            # Progress and color dispatch read vir_tui's own session
+            # lifecycle (utils.in_session()), so no host-side flag to set:
+            # the curses progress box draws into the session's screen.
             return _menu_session()
     except KeyboardInterrupt:
         return 130
-    finally:
-        utils.IN_TUI = False
 
 
 def _integrity_prompts() -> tuple[int, bool, bool]:

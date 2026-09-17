@@ -1,5 +1,12 @@
 # lattice-music Patch Notes
 
+## 2026-09-17 (no version bump: refactor + tests + a companion script)
+
+- **The `utils.IN_TUI` flag retired** onto vir_tui's own session lifecycle: `utils.in_session()` reads `vir_tui.session_screen()` (screen ownership; the work order's other candidate `tui_active()` is true on any tty, which would have disabled CLI color and swapped tqdm for curses boxes on plain terminal runs), tui.py sets nothing, and stats.py's four print gates read the same predicate. The wiring tests now publish a fake session screen instead of setting the flag.
+- **testWAV/testWMA coverage landed** (they had zero): missing-decoder refusal for both (no decoder = exit 2, never a successful-looking empty scan), per-mode report plumbing (title, extension), and the always-writes-report contract with the exit code keyed on corruption.
+- **`retag.py --strip-junk`** (script-only, retag 1.2.0; the strip half of B.8's audit/strip split, seeded by the real finding of three MP3s carrying five obsolete v2.3 frames each): convert-or-drop of the audit's obsolete class through mutagen's `update_to_v24` (TYER/TDAT/TIME fold into TDRC; v2.2 three-letter names normalize), empty text frames deleted, nonstandard iTunes-era frames left alone (functional; report-only class), saves as ID3v2.4. Apply-by-default like the script it lives in, `--dry-run` honored, idempotent, refuses genre arguments. Detection reuses `lattice.modes.audit.audit_id3_junk`, so the classifier cannot drift from the strip.
+- Suite: 641 -> 651 tests.
+
 ## v5.6.0 (2026-09-16)
 
 ### `--verifyReplayGain` is reference-aware: R128-tagged files no longer false-positive at the default target

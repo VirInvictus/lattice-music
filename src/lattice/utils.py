@@ -21,14 +21,19 @@ try:
 except ImportError:
     HAVE_TQDM = False
 
-IN_TUI = False
+
+def in_session() -> bool:
+    """True while a vir_tui interactive session owns the terminal. The
+    retired hand-rolled IN_TUI flag: vir_tui's own session lifecycle is
+    the single source (floor 2.5.0 ships session_screen())."""
+    return vir_tui.session_screen() is not None
 
 
 def _use_color() -> bool:
     """ANSI color only for an interactive terminal: never in the TUI, never when
     piped or redirected (so reports/pipes stay clean), never when NO_COLOR is
     set. Evaluated per call because the TUI swaps stdout at runtime."""
-    return not IN_TUI and "NO_COLOR" not in os.environ and sys.stdout.isatty()
+    return not in_session() and "NO_COLOR" not in os.environ and sys.stdout.isatty()
 
 
 def color(text: str, code: str) -> str:
@@ -306,7 +311,7 @@ class _FallbackProgress:
 
 def _make_pbar(total: int, desc: str, quiet: bool):
     """Create a progress bar — tqdm if available, else a simple fallback."""
-    if IN_TUI:
+    if in_session():
         return vir_tui.progress_box(total, desc)
     if HAVE_TQDM and not quiet:
         return tqdm(total=total, unit="file", desc=desc, dynamic_ncols=True)

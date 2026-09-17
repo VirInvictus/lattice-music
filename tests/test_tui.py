@@ -1,6 +1,6 @@
 """Tests for interactive_menu's wiring through vir-tui 2.2.0's
-interactive_session(): utils.IN_TUI selects the vir_tui progress box over
-captured tqdm output, and the session screen lifecycle is vir-tui's.
+interactive_session(): the session's published screen (utils.in_session)
+selects the vir_tui progress box over captured tqdm output.
 Also the cli/tui kwargs-parity pins: the house rule is that both faces
 build the same kwargs and call the same modes/* functions directly, and
 the c6575dc migration silently broke exactly that (the dead smart
@@ -8,6 +8,8 @@ playlist item, the dropped layout kwarg and toggles, the roots[0]
 passthrough); these tests fail on any recurrence."""
 
 import inspect
+
+import vir_tui
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -36,27 +38,32 @@ from lattice.modes.stats import run_stats
 
 
 class _FakeSession:
-    """Stands in for vir_tui.interactive_session in wiring tests."""
+    """Mimics the real lifecycle's screen ownership: a curses session
+    publishes the screen into vir_tui while open, a text session leaves
+    it None."""
 
     def __init__(self, screen):
         self.screen = screen
+        self._saved = None
 
     def __enter__(self):
+        if self.screen is not None:
+            self._saved = vir_tui.menu._SCREEN
+            vir_tui.menu._SCREEN = self.screen
         return self.screen
 
     def __exit__(self, *exc):
+        if self.screen is not None:
+            vir_tui.menu._SCREEN = self._saved
         return False
 
 
 class InteractiveMenuWiringTests(unittest.TestCase):
-    def tearDown(self):
-        utils.IN_TUI = False
-
     def _run_menu(self, screen):
         seen = {}
 
         def body():
-            seen["in_tui"] = utils.IN_TUI
+            seen["in_session"] = utils.in_session()
             return 0
 
         with (
@@ -72,13 +79,13 @@ class InteractiveMenuWiringTests(unittest.TestCase):
         sentinel = object()
         rc, seen = self._run_menu(sentinel)
         self.assertEqual(rc, 0)
-        self.assertTrue(seen["in_tui"])
-        self.assertFalse(utils.IN_TUI)
+        self.assertTrue(seen["in_session"])
+        self.assertFalse(utils.in_session())
 
     def test_no_curses_keeps_cli_progress_semantics(self):
         _rc, seen = self._run_menu(None)
-        self.assertFalse(seen["in_tui"])
-        self.assertFalse(utils.IN_TUI)
+        self.assertFalse(seen["in_session"])
+        self.assertFalse(utils.in_session())
 
 
 class _PromptScript:

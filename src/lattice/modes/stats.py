@@ -69,11 +69,11 @@ def run_stats(
 
     total_files = count_audio_files(roots)
     if total_files == 0:
-        if not quiet and not utils.IN_TUI:
+        if not quiet and not utils.in_session():
             print(f"No audio files found under: {', '.join(roots)}")
         return ""
 
-    if not quiet and not utils.IN_TUI:
+    if not quiet and not utils.in_session():
         print(f"Scanning {total_files} files under: {', '.join(roots)}")
 
     pbar = _make_pbar(total_files, "Gathering stats", quiet)
@@ -251,10 +251,10 @@ def run_stats(
         os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
         with open(out_path, "w", encoding="utf-8") as out_file:
             out_file.write(report)
-        if not quiet and not utils.IN_TUI:
+        if not quiet and not utils.in_session():
             print(f"\nStatistics written to: {out_path}")
     else:
-        if not quiet and not utils.IN_TUI:
+        if not quiet and not utils.in_session():
             print()
             print(report)
 

@@ -295,3 +295,79 @@ class NoopGuardTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StripJunkTests(unittest.TestCase):
+    """--strip-junk: the convert-or-drop companion to --auditJunkFrames
+    (P2-2, seeded by the real finding: three MP3s carrying five obsolete
+    v2.3 frames each). The fixture MP3 is clean, so the junk frames are
+    seeded raw (translate=False, exactly how the audit sees them)."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.path = os.path.join(self._tmp.name, "track.mp3")
+        shutil.copy(MP3_SRC, self.path)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _seed(self):
+        from mutagen.id3 import TALB, TDRC, TYER, TPE1
+
+        tags = ID3(self.path, translate=False)
+        tags.add(TYER(encoding=3, text="2000"))
+        tags.add(TPE1(encoding=3, text="Artist"))
+        tags.add(TALB(encoding=3, text="Album"))
+        tags.add(TDRC(encoding=3, text="2000-01-01"))
+        tags.save(self.path, v2_version=3)
+
+    def _findings(self):
+        from lattice.modes.audit import audit_id3_junk
+
+        return audit_id3_junk(self.path)
+
+    def test_clean_fixture_is_a_noop(self):
+        changed, summary = retag.strip_junk_frames(self.path)
+        self.assertFalse(changed)
+        self.assertEqual(summary, "")
+
+    def test_obsolete_frame_is_converted_and_saved(self):
+        self._seed()
+        self.assertIsNotNone(self._findings())  # the seed is really junky
+        changed, summary = retag.strip_junk_frames(self.path)
+        self.assertTrue(changed)
+        self.assertIn("junk frame(s) removed", summary)
+        after = ID3(self.path, translate=False)
+        self.assertNotIn("TYER", after)  # folded into TDRC by update_to_v24
+        self.assertEqual(after["TPE1"].text, ["Artist"])  # real frames survive
+
+    def test_strip_is_idempotent(self):
+        self._seed()
+        self.assertTrue(retag.strip_junk_frames(self.path)[0])
+        changed, _ = retag.strip_junk_frames(self.path)
+        self.assertFalse(changed)
+        self.assertIsNone(self._findings())
+
+    def _run_main(self, argv):
+        import contextlib
+        import io
+
+        old = sys.argv
+        sys.argv = ["retag.py", *argv]
+        out, err = io.StringIO(), io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                rc = retag.main()
+        finally:
+            sys.argv = old
+        return rc, out.getvalue(), err.getvalue()
+
+    def test_main_strip_junk_refuses_genre_arguments(self):
+        with self.assertRaises(SystemExit):
+            self._run_main([os.path.dirname(self.path), "--strip-junk", "Some Genre"])
+
+    def test_main_strip_junk_runs_and_exits_zero(self):
+        self._seed()
+        rc, _out, _err = self._run_main([os.path.dirname(self.path), "--strip-junk"])
+        self.assertEqual(rc, 0)
+        self.assertIsNone(self._findings())

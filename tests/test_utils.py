@@ -159,9 +159,7 @@ class ProgressBoxSessionTests(unittest.TestCase):
         scr = mock.Mock()
         scr.getmaxyx.return_value = (24, 80)
         saved_screen = vir_tui.menu._SCREEN
-        saved_in_tui = utils.IN_TUI
         vir_tui.menu._SCREEN = scr
-        utils.IN_TUI = True
         try:
             with mock.patch("curses.color_pair", return_value=0):
                 bar = utils._make_pbar(10, "Scanning", False)
@@ -171,7 +169,6 @@ class ProgressBoxSessionTests(unittest.TestCase):
             self.assertTrue(scr.refresh.called)
         finally:
             vir_tui.menu._SCREEN = saved_screen
-            utils.IN_TUI = saved_in_tui
 
 
 class ResetTerminalSessionGuardTests(unittest.TestCase):
@@ -301,24 +298,27 @@ class PbarTests(unittest.TestCase):
     """_make_pbar's branch selection and the curses bar's headless safety."""
 
     def tearDown(self):
-        lattice_utils.IN_TUI = False
-
-    def test_in_tui_selects_vir_tui_progress_box(self):
         import vir_tui
 
-        lattice_utils.IN_TUI = True
+        vir_tui.menu._SCREEN = None
+
+    def test_in_session_selects_vir_tui_progress_box(self):
+        import vir_tui
+
+        vir_tui.menu._SCREEN = mock.Mock()
         pbar = lattice_utils._make_pbar(10, "Testing", False)
         self.assertIsInstance(pbar, vir_tui.ProgressBox)
 
     def test_cli_quiet_selects_fallback(self):
-        lattice_utils.IN_TUI = False
         pbar = lattice_utils._make_pbar(10, "Testing", quiet=True)
         self.assertIsInstance(pbar, lattice_utils._FallbackProgress)
 
     def test_tuipbar_counts_survive_headless_draw(self):
         # draw() swallows curses failures (no tty under the test runner);
         # counting and close() must work regardless.
-        lattice_utils.IN_TUI = True
+        import vir_tui
+
+        vir_tui.menu._SCREEN = mock.Mock()
         pbar = lattice_utils._make_pbar(3, "Testing", False)
         for _ in range(3):
             pbar.update(1)
