@@ -72,11 +72,26 @@ class TrackResult:
 
 
 def _fetch_json(url: str):
-    """GET `url` and decode the JSON body. Raises urllib.error.HTTPError on
-    non-2xx (callers distinguish 404); patched out in the test suite."""
-    req = urllib.request.Request(url, headers={"User-Agent": _UA})
-    with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    """GET `url` and decode the JSON body, retrying transient failures
+    (429/5xx, connection resets) with a short backoff — LRCLIB returns
+    Service Unavailable under sustained batch load, and without this a
+    single 503 burned the track as an error. 404 propagates immediately:
+    that is the exact lookup's no-match signal, not a failure. Patched out
+    in the test suite."""
+    last: Exception = RuntimeError("unreachable")
+    for attempt in range(3):
+        req = urllib.request.Request(url, headers={"User-Agent": _UA})
+        try:
+            with urllib.request.urlopen(req, timeout=_TIMEOUT_S) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            if e.code == 404 or e.code not in (429, 500, 502, 503, 504):
+                raise
+            last = e
+        except urllib.error.URLError as e:
+            last = e
+        time.sleep(1.5 * (attempt + 1))
+    raise last
 
 
 def _lrclib_exact(artist, title, album, duration_s, fetch):

@@ -4,6 +4,7 @@ stray-audit pin that keeps --auditStrays from flagging our own sidecars."""
 
 import contextlib
 import io
+import json
 import shutil
 import tempfile
 import unittest
@@ -14,6 +15,7 @@ from unittest import mock
 from mutagen.id3 import ID3, TALB, TIT2, TPE1
 
 from lattice import cli
+from lattice.modes import lyrics
 from lattice.modes.audit import SIDECAR_IGNORE_EXT
 from lattice.modes.lyrics import run_lyrics
 from lattice.tags import get_all_tags
@@ -210,6 +212,68 @@ class LyricsModeTests(unittest.TestCase):
         # Cross-mode contract: --auditStrays must not flag the sidecars this
         # mode writes as import junk.
         self.assertIn(".lrc", SIDECAR_IGNORE_EXT)
+
+
+class FetchRetryTests(unittest.TestCase):
+    """The fetcher retries transient 429/5xx/connection failures with
+    backoff (LRCLIB threw real Service Unavailables during the first master
+    bake) and never retries a 404 — that is a no-match, not a failure."""
+
+    class _FakeResp:
+        def __init__(self, body):
+            self._body = body
+
+        def read(self):
+            return self._body.encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def test_retries_503_then_succeeds(self):
+        body = json.dumps({"syncedLyrics": "[00:01.00]hi"})
+        responses = [
+            urllib.error.HTTPError("u", 503, "Service Unavailable", None, None),
+            self._FakeResp(body),
+        ]
+        with (
+            mock.patch("lattice.modes.lyrics.time.sleep"),
+            mock.patch(
+                "lattice.modes.lyrics.urllib.request.urlopen",
+                side_effect=responses,
+            ),
+        ):
+            self.assertEqual(
+                lyrics._fetch_json("https://lrclib.net/api/get?x=1"),
+                {"syncedLyrics": "[00:01.00]hi"},
+            )
+
+    def test_404_propagates_without_retry(self):
+        boom = urllib.error.HTTPError("u", 404, "Not Found", None, None)
+        with (
+            mock.patch("lattice.modes.lyrics.time.sleep") as snooze,
+            mock.patch(
+                "lattice.modes.lyrics.urllib.request.urlopen", side_effect=boom
+            ) as urlopen,
+        ):
+            with self.assertRaises(urllib.error.HTTPError):
+                lyrics._fetch_json("https://lrclib.net/api/get?x=1")
+        self.assertEqual(urlopen.call_count, 1)
+        self.assertFalse(snooze.called)
+
+    def test_gives_up_after_three_attempts(self):
+        boom = urllib.error.HTTPError("u", 503, "Service Unavailable", None, None)
+        with (
+            mock.patch("lattice.modes.lyrics.time.sleep"),
+            mock.patch(
+                "lattice.modes.lyrics.urllib.request.urlopen", side_effect=boom
+            ) as urlopen,
+        ):
+            with self.assertRaises(urllib.error.HTTPError):
+                lyrics._fetch_json("https://lrclib.net/api/get?x=1")
+        self.assertEqual(urlopen.call_count, 3)
 
 
 class LyricsDispatchTests(unittest.TestCase):
