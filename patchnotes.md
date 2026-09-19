@@ -1,5 +1,14 @@
 # lattice-music Patch Notes
 
+## v5.7.0 (2026-09-19)
+
+**Contract amendment:** the package now touches the network in exactly one place. spec.md §1 carries the exception (the open, unauthenticated, GET-only LRCLIB API as the one sanctioned external lookup), §3 gains the `--lyrics` row, and §5's not-a-tagger/not-a-sync-tool wording names the mode, its `.lrc` sidecar output, and the fetch-not-sync carve-out. CLAUDE.md and the README callouts now say three write modes.
+
+- **New write mode: `--lyrics`** (the recorded lyrics candidate, unparked): walks one library root, matches every track against LRCLIB (exact `/api/get` by artist+title+album+duration, then `/api/search` with a ±2s duration-window pick), and on `--apply` writes the synced lyrics as a same-basename `.lrc` sidecar beside each audio file. Players and servers that read sidecar lyrics (Jellyfin 10.9+) pick them up with the files, so a library that clones to several machines takes its lyrics along instead of parking them in one server's database. Instrumental and plain-only matches are reported, never written; tracks already carrying a sidecar are skipped unless `--lyrics-force`. Dry-run is the default and performs the read-only lookups so the preview's hit/miss counts are real; requests are serial and paced (`--lyrics-sleep`, default 0.5s, LRCLIB fair-use etiquette); every written sidecar lands in an append-only `<root>/lyrics.log`. Wired into the CLI and the TUI's Maintenance section, like the other write modes.
+- **`.lrc` joined `--auditStrays`' recognized-sidecar set**, so the lyrics mode's own output is not flagged as import junk by the stray audit.
+- **The suite grew its first network seam:** test_lyrics.py injects a fake LRCLIB fetcher (hand-built JSON, no HTTP in the suite), covering dry-run safety, apply+log, skip-existing/force, instrumental and plain-only handling, the duration-windowed search fallback, per-file error isolation, and the multi-root/usage guards.
+- Suite: 651 -> 668 tests.
+
 ## 2026-09-17 (no version bump: refactor + tests + a companion script)
 
 - **The `utils.IN_TUI` flag retired** onto vir_tui's own session lifecycle: `utils.in_session()` reads `vir_tui.session_screen()` (screen ownership; the work order's other candidate `tui_active()` is true on any tty, which would have disabled CLI color and swapped tqdm for curses boxes on plain terminal runs), tui.py sets nothing, and stats.py's four print gates read the same predicate. The wiring tests now publish a fake session screen instead of setting the flag.

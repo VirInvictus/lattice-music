@@ -15,7 +15,7 @@
 
 A CLI/TUI toolkit for music collectors who manage their own libraries. lattice-music handles library visualization, integrity verification, cover art extraction, and metadata auditing, built on `mutagen` and `tqdm`, with the shared `vir-tui` library powering its terminal UI and `flac` and `ffmpeg` shelled out for integrity checks.
 
-> **Read-only by default.** lattice-music reads tags and decodes audio, and it writes only reports, playlists, and extracted cover art. The two exceptions are the explicit write modes: `--clean` (consolidate fragmented album folders, optionally normalize names and tags) and `--apestrip` (remove stray APEv2 tags from MP3s). Both are dry-run by default, write only on `--apply`, and log every change. The optional companion scripts in `scripts/` also **do** modify files (tags, rating bytes, folder layout) and must be used with caution. See [Write modes](#write-modes) and [Companion scripts](#companion-scripts).
+> **Read-only by default.** lattice-music reads tags and decodes audio, and it writes only reports, playlists, extracted cover art, and `.lrc` lyrics sidecars. The three exceptions are the explicit write modes: `--clean` (consolidate fragmented album folders, optionally normalize names and tags), `--apestrip` (remove stray APEv2 tags from MP3s), and `--lyrics` (fetch synced lyrics from the LRCLIB API into `.lrc` sidecars beside your audio). All are dry-run by default, write only on `--apply`, and log every change. The optional companion scripts in `scripts/` also **do** modify files (tags, rating bytes, folder layout) and must be used with caution. See [Write modes](#write-modes) and [Companion scripts](#companion-scripts).
 
 > **Note:** This is actively maintained software: bug fixes land as they come, and the audit-mode family keeps growing (see the Features table). It is thoroughly tested and known to be fully functional on the primary development environment: **Fedora Linux 44 (Workstation Edition)** on **Python 3.14**, with `flac` and `ffmpeg` from the Fedora repositories. While it is pure Python and should be cross-platform, this specific setup is the only officially tested environment.
 
@@ -67,6 +67,7 @@ Modern music players often hide your library behind proprietary databases. latti
 | **Library health score** | `--healthScore` | Per-album score out of 100 aggregating tag completeness, ReplayGain coverage, art, and the bitrate floor, with point-by-point deductions |
 | **Clean (write)** | `--clean` | Consolidates fragmented album folders; opt-in `--normalize-names`/`--normalize-filenames`/`--normalize-tags` passes. Dry-run by default, `--apply` to write |
 | **APEv2 strip (write)** | `--apestrip` | Removes stray APEv2 tags from MP3s (`--keep-metadata` to migrate first, `--repair-malformed` for broken tags). Dry-run by default, `--apply` to write |
+| **Lyrics fetch (write)** | `--lyrics` | Fetches synced lyrics from the LRCLIB API into same-basename `.lrc` sidecars (`--lyrics-force` to overwrite, `--lyrics-sleep` to pace requests). Dry-run by default, `--apply` to write |
 | **Snapshot** | `--snapshot` | Writes a per-file library snapshot TSV (path, size, mtime, key tags, ReplayGain presence) for before/after evidence |
 | **Snapshot diff** | `--diff SNAPSHOT` | Replays a snapshot against the current tree: moved, retagged, resized, added, and removed files |
 | **Version** | `--version` | Prints version and exits |
@@ -223,10 +224,11 @@ lattice --apestrip ~/Music --apply
 
 ## Write modes
 
-Two modes write to your library, and both are **dry-run by default**: without `--apply` they only preview, and every change is recorded to an append-only timestamped log.
+Three modes write to your library, and all are **dry-run by default**: without `--apply` they only preview, and every change is recorded to an append-only timestamped log.
 
 - **`lattice --clean`** consolidates fragmented album folders (the same job as [`cleaner.py`](#cleanerpy)), then applies the opt-in passes you name: `--normalize-names` (rename folders at any depth), `--normalize-filenames` (rename track files), `--normalize-tags` (library-wide typographic tag normalization; on MP3s it writes ID3v2.3 plus a refreshed ID3v1), or `--all` for all three. On a genre-first library, pass `--layout '{genre}/{artist}/{album}'` so the tag pass reads the artist level correctly. The preview predicts the real run exactly; the log defaults to `<root>/cleanup.log`.
 - **`lattice --apestrip`** strips stray APEv2 tags from MP3s (the same job as [`apestrip.py`](#apestrippy)). `--keep-metadata` migrates sole-source APE fields into ID3 first (genre is never migrated; ratings are reported, never written), and `--repair-malformed` also repairs malformed APE tags via verified atomic byte surgery. A real run prints the worklist and asks for confirmation (auto-skipped when stdin is not a TTY); the log defaults to `<root>/apestrip.log`.
+- **`lattice --lyrics`** fetches synced lyrics from the open [LRCLIB](https://lrclib.net) API and writes them as same-basename `.lrc` sidecars beside your audio files — players and servers that read sidecar lyrics (Jellyfin 10.9+ among them) then carry the lyrics with the files, so a library that syncs to several machines takes its lyrics along. Matching is artist + title (+ album and duration) with a duration-windowed search fallback; instrumental and plain-only matches are reported, never written; tracks with a sidecar are skipped unless `--lyrics-force`. The preview runs the real lookups (read-only) so its hit/miss counts are honest; requests are paced with `--lyrics-sleep`; the log defaults to `<root>/lyrics.log`.
 
 ```bash
 # Preview, then merge fragmented folders and run every normalization pass
@@ -236,9 +238,13 @@ lattice --clean ~/Music --apply --all
 # Preview, then strip APEv2 tags
 lattice --apestrip ~/Music
 lattice --apestrip ~/Music --apply --keep-metadata
+
+# Preview the LRCLIB lookups, then write the .lrc sidecars
+lattice --lyrics ~/Music
+lattice --lyrics ~/Music --apply
 ```
 
-The TUI exposes both under its Maintenance section, behind yes/no confirms (answering No to the apply question runs the preview instead). The `scripts/cleaner.py` and `scripts/apestrip.py` launchers keep their historical apply-by-default behavior for aliases and cron; see [Companion scripts](#companion-scripts).
+The TUI exposes all three under its Maintenance section, behind yes/no confirms (answering No to the apply question runs the preview instead). The `scripts/cleaner.py` and `scripts/apestrip.py` launchers keep their historical apply-by-default behavior for aliases and cron; see [Companion scripts](#companion-scripts).
 
 ## AI library export
 
@@ -271,7 +277,7 @@ Produces `Alternative_Rock_Library.txt`, `East_Coast_Rap_Library.txt`, and so on
 lattice --duplicates --root ~/Music --root /mnt/usb/Albums --output duplicates.txt
 ```
 
-Every mode aggregates across the roots: combined statistics, one merged library tree, genre wings that span both, and so on. A path passed twice is de-duped. The exception is the two write modes: `--clean` and `--apestrip` operate on exactly one tree and refuse a multi-root list. The payoff for `--duplicates` is cross-library detection: an album that lives in both libraries is grouped as a single exact duplicate, and each entry is prefixed by its root's basename (`Music/…` vs `Albums/…`) so you can tell the copies apart.
+Every mode aggregates across the roots: combined statistics, one merged library tree, genre wings that span both, and so on. A path passed twice is de-duped. The exception is the three write modes: `--clean`, `--apestrip`, and `--lyrics` operate on exactly one tree and refuse a multi-root list. The payoff for `--duplicates` is cross-library detection: an album that lives in both libraries is grouped as a single exact duplicate, and each entry is prefixed by its root's basename (`Music/…` vs `Albums/…`) so you can tell the copies apart.
 
 To make several roots permanent, add a `library_roots` array to `~/.config/lattice/config.json`:
 

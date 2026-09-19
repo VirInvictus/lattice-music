@@ -522,6 +522,11 @@ class CliTuiKwargsParityTests(unittest.TestCase):
             main_menu=True,
         )
 
+    # NOTE: clean/apestrip/lyrics have no parity cases on purpose — the TUI
+    # gate passes assume_yes=True where the CLI face keeps its own TTY
+    # prompt, so the kwargs legitimately differ on that one flag. Their
+    # wiring is pinned structurally in test_write_modes.py instead.
+
 
 class RootPassthroughTests(unittest.TestCase):
     """The multi-root contract: a library_roots config reaches the modes as

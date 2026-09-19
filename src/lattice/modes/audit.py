@@ -1884,6 +1884,7 @@ def run_junk_frame_audit(
 # outside these sets are reported as likely import junk.
 SIDECAR_IGNORE_EXT = {
     ".log",  # cleaner/apestrip/rerate/replaygain/genre_tidy/slipcover logs
+    ".lrc",  # synced-lyrics sidecars (lattice --lyrics, LRCGET, foobar2000)
     ".m3u",
     ".m3u8",
     ".pls",

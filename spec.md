@@ -1,6 +1,6 @@
 # lattice-music Application Specification
 
-**Version:** 5.5.0  
+**Version:** 5.7.0  
 **Language:** Python 3.14+  
 **Dependencies:** `mutagen`, `tqdm`, `vir-tui`  
 **License:** MIT
@@ -12,7 +12,9 @@
 lattice-music is a CLI toolkit for music collectors who manage their own libraries
 outside of any player's database. It reads tags directly via mutagen, and is
 player-agnostic by design. Every operation works from the filesystem and
-embedded metadata, not from a proprietary database or cloud service.
+embedded metadata, not from a proprietary database or cloud service. The one
+sanctioned external lookup is `--lyrics`, which queries the open LRCLIB API
+(unauthenticated, GET-only) for lyrics to files already in the library.
 
 Design philosophy: **one toolkit, every library maintenance task.** The standard collector
 layout (`~/Music/ARTIST/ALBUM/01 - Track.flac`) is the default assumption. It is
@@ -128,6 +130,7 @@ supplies default roots; the first-run prompt persists only the single
 | Snapshot diff | `--diff SNAPSHOT` | Replay a snapshot against the current tree: MOVED (size+mtime preserved at a new path), RETAGGED (per-field old -> new), RESIZED, ADDED, REMOVED |
 | Clean | `--clean` | Consolidate fragmented album folders (quote/dash/case variants) with opt-in name (`--normalize-names`, `--normalize-filenames`) and tag (`--normalize-tags`) normalization passes; write mode, dry-run by default |
 | APEv2 strip | `--apestrip` | Remove stray APEv2 tags from MP3s (`--keep-metadata` to migrate sole-source fields first, `--repair-malformed` for tags mutagen cannot parse); write mode, dry-run by default |
+| Lyrics fetch | `--lyrics` | Match each track against the LRCLIB API and write its synced lyrics as a same-basename `.lrc` sidecar beside the audio (`--lyrics-force` to overwrite, `--lyrics-sleep` for request pacing); instrumental and plain-only matches are reported, never written; write mode, dry-run by default |
 
 ---
 
@@ -170,10 +173,14 @@ remainder, still producing the full report. A completed scan deletes the state.
   `--clean`/`--apestrip` write modes (opt-in via `--apply`, logged, dry-run by
   default). Every other mode writes no tags and no audio: its only outputs are
   the reports and playlists it writes outside the library, cover art extracted
-  by `--extractArt`, and the transient `--resume` state file beside an
-  integrity report.
+  by `--extractArt`, the `.lrc` sidecar files `--lyrics` writes beside audio
+  files when applied (audio files themselves are never touched by it), and the
+  transient `--resume` state file beside an integrity report.
 - **Not a database.** It walks the filesystem every time; there is no index.
-- **Not a sync tool.** It does not interact with cloud services or devices.
+- **Not a sync tool.** It does not interact with cloud services or devices. The
+  single exception is `--lyrics`' read-only lookup against the open LRCLIB API:
+  it fetches lyrics for files already in the library and pushes nothing
+  anywhere.
 
 ## 6. Companion Scripts
 

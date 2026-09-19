@@ -49,6 +49,7 @@ from lattice.modes.integrity import (
     run_wav_mode,
     run_wma_mode,
 )
+from lattice.modes.lyrics import run_lyrics
 from lattice.modes.library import (
     diff_snapshot,
     write_ai_library,
@@ -136,6 +137,7 @@ _MAIN_SECTIONS = [
         [
             "Consolidate fragmented albums (clean)",
             "Strip APEv2 tags (apestrip)",
+            "Fetch synced lyrics (lyrics)",
         ],
     ),
     (
@@ -207,6 +209,8 @@ _MAIN_ALIASES: dict[str, tuple | None] = {
     "clean": (4, 0),
     "apestrip": (4, 1),
     "ape": (4, 1),
+    "lyrics": (4, 2),
+    "lrc": (4, 2),
     "settings": (5, 0),
     "config": (5, 0),
     "c": (5, 0),
@@ -779,6 +783,28 @@ def _menu_session() -> int:
                     dry_run=not apply,
                     keep_metadata=keep,
                     repair_malformed=repair,
+                    assume_yes=True,
+                    quiet=False,
+                )
+
+            elif result == (4, 2):
+                # Write mode: same gate pattern as apestrip — the ask_yn
+                # confirm decides dry-run vs apply, and the mode runs with
+                # assume_yes so its own prompt stays out of the capture.
+                if len(roots) != 1:
+                    notify(
+                        "The lyrics mode needs exactly one library root; "
+                        f"{len(roots)} are configured (library_roots)."
+                    )
+                    continue
+                force = ask_yn("Overwrite existing .lrc sidecars? (y/N)")
+                apply = ask_yn("APPLY fetch now? No = dry-run preview only (y/N)")
+                run_with_capture(
+                    "Fetch synced lyrics (lyrics)",
+                    run_lyrics,
+                    roots[0],
+                    dry_run=not apply,
+                    force=force,
                     assume_yes=True,
                     quiet=False,
                 )

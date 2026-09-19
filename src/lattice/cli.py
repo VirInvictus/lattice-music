@@ -57,6 +57,7 @@ from lattice.modes.integrity import (
     run_wav_mode,
     run_wma_mode,
 )
+from lattice.modes.lyrics import run_lyrics
 from lattice.modes.library import (
     diff_snapshot,
     write_ai_library,
@@ -227,6 +228,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Strip stray APEv2 tags from MP3s (write mode: dry-run by "
         "default, --apply to write)",
     )
+    group.add_argument(
+        "--lyrics",
+        action="store_true",
+        help="Fetch synced lyrics from LRCLIB into .lrc sidecars (write "
+        "mode: dry-run by default, --apply to write)",
+    )
 
     p.add_argument(
         "--root",
@@ -303,12 +310,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--dry-run",
         dest="dry_run",
         action="store_true",
-        help="Preview changes without writing (extractArt, clean, apestrip)",
+        help="Preview changes without writing (extractArt, clean, apestrip, lyrics)",
     )
     p.add_argument(
         "--apply",
         action="store_true",
-        help="Write for real (clean, apestrip); without it these modes only preview",
+        help="Write for real (clean, apestrip, lyrics); without it these modes "
+        "only preview",
     )
     p.add_argument(
         "--normalize-names",
@@ -346,6 +354,18 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="--apestrip: also repair malformed APE tags mutagen cannot parse, "
         "by excising the tag bytes directly (verified + atomic)",
+    )
+    p.add_argument(
+        "--lyrics-force",
+        action="store_true",
+        help="--lyrics: re-fetch and overwrite existing .lrc sidecars (default: "
+        "tracks with a sidecar are skipped)",
+    )
+    p.add_argument(
+        "--lyrics-sleep",
+        type=float,
+        default=0.5,
+        help="--lyrics: seconds to sleep between LRCLIB requests (default: 0.5)",
     )
     p.add_argument(
         "--resume",
@@ -618,7 +638,7 @@ def main(argv: list[str] | None = None) -> int:
 
         # The write modes operate on exactly one tree (like the companion
         # scripts they replace), not on an aggregated root list.
-        if args.clean or args.apestrip:
+        if args.clean or args.apestrip or args.lyrics:
             if len(root) != 1:
                 print(
                     "error: this write mode needs exactly one library root; "
@@ -637,11 +657,19 @@ def main(argv: list[str] | None = None) -> int:
                     layout=args.layout,
                     quiet=args.quiet,
                 )
-            return run_apestrip(
+            if args.apestrip:
+                return run_apestrip(
+                    root[0],
+                    dry_run=dry_run,
+                    keep_metadata=args.keep_metadata,
+                    repair_malformed=args.repair_malformed,
+                    quiet=args.quiet,
+                )
+            return run_lyrics(
                 root[0],
                 dry_run=dry_run,
-                keep_metadata=args.keep_metadata,
-                repair_malformed=args.repair_malformed,
+                force=args.lyrics_force,
+                sleep_s=args.lyrics_sleep,
                 quiet=args.quiet,
             )
 

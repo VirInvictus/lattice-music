@@ -147,19 +147,22 @@ class ApestripDispatchTests(unittest.TestCase):
 
 
 class TuiWriteModeTests(unittest.TestCase):
-    def test_maintenance_section_holds_both_write_modes(self):
+    def test_maintenance_section_holds_the_write_modes(self):
         sections = {name: items for name, items in tui._MAIN_SECTIONS if name}
         self.assertEqual(
             sections["MAINTENANCE"],
             [
                 "Consolidate fragmented albums (clean)",
                 "Strip APEv2 tags (apestrip)",
+                "Fetch synced lyrics (lyrics)",
             ],
         )
 
     def test_aliases_and_selection_constants_track_the_new_section(self):
         self.assertEqual(tui._MAIN_ALIASES["clean"], (4, 0))
         self.assertEqual(tui._MAIN_ALIASES["apestrip"], (4, 1))
+        self.assertEqual(tui._MAIN_ALIASES["lyrics"], (4, 2))
+        self.assertEqual(tui._MAIN_ALIASES["lrc"], (4, 2))
         self.assertEqual(tui._SEL_CHANGE_ROOT, (5, 0))
         self.assertEqual(tui._SEL_QUIT, (6, 0))
 
