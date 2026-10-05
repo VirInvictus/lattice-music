@@ -447,6 +447,10 @@ def run_genre_tidy_apply(
     finally:
         log.close()
 
+    if json_mode:
+        print(json_summary("genre_tidy", directory, dry_run, dict(stats)), end="")
+        return 1 if stats["errors"] else 0
+
     verb = "would retag" if dry_run else "retagged"
     print(
         ui.info(
@@ -476,8 +480,6 @@ def run_genre_tidy_apply(
     if stats["errors"]:
         print(ui.info(f"  {stats['errors']} retag error(s) — see log."))
     print(ui.info(f"Log: {log_path}"))
-    if json_mode:
-        print(json_summary("genre_tidy", directory, dry_run, dict(stats)), end="")
     # Nonzero when any album failed to retag, matching the retag mode,
     # rerate.py and replaygain.py; apply used to exit 0 no matter how many
     # writes failed.

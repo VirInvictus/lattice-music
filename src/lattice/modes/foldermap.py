@@ -657,7 +657,7 @@ def run_genremap(
     manifest = (
         Path(log_path) if log_path else directory / "genre_foldermap.manifest.tsv"
     )
-    if not quiet:
+    if not quiet and not json_mode:
         ui.print_header(f"{_title}{'' if apply else ' [DRY RUN]'}")
         print(f"Target: {directory}")
         print(f"Manifest: {manifest}\n")
@@ -672,7 +672,7 @@ def run_genremap(
         refile_mismatched,
     )
 
-    if not quiet:
+    if not quiet and not json_mode:
         if issues:
             print(ui.warn(f"--- {len(issues)} issue(s) flagged for review ---"))
             for msg in issues:
@@ -687,7 +687,7 @@ def run_genremap(
             )
             return 0
 
-    with Runner(manifest, dry_run=not apply, quiet=quiet) as runner:
+    with Runner(manifest, dry_run=not apply, quiet=quiet or json_mode) as runner:
         execute(moves, source_dirs, runner, root=directory, staging=staging)
         if json_mode:
             print(

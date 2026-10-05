@@ -275,7 +275,7 @@ def run_replaygain(
     if log_path is None:
         log_path = os.path.join(root, "replaygain.log")
 
-    if not quiet:
+    if not quiet and not json_mode:
         ui.print_header(f"{_title}{' [DRY RUN]' if dry_run else ''}")
         print(f"Target: {root}")
         print(f"Target loudness: {target_desc}")
@@ -352,7 +352,7 @@ def run_replaygain(
             )
             log("RG RUN END [DRY RUN]")
             log("=" * 70)
-            if not quiet:
+            if not quiet and not json_mode:
                 print(
                     f"Would scan {len(to_scan)} of {len(worklist)} album(s) "
                     f"({skipped_tagged} skipped as fully tagged, "
@@ -374,7 +374,7 @@ def run_replaygain(
             )
             log("RG RUN END [APPLY]")
             log("=" * 70)
-            if not quiet:
+            if not quiet and not json_mode:
                 print(
                     f"Nothing to scan ({skipped_tagged} album(s) already tagged, "
                     f"{len(nested)} nested parent(s) skipped)."
@@ -382,7 +382,7 @@ def run_replaygain(
                 print(f"Log: {log_path}")
             return 0
 
-        if not assume_yes and sys.stdin.isatty():
+        if not assume_yes and not json_mode and sys.stdin.isatty():
             print(
                 f"About to scan and write ReplayGain for {len(to_scan)} "
                 f"album(s) under {root}:"
@@ -403,7 +403,7 @@ def run_replaygain(
                 log("  aborted by user at confirmation; nothing written")
                 log("RG RUN END [APPLY]")
                 log("=" * 70)
-                if not quiet:
+                if not quiet and not json_mode:
                     print("Aborted.")
                 return 0
 

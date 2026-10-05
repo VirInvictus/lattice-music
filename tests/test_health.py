@@ -43,7 +43,12 @@ class HealthDigestTests(_Tree):
         # Explicit --output everywhere: the mode's CWD default would litter
         # the checkout (the other audit tests follow the same rule).
         rc, out = _main(
-            ["--health", "--output", str(Path(self._tmp.name) / "d.txt"), str(self.root)]
+            [
+                "--health",
+                "--output",
+                str(Path(self._tmp.name) / "d.txt"),
+                str(self.root),
+            ]
         )
         self.assertEqual(rc, 0)
         self.assertIn("LIBRARY HEALTH DIGEST", out)
@@ -63,7 +68,12 @@ class HealthDigestTests(_Tree):
 
     def test_counts_reflect_the_tree(self):
         rc, out = _main(
-            ["--health", "--output", str(Path(self._tmp.name) / "d.txt"), str(self.root)]
+            [
+                "--health",
+                "--output",
+                str(Path(self._tmp.name) / "d.txt"),
+                str(self.root),
+            ]
         )
         self.assertEqual(rc, 0)
         # The fixture track is fully tagged, RG-bare, and has no folder art:
@@ -74,7 +84,12 @@ class HealthDigestTests(_Tree):
 
     def test_worst_albums_listed_with_grades(self):
         rc, out = _main(
-            ["--health", "--output", str(Path(self._tmp.name) / "d.txt"), str(self.root)]
+            [
+                "--health",
+                "--output",
+                str(Path(self._tmp.name) / "d.txt"),
+                str(self.root),
+            ]
         )
         self.assertIn("mean", out)
         self.assertRegex(out, r"\s+[A-D]\s+Art/Album/")

@@ -676,7 +676,7 @@ def run_apestrip(
     if log_path is None:
         log_path = os.path.join(root, "apestrip.log")
 
-    if not quiet:
+    if not quiet and not json_mode:
         ui.print_header(f"{_title}{' [DRY RUN]' if dry_run else ''}")
         print(f"Target: {root}")
         print(f"Migrate metadata: {'Yes' if keep_metadata else 'No'}\n")
@@ -692,7 +692,8 @@ def run_apestrip(
             return 1
 
     def log(msg: str) -> None:
-        ui.tqdm.write(msg)
+        if not json_mode:
+            ui.tqdm.write(msg)
         if log_fh is not None:
             ts = datetime.now().isoformat(timespec="seconds")
             log_fh.write(f"[{ts}] {ui.color(msg, '')}\n")  # write uncolored to log
@@ -731,10 +732,11 @@ def run_apestrip(
             return 0
 
         head = "[DRY RUN] " if dry_run else ""
-        print(f"{head}APEv2 tags found in {len(worklist)} file(s) under {root}\n")
+        if not json_mode:
+            print(f"{head}APEv2 tags found in {len(worklist)} file(s) under {root}\n")
         rating_files = 0
         warn_files = 0
-        for r in worklist:
+        for r in [] if json_mode else worklist:
             rel = os.path.relpath(r.path, root)
             if r.error:
                 print(f"  [!] {rel}: {r.error}")
@@ -761,11 +763,12 @@ def run_apestrip(
         skip_note = (
             f" {total_skipped} unmigratable field(s) skipped," if total_skipped else ""
         )
-        print(
-            f"\n{head}{len(worklist)} file(s), {total_migrations} field migration(s),"
-            f"{skip_note} "
-            f"{rating_files} rating(s) reported, {warn_files} genre warning(s)."
-        )
+        if not json_mode:
+            print(
+                f"\n{head}{len(worklist)} file(s), {total_migrations} field migration(s),"
+                f"{skip_note} "
+                f"{rating_files} rating(s) reported, {warn_files} genre warning(s)."
+            )
 
         if json_mode:
             print(

@@ -23,6 +23,8 @@ post-state digest (lattice --health, in process) when applied. With a
 import is a before/after record.
 """
 
+import contextlib
+import io
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -76,7 +78,10 @@ def run_ingest(
     staging = staging or None
     summary_path = Path(log_path) if log_path else directory / "ingest_summary.txt"
 
-    if not quiet:
+    # Under --json the whole run stays machine-clean: stages run quiet and
+    # only the JSON summary reaches stdout (each stage's log file is full).
+    stage_quiet = quiet or json_mode
+    if not quiet and not json_mode:
         ui.print_header(f"{_title}{' [DRY RUN]' if not apply else ''}")
         print(f"Target: {directory}")
         print(f"Summary: {summary_path}")
@@ -88,13 +93,15 @@ def run_ingest(
             apply=apply,
             staging=staging,
             allow_new_genre=allow_new_genre,
-            quiet=quiet,
+            quiet=stage_quiet,
         )
 
     def stage_apestrip() -> int:
         # The ingest gate confirmed the stage; apestrip's own prompt would
         # double-ask, so it runs with assume_yes and keeps its apply contract.
-        return run_apestrip(directory, dry_run=not apply, assume_yes=True, quiet=quiet)
+        return run_apestrip(
+            directory, dry_run=not apply, assume_yes=True, quiet=stage_quiet
+        )
 
     def stage_clean() -> int:
         return run_clean(
@@ -103,7 +110,7 @@ def run_ingest(
             normalize_names=True,
             normalize_filenames=True,
             normalize_tags=True,
-            quiet=quiet,
+            quiet=stage_quiet,
         )
 
     stages = [
@@ -117,9 +124,16 @@ def run_ingest(
         if apply and not _confirm(name.split(" (")[0]):
             results.append((name, -1, "declined by user; skipped"))
             continue
-        if not quiet:
+        if not quiet and not json_mode:
             print(f"\n--- STAGE: {name} ---")
-        rc = fn()
+        # Under --json the stages' own echoes are captured and discarded (the
+        # per-stage log files keep the full record); stdout carries only the
+        # ingest summary's JSON at the end.
+        if json_mode:
+            with contextlib.redirect_stdout(io.StringIO()):
+                rc = fn()
+        else:
+            rc = fn()
         note = "ok" if rc == 0 else f"exit {rc}"
         results.append((name, rc, note))
 

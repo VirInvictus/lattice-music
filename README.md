@@ -15,7 +15,7 @@
 
 A CLI/TUI toolkit for music collectors who manage their own libraries. lattice-music handles library visualization, integrity verification, cover art extraction, and metadata auditing, built on `mutagen` and `tqdm`, with the shared `vir-tui` library powering its terminal UI and `flac` and `ffmpeg` shelled out for integrity checks.
 
-> **Read-only by default.** lattice-music reads tags and decodes audio, and it writes only reports, playlists, extracted cover art, and `.lrc` lyrics sidecars. The six exceptions are the explicit write modes: `--clean` (consolidate fragmented album folders, optionally normalize names and tags), `--apestrip` (remove stray APEv2 tags from MP3s), `--lyrics` (fetch synced lyrics from the LRCLIB API into `.lrc` sidecars beside your audio), `--replayGain` (write ReplayGain 2.0 tags via `rsgain`), `--retag` (rewrite genre tags on one album directory), `--genreTidy-apply` (reconcile genre tags to an artist-to-genre authority map), and `--genreMap` (reorganize the tree into Genre/Artist/Album; the package's one folder-moving mode, reversible through its manifest). All are dry-run by default, write only on `--apply`, and log every change. The optional companion scripts in `scripts/` also **do** modify files (tags, rating bytes, folder layout) and must be used with caution. See [Write modes](#write-modes) and [Companion scripts](#companion-scripts).
+> **Read-only by default.** lattice-music reads tags and decodes audio, and it writes only reports, playlists, extracted cover art, and `.lrc` lyrics sidecars. The seven exceptions are the explicit write modes: `--clean` (consolidate fragmented album folders, optionally normalize names and tags), `--apestrip` (remove stray APEv2 tags from MP3s), `--lyrics` (fetch synced lyrics from the LRCLIB API into `.lrc` sidecars beside your audio), `--replayGain` (write ReplayGain 2.0 tags via `rsgain`), `--retag` (rewrite genre tags on one album directory), `--genreTidy-apply` (reconcile genre tags to an artist-to-genre authority map), and `--genreMap` (reorganize the tree into Genre/Artist/Album; the package's one folder-moving mode, reversible through its manifest). `--ingest` sequences three of them as the import ritual. All are dry-run by default, write only on `--apply`, and log every change. The optional companion scripts in `scripts/` also **do** modify files (tags, rating bytes, folder layout) and must be used with caution. See [Write modes](#write-modes) and [Companion scripts](#companion-scripts).
 
 > **Note:** This is actively maintained software: bug fixes land as they come, and the audit-mode family keeps growing (see the Features table). It is thoroughly tested and known to be fully functional on the primary development environment: **Fedora Linux 44 (Workstation Edition)** on **Python 3.14**, with `flac` and `ffmpeg` from the Fedora repositories. While it is pure Python and should be cross-platform, this specific setup is the only officially tested environment.
 
@@ -448,32 +448,50 @@ The filesystem is the source of truth: lattice-music walks the tree on every inv
 <summary>Full <code>lattice --help</code></summary>
 
 ```
-usage: lattice [-h] [--version] [--library | --ai-library | --all-wings | --ai-wings | --testFLAC | --testMP3 |
-               --testOpus | --testWAV | --testWMA | --extractArt | --missingArt | --auditArtQuality |
-               --auditArtMismatch | --duplicates | --auditAudioDupes | --auditTags | --auditJunkFrames |
-               --auditAlbums | --auditBitrate | --auditReplayGain | --verifyReplayGain | --auditStrays |
-               --healthScore | --playlist | --checkPlaylists | --stats | --snapshot | --diff SNAPSHOT | --clean |
-               --apestrip] [--root DIR] [--output OUTPUT] [--rule RULE] [--layout LAYOUT]
-               [--min-art-res MIN_ART_RES] [--min-bitrate MIN_BITRATE] [--target-lufs TARGET_LUFS]
-               [--tolerance TOLERANCE] [--workers WORKERS] [--prefer {flac,ffmpeg}] [--quiet] [--genres]
-               [--paths] [--dry-run] [--apply] [--normalize-names] [--normalize-filenames] [--normalize-tags]
-               [--all] [--keep-metadata] [--repair-malformed] [--resume] [--only-errors | --no-only-errors]
-               [--ffmpeg FFMPEG] [--verbose]
-               [pos_root]
+usage: lattice [-h] [--version] [--library | --ai-library | --all-wings |
+               --ai-wings | --testFLAC | --testMP3 | --testOpus | --testWAV |
+               --testWMA | --extractArt | --missingArt | --auditArtQuality |
+               --auditArtMismatch | --duplicates | --auditAudioDupes |
+               --auditTags | --auditJunkFrames | --auditAlbums |
+               --auditBitrate | --auditReplayGain | --verifyReplayGain |
+               --auditStrays | --healthScore | --health | --playlist |
+               --checkPlaylists | --stats | --snapshot | --diff SNAPSHOT |
+               --clean | --apestrip | --lyrics | --replayGain | --retag |
+               --genreTidy-build | --genreTidy-apply | --ingest | --genreMap]
+               [--root DIR] [--output OUTPUT] [--rule RULE] [--where EXPR]
+               [--layout LAYOUT] [--min-art-res MIN_ART_RES]
+               [--min-bitrate MIN_BITRATE] [--target-lufs N]
+               [--tolerance TOLERANCE] [--workers WORKERS] [--threads THREADS]
+               [--skip-tagged] [--prefer {flac,ffmpeg}] [--quiet] [--json]
+               [--fail-on-findings] [--genres] [--paths] [--dry-run] [--apply]
+               [--normalize-names] [--normalize-filenames] [--normalize-tags]
+               [--all] [--keep-metadata] [--repair-malformed] [--strip-junk]
+               [--map FILE] [--baseline SNAPSHOT] [--revert MANIFEST]
+               [--only-genre GENRE] [--staging DIR] [--refile-mismatched]
+               [--allow-new-genre] [--lyrics-force]
+               [--lyrics-sleep LYRICS_SLEEP] [--resume]
+               [--only-errors | --no-only-errors] [--ffmpeg FFMPEG]
+               [--verbose]
+               [pos_root] [retag_genres ...]
 
-Filesystem-first music library toolkit: trees, integrity, audits, content-hash duplicate detection, health score,
-write modes
+Filesystem-first music library toolkit: trees, integrity, audits, content-hash
+duplicate detection, health score, write modes
 
 positional arguments:
   pos_root              Root directory (positional fallback)
+  retag_genres          --retag: one or more genres to apply to the directory
+                        (take care to quote multi-word genres; omitted with
+                        --strip-junk)
 
 options:
   -h, --help            show this help message and exit
   --version             show program's version number and exit
   --library             Generate library tree
-  --ai-library          Generate token-efficient library for AI recommendations
+  --ai-library          Generate token-efficient library for AI
+                        recommendations
   --all-wings           Generate separate library files for each genre
-  --ai-wings            Generate separate AI-friendly library files for each genre
+  --ai-wings            Generate separate AI-friendly library files for each
+                        genre
   --testFLAC            Verify FLAC files
   --testMP3             Verify MP3 files
   --testOpus            Verify Opus files via FFmpeg decode
@@ -481,73 +499,177 @@ options:
   --testWMA             Verify WMA files via FFmpeg decode
   --extractArt          Extract embedded cover art to folder
   --missingArt          Report directories missing cover art
-  --auditArtQuality     Report extracted/folder covers below a resolution threshold
-  --auditArtMismatch    Compare embedded art against folder covers: byte-identical, same-pixels re-encodes, and
-                        real mismatches
-  --duplicates          Four-section dupe report: exact albums, within-folder multi-format, similar names, track-
-                        level
-  --auditAudioDupes     Content-hash duplicate detection: exact sha256, audio-stream, and head/tail sampled
-                        matches (catches retagged or renamed dupes)
+  --auditArtQuality     Report extracted/folder covers below a resolution
+                        threshold
+  --auditArtMismatch    Compare embedded art against folder covers: byte-
+                        identical, same-pixels re-encodes, and real mismatches
+  --duplicates          Four-section dupe report: exact albums, within-folder
+                        multi-format, similar names, track-level
+  --auditAudioDupes     Content-hash duplicate detection: exact sha256, audio-
+                        stream, and head/tail sampled matches (catches
+                        retagged or renamed dupes)
   --auditTags           Report files with incomplete tags
-  --auditJunkFrames     Audit MP3 ID3v2 tags for junk frames: obsolete v2.3 leftovers, empty text frames,
-                        duplicate unique frames, and nonstandard iTunes-era frames
-  --auditAlbums         Per-album consistency audit: mixed codecs, track-number gaps and duplicates, and missing
-                        or divergent year tags
+  --auditJunkFrames     Audit MP3 ID3v2 tags for junk frames: obsolete v2.3
+                        leftovers, empty text frames, duplicate unique frames,
+                        and nonstandard iTunes-era frames
+  --auditAlbums         Per-album consistency audit: mixed codecs, track-
+                        number gaps and duplicates, and missing or divergent
+                        year tags
   --auditBitrate        Report files below a certain bitrate floor
-  --auditReplayGain     Report per-album ReplayGain coverage (missing, partial, no album gain)
-  --verifyReplayGain    Verify stored ReplayGain values against a fresh read-only rsgain measurement (requires
-                        rsgain; nothing is written)
-  --auditStrays         Report audio outside the layout's album depth, loose tracks, hidden-dir audio, and
-                        unrecognized non-audio files in album folders
-  --healthScore         Per-album health score aggregating tag completeness, ReplayGain coverage, art, and the
-                        bitrate floor
+  --auditReplayGain     Report per-album ReplayGain coverage (missing,
+                        partial, no album gain)
+  --verifyReplayGain    Verify stored ReplayGain values against a fresh read-
+                        only rsgain measurement (requires rsgain; nothing is
+                        written)
+  --auditStrays         Report audio outside the layout's album depth, loose
+                        tracks, hidden-dir audio, and unrecognized non-audio
+                        files in album folders
+  --healthScore         Per-album health score aggregating tag completeness,
+                        ReplayGain coverage, art, and the bitrate floor
+  --health              One-screen digest of finding counts across the
+                        existing lenses (tags, bitrate, ReplayGain, art,
+                        strays, playlists, duplicates, worst health scores)
+                        from a single walk, with pointers to the full reports;
+                        read-only, always exits 0
   --playlist            Generate a smart .m3u playlist based on a rule
-  --checkPlaylists      Verify the library's .m3u playlists: missing #EXTM3U headers and entries whose target no
-                        longer exists
+  --checkPlaylists      Verify the library's .m3u playlists: missing #EXTM3U
+                        headers and entries whose target no longer exists
   --stats               Library-wide statistics summary
-  --snapshot            Write a per-file library snapshot TSV (the --diff baseline)
-  --diff SNAPSHOT       Replay a --snapshot TSV against the current tree: moved, retagged, resized, added, and
-                        removed files
-  --clean               Consolidate fragmented album folders; optionally normalize names and tags (write mode:
-                        dry-run by default, --apply to write)
-  --apestrip            Strip stray APEv2 tags from MP3s (write mode: dry-run by default, --apply to write)
-  --root DIR            Root directory; repeat --root to scan several libraries together (default: read from
-                        config or current dir)
+  --snapshot            Write a per-file library snapshot TSV (the --diff
+                        baseline)
+  --diff SNAPSHOT       Replay a --snapshot TSV against the current tree:
+                        moved, retagged, resized, added, and removed files
+  --clean               Consolidate fragmented album folders; optionally
+                        normalize names and tags (write mode: dry-run by
+                        default, --apply to write)
+  --apestrip            Strip stray APEv2 tags from MP3s (write mode: dry-run
+                        by default, --apply to write)
+  --lyrics              Fetch synced lyrics from LRCLIB into .lrc sidecars
+                        (write mode: dry-run by default, --apply to write)
+  --replayGain          Scan and write ReplayGain 2.0 tags album-by-album via
+                        rsgain (write mode: dry-run by default, --apply to
+                        write; requires rsgain)
+  --retag               Overwrite genre tags on one album directory: --retag
+                        DIR GENRE [GENRE...] (write mode: dry-run by default,
+                        --apply to write; --strip-junk strips junk ID3 frames
+                        instead and takes no genres)
+  --genreTidy-build     Scan (read-only) and write the artist-to-genre TSV
+                        authority map (--genreTidy-apply reconciles the
+                        library to it)
+  --genreTidy-apply     Retag albums whose genre disagrees with the authority
+                        map (write mode: dry-run by default, --apply to write)
+  --ingest              Run the import ritual over one root: genreMap, then
+                        apestrip, then clean --all, then the post-state health
+                        digest (dry-run by default, --apply to run the stages;
+                        each stage keeps its own log)
+  --genreMap            Restructure a flat Artist/Album library into
+                        Genre/Artist/Album (write mode: dry-run by default,
+                        --apply to move; --revert replays the manifest TSV in
+                        reverse)
+  --root DIR            Root directory; repeat --root to scan several
+                        libraries together (default: read from config or
+                        current dir)
   --output OUTPUT       Output path
-  --rule RULE           Smart playlist rule (e.g. "rating >= 4 and genre == 'Jazz'")
-  --layout LAYOUT       Directory structure pattern for extracting tags from path (default: the `layout` config
-                        key, or {artist}/{album}). Use {genre}/{artist}/{album} for a genre-first library.
+  --rule RULE           Smart playlist rule (e.g. "rating >= 4 and genre ==
+                        'Jazz'")
+  --where EXPR          Scope the scan to tracks matching the rule expression
+                        (the --playlist grammar: rating, genre, artist, album,
+                        title, duration, bitrate). Applies to the library
+                        exports, --stats, the tag-reading audits, and album-
+                        granular targeting of --genreTidy-*, --genreMap, and
+                        --replayGain (a rule matching ANY track selects the
+                        whole album)
+  --layout LAYOUT       Directory structure pattern for extracting tags from
+                        path (default: the `layout` config key, or
+                        {artist}/{album}). Use {genre}/{artist}/{album} for a
+                        genre-first library.
   --min-art-res MIN_ART_RES
-                        Minimum resolution in pixels for --auditArtQuality (default: 500)
+                        Minimum resolution in pixels for --auditArtQuality
+                        (default: 500)
   --min-bitrate MIN_BITRATE
-                        Minimum bitrate in kbps for --auditBitrate (default: 192)
-  --target-lufs TARGET_LUFS
-                        Assumed ReplayGain write target in LUFS for --verifyReplayGain (default: -18, the
-                        ReplayGain 2.0 reference; verify a -14-targeted library at -14)
+                        Minimum bitrate in kbps for --auditBitrate (default:
+                        192)
+  --target-lufs N       ReplayGain target loudness in LUFS.
+                        --verifyReplayGain: the target the stored replaygain_*
+                        values are checked against (default: -18, the
+                        ReplayGain 2.0 reference; verify a -14-targeted
+                        library at -14). --replayGain: writing at a custom
+                        target switches rsgain to custom mode (default: the 89
+                        dB standard). Applies to replaygain_*-tagged files;
+                        R128-tagged files verify at the R128 -23 LUFS baseline
+                        their format implies either way
   --tolerance TOLERANCE
-                        Allowed |stored - expected| in dB for --verifyReplayGain (default: 0.5)
+                        Allowed |stored - expected| in dB for
+                        --verifyReplayGain (default: 0.5)
   --workers WORKERS     Parallel workers (integrity modes)
+  --threads THREADS     --replayGain: parallel scan threads passed to rsgain
+                        (-m); default 1 (standard mode only; ignored with
+                        --target-lufs)
+  --skip-tagged         --replayGain: skip albums already fully tagged (track
+                        + album gain on every file), as a unit
   --prefer {flac,ffmpeg}
                         Preferred tool (FLAC mode)
   --quiet               Minimize output
+  --json                Machine-readable output: the stats/audit report
+                        becomes a JSON document, and a write mode ends with a
+                        JSON run summary (counts, dry_run vs committed). .txt
+                        stays the default; --output - pipes
+  --fail-on-findings    Audit modes exit 1 when they have findings (default
+                        0), so a cron/CI job can gate on a clean report
   --genres              Include album genres in library tree
   --paths               Include absolute directory paths at the album level
-  --dry-run             Preview changes without writing (extractArt, clean, apestrip)
-  --apply               Write for real (clean, apestrip); without it these modes only preview
-  --normalize-names     --clean: also rename non-duplicate folders at every depth with non-standard characters to
-                        their normalized form
+  --dry-run             Preview changes without writing (extractArt, clean,
+                        apestrip, lyrics)
+  --apply               Write for real (clean, apestrip, lyrics); without it
+                        these modes only preview
+  --normalize-names     --clean: also rename non-duplicate folders at every
+                        depth with non-standard characters to their normalized
+                        form
   --normalize-filenames
-                        --clean: also rename audio track files the same way (a distinct change from --normalize-
-                        names)
-  --normalize-tags      --clean: library-wide typographic tag normalization (Pass 4)
-  --all                 --clean: run all normalization passes (--normalize-names, --normalize-filenames,
-                        --normalize-tags)
-  --keep-metadata       --apestrip: before stripping, migrate APE fields not already in ID3 into the matching ID3
-                        frame (genre is never migrated, ratings never written)
-  --repair-malformed    --apestrip: also repair malformed APE tags mutagen cannot parse, by excising the tag
-                        bytes directly (verified + atomic)
-  --resume              --testFLAC / --testMP3: reuse the verdicts recorded by an interrupted run
-                        (<output>.progress.json) and scan only the remaining files; finishing a scan clears the
+                        --clean: also rename audio track files the same way (a
+                        distinct change from --normalize-names)
+  --normalize-tags      --clean: library-wide typographic tag normalization
+                        (Pass 4)
+  --all                 --clean: run all normalization passes (--normalize-
+                        names, --normalize-filenames, --normalize-tags)
+  --keep-metadata       --apestrip: before stripping, migrate APE fields not
+                        already in ID3 into the matching ID3 frame (genre is
+                        never migrated, ratings never written)
+  --repair-malformed    --apestrip: also repair malformed APE tags mutagen
+                        cannot parse, by excising the tag bytes directly
+                        (verified + atomic)
+  --strip-junk          --retag: strip junk ID3 frames (obsolete v2.3-era,
+                        empty text) instead of rewriting genres; takes no
+                        genre arguments
+  --map FILE            --genreTidy-build / --genreTidy-apply: authority-map
+                        path (default: <root>/genre_map.tsv; the repo ships a
+                        maintained map as artist_genre_defaults.tsv)
+  --baseline SNAPSHOT   --ingest: a --snapshot TSV taken before the import;
+                        the summary then points at a diff report showing
+                        exactly what the ritual changed
+  --revert MANIFEST     --genreMap: replay a run's manifest TSV in reverse
+                        (dry-run by default; add --apply to execute the
+                        restore)
+  --only-genre GENRE    --genreMap: restrict the plan to this genre
+                        (repeatable), for a staged rollout
+  --staging DIR         --genreMap: name of a top-level staging inbox whose
+                        Artist/Album contents are filed into the real taxonomy
+                        instead of read as a genre (default: 'Unfiltered';
+                        pass an empty string to disable)
+  --refile-mismatched   --genreMap: move an already-organized album whose tag
+                        genre disagrees with its genre folder to the tag's
+                        folder (still gated by the existing genre vocabulary)
+  --allow-new-genre     --genreMap: permit creating a new top-level genre
+                        folder when an album's genre isn't one the library
+                        already uses
+  --lyrics-force        --lyrics: re-fetch and overwrite existing .lrc
+                        sidecars (default: tracks with a sidecar are skipped)
+  --lyrics-sleep LYRICS_SLEEP
+                        --lyrics: seconds to sleep between LRCLIB requests
+                        (default: 0.5)
+  --resume              --testFLAC / --testMP3: reuse the verdicts recorded by
+                        an interrupted run (<output>.progress.json) and scan
+                        only the remaining files; finishing a scan clears the
                         state
   --only-errors, --no-only-errors
                         Write only errors/warns (MP3/Opus/WAV/WMA modes)

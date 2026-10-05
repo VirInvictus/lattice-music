@@ -371,7 +371,7 @@ def run_retag(
         print(ui.error(f"[!] Directory not found: {target_dir}"), file=sys.stderr)
         return 1
 
-    if not quiet:
+    if not quiet and not json_mode:
         ui.print_header(
             f"{_title}"
             + (" - Junk-Frame Stripper" if strip_junk else "")
@@ -398,7 +398,8 @@ def run_retag(
             return 1
 
     def log(msg: str) -> None:
-        ui.tqdm.write(msg)
+        if not json_mode:
+            ui.tqdm.write(msg)
         if log_fh is not None:
             prefix = "[DRY] " if dry_run else ""
             ts = datetime.now().isoformat(timespec="seconds")

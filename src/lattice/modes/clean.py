@@ -103,10 +103,14 @@ class Run:
         dry_run: bool,
         normalize_tags: bool = False,
         artist_depth: int = 1,
+        json_mode: bool = False,
     ):
         self.root = root
         self.dry_run = dry_run
         self.normalize_tags = normalize_tags
+        # --json keeps stdout machine-clean: the per-item record goes to the
+        # log file only, and the run ends with the JSON summary.
+        self.json_mode = json_mode
         # Path depth (components below root) at which a folder names an artist,
         # derived from the layout. Only folders at this depth seed the tag pass.
         self.artist_depth = artist_depth
@@ -198,7 +202,7 @@ class Run:
             self.log_file.write("\n")
             msg = msg.lstrip("\n")
 
-        if msg:
+        if msg and not self.json_mode:
             disp_msg = msg
             if msg.startswith("--- PASS"):
                 disp_msg = ui.color(msg, ui.BOLD + ui.CYAN)
@@ -824,7 +828,7 @@ def run_clean(
         log_path = root / "cleanup.log"
     log_path = Path(log_path)
 
-    if not quiet:
+    if not quiet and not json_mode:
         ui.print_header(f"{_title}{' [DRY RUN]' if dry_run else ''}")
         print(f"Target: {root}")
         print(f"Log path: {log_path}\n")
@@ -836,6 +840,7 @@ def run_clean(
             dry_run=dry_run,
             normalize_tags=normalize_tags,
             artist_depth=artist_depth,
+            json_mode=json_mode,
         )
     except OSError as e:
         # Run opens the log in its constructor; an unwritable path used to be a
