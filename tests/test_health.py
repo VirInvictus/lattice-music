@@ -40,7 +40,11 @@ class _Tree(unittest.TestCase):
 
 class HealthDigestTests(_Tree):
     def test_digest_is_one_screen_and_exits_zero(self):
-        rc, out = _main(["--health", str(self.root)])
+        # Explicit --output everywhere: the mode's CWD default would litter
+        # the checkout (the other audit tests follow the same rule).
+        rc, out = _main(
+            ["--health", "--output", str(Path(self._tmp.name) / "d.txt"), str(self.root)]
+        )
         self.assertEqual(rc, 0)
         self.assertIn("LIBRARY HEALTH DIGEST", out)
         self.assertIn("Walked once: 1 files in 1 albums", out)
@@ -58,7 +62,9 @@ class HealthDigestTests(_Tree):
             self.assertIn(pointer, out)
 
     def test_counts_reflect_the_tree(self):
-        rc, out = _main(["--health", str(self.root)])
+        rc, out = _main(
+            ["--health", "--output", str(Path(self._tmp.name) / "d.txt"), str(self.root)]
+        )
         self.assertEqual(rc, 0)
         # The fixture track is fully tagged, RG-bare, and has no folder art:
         # the digest's numbers must agree with the audits' rules.
@@ -67,7 +73,9 @@ class HealthDigestTests(_Tree):
         self.assertIn("Art:        1 album(s) without any cover", out)
 
     def test_worst_albums_listed_with_grades(self):
-        rc, out = _main(["--health", str(self.root)])
+        rc, out = _main(
+            ["--health", "--output", str(Path(self._tmp.name) / "d.txt"), str(self.root)]
+        )
         self.assertIn("mean", out)
         self.assertRegex(out, r"\s+[A-D]\s+Art/Album/")
 
