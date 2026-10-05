@@ -66,6 +66,7 @@ from lattice.modes.library import (
     write_snapshot,
 )
 from lattice.modes.lyrics import run_lyrics
+from lattice.modes.genretidy import run_genre_tidy_apply, run_genre_tidy_build
 from lattice.modes.playlists import generate_playlist, run_check_playlists
 from lattice.modes.replaygain import run_replaygain
 from lattice.modes.retag import run_retag
@@ -250,6 +251,20 @@ def build_parser() -> argparse.ArgumentParser:
         "[GENRE...] (write mode: dry-run by default, --apply to write; "
         "--strip-junk strips junk ID3 frames instead and takes no genres)",
     )
+    group.add_argument(
+        "--genreTidy-build",
+        dest="genre_tidy_build",
+        action="store_true",
+        help="Scan (read-only) and write the artist-to-genre TSV authority "
+        "map (--genreTidy-apply reconciles the library to it)",
+    )
+    group.add_argument(
+        "--genreTidy-apply",
+        dest="genre_tidy_apply",
+        action="store_true",
+        help="Retag albums whose genre disagrees with the authority map "
+        "(write mode: dry-run by default, --apply to write)",
+    )
 
     p.add_argument(
         "--root",
@@ -399,6 +414,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="--retag: strip junk ID3 frames (obsolete v2.3-era, empty text) "
         "instead of rewriting genres; takes no genre arguments",
+    )
+    p.add_argument(
+        "--map",
+        dest="map_path",
+        default=None,
+        metavar="FILE",
+        help="--genreTidy-build / --genreTidy-apply: authority-map path "
+        "(default: <root>/genre_map.tsv; the repo ships a maintained map as "
+        "artist_genre_defaults.tsv)",
     )
     p.add_argument(
         "--lyrics-force",
@@ -733,8 +757,17 @@ def main(argv: list[str] | None = None) -> int:
             return diff_snapshot(root, args.diff_snapshot, output, quiet=args.quiet)
 
         # The write modes operate on exactly one tree (like the companion
-        # scripts they replace), not on an aggregated root list.
-        if args.clean or args.apestrip or args.lyrics or args.replaygain:
+        # scripts they replace), not on an aggregated root list. The
+        # genreTidy pair joins the guard: build writes the map beside the
+        # root and apply retags under it, so both are one-root modes.
+        if (
+            args.clean
+            or args.apestrip
+            or args.lyrics
+            or args.replaygain
+            or args.genre_tidy_build
+            or args.genre_tidy_apply
+        ):
             if len(root) != 1:
                 print(
                     "error: this write mode needs exactly one library root; "
@@ -769,6 +802,21 @@ def main(argv: list[str] | None = None) -> int:
                     # None (no --target-lufs) is the standard rsgain easy pass.
                     target_lufs=args.target_lufs,
                     threads=args.threads,
+                    quiet=args.quiet,
+                )
+            if args.genre_tidy_build:
+                return run_genre_tidy_build(
+                    root[0],
+                    map_path=args.map_path,
+                    layout=args.layout,
+                    quiet=args.quiet,
+                )
+            if args.genre_tidy_apply:
+                return run_genre_tidy_apply(
+                    root[0],
+                    dry_run=dry_run,
+                    map_path=args.map_path,
+                    layout=args.layout,
                     quiet=args.quiet,
                 )
             return run_lyrics(

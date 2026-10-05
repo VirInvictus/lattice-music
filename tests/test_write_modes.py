@@ -298,6 +298,97 @@ class RetagDispatchTests(unittest.TestCase):
             self._main(["--retag", "--clean", str(self.album), "Ambient"])
 
 
+class GenreTidyDispatchTests(unittest.TestCase):
+    """The `lattice --genreTidy-build` / `--genreTidy-apply` wiring (the 6.0.0
+    fold of scripts/genre_tidy.py): two flat flags for the two verbs, the map
+    defaults beside the root (--map overrides), apply dry-runs by default and
+    joins the single-root refusal. The tool's brain is covered by
+    test_genre_tidy.py."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name) / "Music"
+        album = self.root / "Aphex Twin" / "Selected Ambient Works"
+        album.mkdir(parents=True)
+        shutil.copy(FLAC_SRC, album / "01 - Xtal.flac")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _main(self, argv):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = cli.main(argv)
+        return rc, buf.getvalue()
+
+    def test_build_writes_the_map(self):
+        rc, _out = self._main(["--genreTidy-build", str(self.root)])
+        self.assertEqual(rc, 0)
+        map_text = (self.root / "genre_map.tsv").read_text(encoding="utf-8")
+        self.assertIn("Aphex Twin\tElectronic", map_text)
+
+    def test_apply_dry_run_is_the_default(self):
+        self._main(["--genreTidy-build", str(self.root)])
+        (self.root / "genre_map.tsv").write_text("Aphex Twin\tIDM\n", encoding="utf-8")
+        rc, out = self._main(["--genreTidy-apply", str(self.root)])
+        self.assertEqual(rc, 0)
+        from mutagen.flac import FLAC
+
+        self.assertEqual(
+            FLAC(
+                str(
+                    self.root
+                    / "Aphex Twin"
+                    / "Selected Ambient Works"
+                    / "01 - Xtal.flac"
+                )
+            ).get("genre"),
+            ["Electronic"],
+        )
+        log = (self.root / "genre_tidy.log").read_text(encoding="utf-8")
+        self.assertIn("GENRE TIDY [DRY RUN]", log)
+        self.assertIn("would retag 1 album(s)", out)
+
+    def test_apply_writes_and_is_idempotent(self):
+        self._main(["--genreTidy-build", str(self.root)])
+        (self.root / "genre_map.tsv").write_text("Aphex Twin\tIDM\n", encoding="utf-8")
+        rc, _out = self._main(["--genreTidy-apply", str(self.root), "--apply"])
+        self.assertEqual(rc, 0)
+        from mutagen.flac import FLAC
+
+        path = self.root / "Aphex Twin" / "Selected Ambient Works" / "01 - Xtal.flac"
+        self.assertEqual(FLAC(str(path)).get("genre"), ["IDM"])
+        rc, out = self._main(["--genreTidy-apply", str(self.root), "--apply"])
+        self.assertEqual(rc, 0)
+        self.assertIn("retagged 0 album(s); 1 already compliant", out)
+        log = (self.root / "genre_tidy.log").read_text(encoding="utf-8")
+        self.assertIn("GENRE TIDY [APPLY]", log)
+
+    def test_apply_without_a_map_is_exit_1(self):
+        rc, _out = self._main(["--genreTidy-apply", str(self.root)])
+        self.assertEqual(rc, 1)
+
+    def test_map_flag_reaches_the_mode(self):
+        map_path = Path(self._tmp.name) / "custom.tsv"
+        rc, _out = self._main(
+            ["--genreTidy-build", str(self.root), "--map", str(map_path)]
+        )
+        self.assertEqual(rc, 0)
+        self.assertIn("Aphex Twin", map_path.read_text(encoding="utf-8"))
+
+    def test_multiple_roots_are_rejected(self):
+        other = Path(self._tmp.name) / "Other"
+        other.mkdir()
+        rc, _out = self._main(
+            ["--genreTidy-build", "--root", str(self.root), "--root", str(other)]
+        )
+        self.assertEqual(rc, 2)
+
+    def test_mode_flags_are_mutually_exclusive(self):
+        with self.assertRaises(SystemExit):
+            self._main(["--genreTidy-apply", "--clean", str(self.root)])
+
+
 class TuiWriteModeTests(unittest.TestCase):
     def test_maintenance_section_holds_the_write_modes(self):
         sections = {name: items for name, items in tui._MAIN_SECTIONS if name}
@@ -309,6 +400,8 @@ class TuiWriteModeTests(unittest.TestCase):
                 "Fetch synced lyrics (lyrics)",
                 "Write ReplayGain tags (replaygain)",
                 "Rewrite genre tags on one album (retag)",
+                "Build genre authority map (genreTidy build)",
+                "Apply genre authority map (genreTidy apply)",
             ],
         )
 
@@ -319,6 +412,9 @@ class TuiWriteModeTests(unittest.TestCase):
         self.assertEqual(tui._MAIN_ALIASES["lrc"], (4, 2))
         self.assertEqual(tui._MAIN_ALIASES["rgwrite"], (4, 3))
         self.assertEqual(tui._MAIN_ALIASES["retag"], (4, 4))
+        self.assertEqual(tui._MAIN_ALIASES["tidybuild"], (4, 5))
+        self.assertEqual(tui._MAIN_ALIASES["tidy"], (4, 6))
+        self.assertEqual(tui._MAIN_ALIASES["tidyapply"], (4, 6))
         self.assertEqual(tui._SEL_CHANGE_ROOT, (5, 0))
         self.assertEqual(tui._SEL_QUIT, (6, 0))
 

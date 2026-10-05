@@ -15,7 +15,7 @@
 
 A CLI/TUI toolkit for music collectors who manage their own libraries. lattice-music handles library visualization, integrity verification, cover art extraction, and metadata auditing, built on `mutagen` and `tqdm`, with the shared `vir-tui` library powering its terminal UI and `flac` and `ffmpeg` shelled out for integrity checks.
 
-> **Read-only by default.** lattice-music reads tags and decodes audio, and it writes only reports, playlists, extracted cover art, and `.lrc` lyrics sidecars. The five exceptions are the explicit write modes: `--clean` (consolidate fragmented album folders, optionally normalize names and tags), `--apestrip` (remove stray APEv2 tags from MP3s), `--lyrics` (fetch synced lyrics from the LRCLIB API into `.lrc` sidecars beside your audio), `--replayGain` (write ReplayGain 2.0 tags via `rsgain`), and `--retag` (rewrite genre tags on one album directory). All are dry-run by default, write only on `--apply`, and log every change. The optional companion scripts in `scripts/` also **do** modify files (tags, rating bytes, folder layout) and must be used with caution. See [Write modes](#write-modes) and [Companion scripts](#companion-scripts).
+> **Read-only by default.** lattice-music reads tags and decodes audio, and it writes only reports, playlists, extracted cover art, and `.lrc` lyrics sidecars. The six exceptions are the explicit write modes: `--clean` (consolidate fragmented album folders, optionally normalize names and tags), `--apestrip` (remove stray APEv2 tags from MP3s), `--lyrics` (fetch synced lyrics from the LRCLIB API into `.lrc` sidecars beside your audio), `--replayGain` (write ReplayGain 2.0 tags via `rsgain`), `--retag` (rewrite genre tags on one album directory), and `--genreTidy-apply` (reconcile genre tags to an artist-to-genre authority map). All are dry-run by default, write only on `--apply`, and log every change. The optional companion scripts in `scripts/` also **do** modify files (tags, rating bytes, folder layout) and must be used with caution. See [Write modes](#write-modes) and [Companion scripts](#companion-scripts).
 
 > **Note:** This is actively maintained software: bug fixes land as they come, and the audit-mode family keeps growing (see the Features table). It is thoroughly tested and known to be fully functional on the primary development environment: **Fedora Linux 44 (Workstation Edition)** on **Python 3.14**, with `flac` and `ffmpeg` from the Fedora repositories. While it is pure Python and should be cross-platform, this specific setup is the only officially tested environment.
 
@@ -70,6 +70,8 @@ Modern music players often hide your library behind proprietary databases. latti
 | **Lyrics fetch (write)** | `--lyrics` | Fetches synced lyrics from the LRCLIB API into same-basename `.lrc` sidecars (`--lyrics-force` to overwrite, `--lyrics-sleep` to pace requests). Dry-run by default, `--apply` to write |
 | **ReplayGain write** | `--replayGain` | Scans and writes ReplayGain 2.0 gain/peak tags album-by-album via `rsgain` (`--skip-tagged` to skip fully-tagged albums as a unit, `--target-lufs` for a custom target, `--threads` to parallelize the scan). Dry-run by default, `--apply` to write |
 | **Genre rewrite (write)** | `--retag` | Hard-overwrites the genre tag(s) on one album directory: `--retag DIR GENRE [GENRE...]`, clearing the hidden MP3 genre spots (APEv2, `TXXX:GENRE`, the ID3v1 byte) as it writes; `--strip-junk` strips junk ID3 frames instead. Dry-run by default, `--apply` to write |
+| **Genre authority build** | `--genreTidy-build` | Scans the library (read-only) and writes the editable artist-to-genre authority map TSV (`--map` to override `<root>/genre_map.tsv`); re-runs preserve your edits and only append new artists |
+| **Genre authority apply (write)** | `--genreTidy-apply` | Retags every album whose genre is not on its artist's map line, collapsing it to the line's first (canonical) genre; compilations are never touched. Dry-run by default, `--apply` to write |
 | **Snapshot** | `--snapshot` | Writes a per-file library snapshot TSV (path, size, mtime, key tags, ReplayGain presence) for before/after evidence |
 | **Snapshot diff** | `--diff SNAPSHOT` | Replays a snapshot against the current tree: moved, retagged, resized, added, and removed files |
 | **Version** | `--version` | Prints version and exits |
@@ -234,13 +236,14 @@ lattice --retag "~/Music/Kanye West/Yeezus" "Alternative Rap" --apply
 
 ## Write modes
 
-Five modes write to your library, and all are **dry-run by default**: without `--apply` they only preview, and every change is recorded to an append-only timestamped log.
+Six modes write to your library, and all are **dry-run by default**: without `--apply` they only preview, and every change is recorded to an append-only timestamped log.
 
 - **`lattice --clean`** consolidates fragmented album folders (the same job as [`cleaner.py`](#cleanerpy)), then applies the opt-in passes you name: `--normalize-names` (rename folders at any depth), `--normalize-filenames` (rename track files), `--normalize-tags` (library-wide typographic tag normalization; on MP3s it writes ID3v2.3 plus a refreshed ID3v1), or `--all` for all three. On a genre-first library, pass `--layout '{genre}/{artist}/{album}'` so the tag pass reads the artist level correctly. The preview predicts the real run exactly; the log defaults to `<root>/cleanup.log`.
 - **`lattice --apestrip`** strips stray APEv2 tags from MP3s (the same job as [`apestrip.py`](#apestrippy)). `--keep-metadata` migrates sole-source APE fields into ID3 first (genre is never migrated; ratings are reported, never written), and `--repair-malformed` also repairs malformed APE tags via verified atomic byte surgery. A real run prints the worklist and asks for confirmation (auto-skipped when stdin is not a TTY); the log defaults to `<root>/apestrip.log`.
 - **`lattice --lyrics`** fetches synced lyrics from the open [LRCLIB](https://lrclib.net) API and writes them as same-basename `.lrc` sidecars beside your audio files — players and servers that read sidecar lyrics (Jellyfin 10.9+ among them) then carry the lyrics with the files, so a library that syncs to several machines takes its lyrics along. Matching is artist + title (+ album and duration) with a duration-windowed search fallback; instrumental and plain-only matches are reported, never written; tracks with a sidecar are skipped unless `--lyrics-force`. The preview runs the real lookups (read-only) so its hit/miss counts are honest; requests are paced with `--lyrics-sleep`; the log defaults to `<root>/lyrics.log`.
 - **`lattice --replayGain`** writes ReplayGain 2.0 tags (the same job as [`replaygain.py`](#replaygainpy)): one album gain plus album peak per album folder and a per-track gain plus peak, computed and written by [`rsgain`](https://github.com/complexlogic/rsgain) at the 89 dB / -18 LUFS reference. Album = one folder, rescanned as a whole so album gain is correct; `--skip-tagged` skips a fully-tagged album *as a unit* (half-skipping would compute album gain over a subset and corrupt it); `--target-lufs N` switches to a custom target (e.g. -14 for the streaming-loud range); `--threads N` parallelizes each scan. The preview lists every album and its current coverage without invoking rsgain; a real run requires rsgain on PATH and exits 2 without it. The log (with the values read back after each album) defaults to `<root>/replaygain.log`.
 - **`lattice --retag DIR GENRE [GENRE...]`** overwrites the genre tag(s) on one album directory (the same job as [`retag.py`](#retagpy); quote multi-word genres). The package's one genre-write path: MP3 writes clear every spot a genre can hide (a stray APEv2 tag is deleted, a bare `TXXX:GENRE` frame removed, the ID3v1 genre byte refreshed) before one clean TCON is written, saved as ID3v2.3 plus a refreshed ID3v1; FLAC/Opus/OGG, M4A, and WMA get their native containers. `--strip-junk` strips junk ID3 frames instead (obsolete v2.3-era frames converted-or-dropped, empty text frames deleted) through the same classifier `--auditJunkFrames` reports with. The log defaults to `<dir>/retag.log`.
+- **`lattice --genreTidy-apply`** retags every album whose genre disagrees with the artist-to-genre authority map (the same job as [`genre_tidy.py apply`](#genre_tidypy); `lattice --genreTidy-build` writes that map read-only). The map (`--map`, default `<root>/genre_map.tsv`) lists, per artist, every genre that artist is allowed to carry; the first is the fix target. Editing the map is the interface: remove a stray genre and its albums collapse to the canonical one, reorder to retarget, blank a line to skip the artist, and compilation album-artists are flagged EXCLUDED and never enforced. Every write goes through the package's one genre-write path (`--retag`'s writer), so a slash canonical like `Emo / Orgcore` writes back compliant. The preview writes the same log lines prefixed `[DRY]`; the log defaults to `<root>/genre_tidy.log`.
 
 ```bash
 # Preview, then merge fragmented folders and run every normalization pass
@@ -262,9 +265,14 @@ lattice --replayGain ~/Music --apply --skip-tagged
 # Preview, then hard-set the genre on one album
 lattice --retag "~/Music/Kanye West/Yeezus" "Alternative Rap"
 lattice --retag "~/Music/Kanye West/Yeezus" "Alternative Rap" --apply
+
+# Build the artist-to-genre authority map, then preview and apply it
+lattice --genreTidy-build ~/Music
+lattice --genreTidy-apply ~/Music
+lattice --genreTidy-apply ~/Music --apply
 ```
 
-The TUI exposes all five under its Maintenance section, behind yes/no confirms (answering No to the apply question runs the preview instead). The `scripts/cleaner.py`, `scripts/apestrip.py`, `scripts/replaygain.py`, and `scripts/retag.py` launchers keep their historical apply-by-default behavior for aliases and cron; see [Companion scripts](#companion-scripts).
+The TUI exposes all of them under its Maintenance section, behind yes/no confirms (answering No to the apply question runs the preview instead). The `scripts/cleaner.py`, `scripts/apestrip.py`, `scripts/replaygain.py`, `scripts/retag.py`, and `scripts/genre_tidy.py` launchers keep their historical apply-by-default behavior for aliases and cron; see [Companion scripts](#companion-scripts).
 
 ## AI library export
 
@@ -466,14 +474,14 @@ options:
 
 ## Companion scripts
 
-The `scripts/` directory holds nine standalone maintenance tools. Four of them, [`cleaner.py`](#cleanerpy), [`apestrip.py`](#apestrippy), [`replaygain.py`](#replaygainpy), and [`retag.py`](#retagpy), are thin launchers over the packaged [write modes](#write-modes) (same flags, same logs, apply-by-default as they always were). The rest are **not** part of the `lattice` package and sit **outside its contract** on purpose: unlike the package's read-only modes, they **modify your files in place**, rewriting tags, rewriting rating bytes, or moving and renaming folders. Run them directly with `python3`.
+The `scripts/` directory holds nine standalone maintenance tools. Five of them, [`cleaner.py`](#cleanerpy), [`apestrip.py`](#apestrippy), [`replaygain.py`](#replaygainpy), [`retag.py`](#retagpy), and [`genre_tidy.py`](#genre_tidypy), are thin launchers over the packaged [write modes](#write-modes) (same flags, same logs, apply-by-default as they always were). The rest are **not** part of the `lattice` package and sit **outside its contract** on purpose: unlike the package's read-only modes, they **modify your files in place**, rewriting tags, rewriting rating bytes, or moving and renaming folders. Run them directly with `python3`.
 
 **Use them with caution.** Have a backup or snapshot first, always preview with `--dry-run`, and read the log before applying. Each writes an append-only timestamped log and is idempotent, so a second run on an already-clean library is a no-op.
 
 | Script | What it changes | Scope |
 |--------|-----------------|-------|
 | [`retag.py`](#retagpy) | Launcher for `lattice --retag`: genre tags on one album directory | manual, per-album |
-| [`genre_tidy.py`](#genre_tidypy) | Genre tags library-wide (through the package's retag writer) | policy map, then apply |
+| [`genre_tidy.py`](#genre_tidypy) | Launcher for `lattice --genreTidy-*`: genre tags library-wide (through the package's retag writer) | policy map, then apply |
 | [`rerate.py`](#reratepy) | MP3 POPM rating bytes | reconcile DeaDBeeF / foobar |
 | [`cleaner.py`](#cleanerpy) | Launcher for `lattice --clean`: folder names and layout (moves, merges, renames); file names with `--normalize-filenames`; title/album/artist tags (all formats) with `--normalize-tags` | filesystem (opt-in names + tags) |
 | [`genre_foldermap.py`](#genre_foldermappy) | Restructures the tree into Genre/Artist/Album | filesystem |
@@ -539,6 +547,8 @@ Audio metadata formats handle multiple genres entirely differently (ID3 uses nul
 ### `genre_tidy.py`
 
 > **Destructive on `apply`.** `build` is read-only; `apply` rewrites genre tags through the package's retag writer (`lattice.modes.retag`). Preview `apply` with `--dry-run` first.
+
+> **Launcher note.** Since 6.0.0 the tool lives in the package (`lattice --genreTidy-build` writes the map, `lattice --genreTidy-apply` enforces it); `scripts/genre_tidy.py` is a thin launcher over it, kept for aliases and cron with the same build/apply subcommands and its historical apply-by-default contract. Everything below describes both entry points; only the default (apply here, dry-run in the package) differs.
 
 A two-phase tool for libraries whose genre tags have drifted: it builds an **artist to genre authority map**, then collapses any album that disagrees with it. It pairs lattice-music's scanner with the package's retag writer (the module behind `lattice --retag`): the `build` phase only reads (through lattice's scanner), and the `apply` phase does every write through `lattice.modes.retag` in-process. It imports `lattice`, so it needs the package importable: installed via `pip`/`pipx`, or run from a checkout with `PYTHONPATH=src`.
 

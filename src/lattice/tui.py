@@ -58,6 +58,7 @@ from lattice.modes.library import (
     write_snapshot,
 )
 from lattice.modes.lyrics import run_lyrics
+from lattice.modes.genretidy import run_genre_tidy_apply, run_genre_tidy_build
 from lattice.modes.playlists import generate_playlist, run_check_playlists
 from lattice.modes.replaygain import run_replaygain
 from lattice.modes.retag import run_retag
@@ -142,6 +143,8 @@ _MAIN_SECTIONS = [
             "Fetch synced lyrics (lyrics)",
             "Write ReplayGain tags (replaygain)",
             "Rewrite genre tags on one album (retag)",
+            "Build genre authority map (genreTidy build)",
+            "Apply genre authority map (genreTidy apply)",
         ],
     ),
     (
@@ -217,6 +220,9 @@ _MAIN_ALIASES: dict[str, tuple | None] = {
     "lrc": (4, 2),
     "rgwrite": (4, 3),
     "retag": (4, 4),
+    "tidybuild": (4, 5),
+    "tidy": (4, 6),
+    "tidyapply": (4, 6),
     "settings": (5, 0),
     "config": (5, 0),
     "c": (5, 0),
@@ -874,6 +880,47 @@ def _menu_session() -> int:
                     dry_run=not apply,
                     strip_junk=junk,
                     log_path=os.path.join(target, "retag.log"),
+                    quiet=False,
+                )
+
+            elif result == (4, 5):
+                # Read-only build (it writes only the TSV map): one root like
+                # the write modes, since the map lands beside it.
+                if len(roots) != 1:
+                    notify(
+                        "The genreTidy build needs exactly one library root; "
+                        f"{len(roots)} are configured (library_roots)."
+                    )
+                    continue
+                layout = ask("Path layout", get_layout())
+                map_path = ask("Map path (blank = <root>/genre_map.tsv)", "").strip()
+                run_with_capture(
+                    "Build genre authority map (genreTidy build)",
+                    run_genre_tidy_build,
+                    roots[0],
+                    map_path=os.path.expanduser(map_path) if map_path else None,
+                    layout=layout,
+                    quiet=False,
+                )
+
+            elif result == (4, 6):
+                # Write mode: the ask_yn confirm decides dry-run vs apply.
+                if len(roots) != 1:
+                    notify(
+                        "The genreTidy apply needs exactly one library root; "
+                        f"{len(roots)} are configured (library_roots)."
+                    )
+                    continue
+                layout = ask("Path layout", get_layout())
+                map_path = ask("Map path (blank = <root>/genre_map.tsv)", "").strip()
+                apply = ask_yn("APPLY retags now? No = dry-run preview only (y/N)")
+                run_with_capture(
+                    "Apply genre authority map (genreTidy apply)",
+                    run_genre_tidy_apply,
+                    roots[0],
+                    dry_run=not apply,
+                    map_path=os.path.expanduser(map_path) if map_path else None,
+                    layout=layout,
                     quiet=False,
                 )
         except CancelledError:

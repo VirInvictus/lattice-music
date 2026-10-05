@@ -1,17 +1,14 @@
 import os
-import sys
 import unittest
 from collections import namedtuple
 from pathlib import Path
 
-# genre_tidy.py still lives in scripts/ (it joins the package as --genreTidy
-# in this same 6.0.0 program); its pure helpers are imported by path. The
-# lattice scan is not exercised here (mirrors the integrity modes: the scan is
-# faked, the decision logic is what is tested); apply's retag calls go through
-# lattice.modes.retag in-process and are exercised on fixture copies.
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
-
-import genre_tidy as gt
+# The genre authority tool lives in the package (the 6.0.0 fold of
+# scripts/genre_tidy.py, now a launcher); scripts/genre_tidy.py is re-exported
+# by these same names via its PEP 562 shim, so either import path works. The
+# lattice scan is faked and apply's retag calls run in-process against fixture
+# copies, mirroring the integrity modes' approach.
+from lattice.modes import genretidy as gt
 
 FakeAD = namedtuple("FakeAD", "artist genre")
 
@@ -242,7 +239,6 @@ class CmdBuildRebuildTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def _build(self, dirs):
-        import argparse
         import contextlib
         import io
 
@@ -250,14 +246,12 @@ class CmdBuildRebuildTests(unittest.TestCase):
         gt.scan_album_dirs = lambda d, q, layout="{artist}/{album}": dirs
         buf = io.StringIO()
         try:
-            args = argparse.Namespace(
-                directory=self._tmp.name,
-                map_path=str(self.map_path),
-                quiet=True,
-                layout="{artist}/{album}",
-            )
             with contextlib.redirect_stdout(buf):
-                rc = gt.cmd_build(args)
+                rc = gt.run_genre_tidy_build(
+                    self._tmp.name,
+                    map_path=str(self.map_path),
+                    quiet=True,
+                )
         finally:
             gt.scan_album_dirs = orig
         return rc, buf.getvalue()
@@ -370,7 +364,6 @@ class CmdApplyTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def _apply(self, records):
-        import argparse
         import contextlib
         import io
 
@@ -378,16 +371,13 @@ class CmdApplyTests(unittest.TestCase):
         gt.scan_album_dirs = lambda d, q, layout="{artist}/{album}": records
         buf = io.StringIO()
         try:
-            args = argparse.Namespace(
-                directory=str(self.root),
-                map_path=str(self.map_path),
-                dry_run=False,
-                log_path=None,
-                quiet=True,
-                layout="{artist}/{album}",
-            )
             with contextlib.redirect_stdout(buf):
-                rc = gt.cmd_apply(args)
+                rc = gt.run_genre_tidy_apply(
+                    str(self.root),
+                    dry_run=False,
+                    map_path=str(self.map_path),
+                    quiet=True,
+                )
         finally:
             gt.scan_album_dirs = orig
         return rc, buf.getvalue()
@@ -505,22 +495,45 @@ class LayoutPassthroughTests(unittest.TestCase):
 
         seen = {}
 
-        def fake_import():
-            def scan(roots, layout, pbar):
-                seen["layout"] = layout
-                return []
+        def fake_scan(roots, layout, pbar):
+            seen["layout"] = layout
+            return []
 
-            pbar = mock.Mock()
-            return (
-                scan,
-                lambda d: [d],
-                lambda roots: 0,
-                lambda total, label, quiet: pbar,
-            )
-
-        with mock.patch.object(gt, "_import_lattice", fake_import):
+        with (
+            mock.patch.object(gt, "_scan_album_dirs", fake_scan),
+            mock.patch.object(gt, "count_audio_files", lambda roots: 0),
+            mock.patch.object(
+                gt, "_make_pbar", lambda total, label, quiet: mock.Mock()
+            ),
+        ):
             gt.scan_album_dirs(Path("/x"), True, "{genre}/{artist}/{album}")
         self.assertEqual(seen["layout"], "{genre}/{artist}/{album}")
+
+
+class FoldTableDivergenceTests(unittest.TestCase):
+    """A3 design point, resolved on purpose: the map key fold is NOT
+    lattice.norm's normalize_name. normalize_name additionally strips
+    apostrophes/quotes from the key ("Director's Cut" == "Directors Cut");
+    re-keying saved maps on it would make build re-append every map artist
+    whose name carries a quote as if it were new. The private table stays, and
+    this pin documents the divergence so nobody 'simplifies' it away."""
+
+    def test_quote_names_are_distinct_keys_here_but_not_in_norm(self):
+        self.assertNotEqual(gt.norm("Director's Cut"), gt.norm("Directors Cut"))
+        from lattice.norm import normalize_name
+
+        self.assertEqual(
+            normalize_name("Director's Cut"), normalize_name("Directors Cut")
+        )
+
+    def test_dash_and_case_folds_still_agree_with_norm(self):
+        from lattice.norm import normalize_name
+
+        self.assertEqual(gt.norm("Jay‐Z"), gt.norm("Jay-Z"))
+        self.assertEqual(
+            gt.norm("Belle & Sebastian"), normalize_name("Belle & Sebastian")
+        )
+        self.assertEqual(gt.norm("  The  XX "), normalize_name("  The  XX "))
 
 
 if __name__ == "__main__":

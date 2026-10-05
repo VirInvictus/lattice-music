@@ -561,26 +561,23 @@ versions below; the per-phase version targets are historical.
   Tests: test_retag.py retargeted (25), test_genre_tidy.py follows the
   call path (argv-builder pins became call-shape pins), nine dispatch
   pins in test_write_modes.py.
-- [ ] **A3 (target v5.10.0): fold `genre_tidy.py` into
-  `lattice.modes.genretidy` as the `--genreTidy` write mode.** Gated on
-  A2. Design point one, resolve first: the script is the only
-  subcommand-shaped tool (build/apply subparsers; main at
-  scripts/genre_tidy.py:474) and the package house style is flat flags;
-  pick two flags (--genreTidy-build writes the map, --genreTidy-apply
-  reconciles) or one mode with a positional verb, with the TUI in mind
-  (MAINTENANCE wants one entry per action; two flags map to two entries
-  naturally). Design point two, resolve on purpose: the private
-  `_QUOTE_DASH_FOLD` copy of norm's fold table (scripts/genre_tidy.py:49-66)
-  exists because it predates norm.py and re-keying saved maps is
-  unwanted; either switch to lattice.norm (and document the map-rekey
-  implication) or keep the private table inside the package with a test
-  pinning both tables' agreement on the artist path - check whether they
-  already agree before choosing. Contract to preserve: the TSV map
-  format (Artist / Genre / Genre2 lines, `#` comments, EXCLUDED artists)
-  round-trips byte-stably; build's append-only preserve-edits behavior;
-  artist_genre_defaults.tsv stays the shipped authority passed via
-  `--map`. Tests: 41 retarget.
-
+- [x] **A3 (target v5.10.0): fold `genre_tidy.py` into
+  `lattice.modes.genretidy` as the `--genreTidy` write mode.** SHIPPED in
+  the single v6.0.0 release, gated on A2 as planned. **Design point one,
+  resolved:** two flat flags (`--genreTidy-build`, `--genreTidy-apply`)
+  over a positional verb; they map to two TUI MAINTENANCE entries (4,5)/(4,6)
+  naturally, and the house style is flat flags. `--map` carries the map
+  path (artist_genre_defaults.tsv still passes). **Design point two,
+  resolved on purpose:** the tables DISAGREE (normalize_name strips
+  apostrophes from keys; the private norm keeps them), so switching would
+  re-key saved maps and make build re-append quoted-name artists; the
+  private `_QUOTE_DASH_FOLD` stays inside the package module with
+  FoldTableDivergenceTests pinning both the divergence and the
+  dash/case agreement. Contract preserved: byte-stable TSV round-trip,
+  append-only preserve-edits build, EXCLUDED comp hard-skip, apply's
+  in-process retag_directory with exit-1-on-error. Tests: 42 (sys.path
+  hack gone; argv pins already became call-shape pins in A2) + 7 dispatch
+  pins in test_write_modes.py.
 - [ ] **A4 (target v6.0.0, major): fold `genre_foldermap.py` into
   `lattice.modes.foldermap` as the `--genreMap` write mode; land the
   spec §5 amendment sanctioning folder moves.** The package's first
