@@ -96,6 +96,7 @@ from mutagen.id3 import (
     ParseID3v1,
 )
 from mutagen.mp3 import MP3
+from lattice.utils import json_summary
 from vir_tui import core as ui
 
 # APE key (lowercased) -> simple ID3 text frame class. Genre/Rating/Comment/cover/
@@ -652,6 +653,7 @@ def run_apestrip(
     log_path=None,
     assume_yes: bool = False,
     quiet: bool = False,
+    json_mode: bool = False,
     _title: str = "lattice apestrip - APEv2 Tag Stripper",
 ) -> int:
     """Run the APEv2 strip over one directory tree.
@@ -714,7 +716,18 @@ def run_apestrip(
                 worklist.append(r)
 
         if not worklist:
-            print(ui.success("No MP3s with an APEv2 tag found. Nothing to do."))
+            if json_mode:
+                print(
+                    json_summary(
+                        "apestrip",
+                        root,
+                        dry_run,
+                        {"files_with_ape": 0, "migrations": 0, "skipped_fields": 0},
+                    ),
+                    end="",
+                )
+            else:
+                print(ui.success("No MP3s with an APEv2 tag found. Nothing to do."))
             return 0
 
         head = "[DRY RUN] " if dry_run else ""
@@ -753,6 +766,22 @@ def run_apestrip(
             f"{skip_note} "
             f"{rating_files} rating(s) reported, {warn_files} genre warning(s)."
         )
+
+        if json_mode:
+            print(
+                json_summary(
+                    "apestrip",
+                    root,
+                    True,
+                    {
+                        "files_with_ape": len(worklist),
+                        "migrations": total_migrations,
+                        "skipped_fields": total_skipped,
+                    },
+                ),
+                end="",
+            )
+            return 0
 
         if dry_run:
             print("\nDry run: no files modified.")
@@ -809,6 +838,23 @@ def run_apestrip(
             f"-> stripped {stripped} file(s) "
             f"({repaired} via malformed-tag repair); {errors} error(s)."
         )
+        if json_mode:
+            print(
+                json_summary(
+                    "apestrip",
+                    root,
+                    False,
+                    {
+                        "files_with_ape": len(worklist),
+                        "stripped": stripped,
+                        "repaired": repaired,
+                        "migrations": total_migrations,
+                        "skipped_fields": total_skipped,
+                        "errors": errors,
+                    },
+                ),
+                end="",
+            )
         if errors:
             return 1
     finally:

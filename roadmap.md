@@ -614,16 +614,16 @@ versions below; the per-phase version targets are historical.
   optional --snapshot evaluation shortcut is deferred (recorded, not
   forgotten). Tests: 12 in test_where.py.
 
-- [ ] **B2: `--json` + exit-code parity.** Opt-in machine shapes for
-  stats/audit/health output and write-run summaries (counts, per-item
-  verdicts, committed vs dry_run); `.txt` stays the default; spec §4's
-  ".txt (not CSV)... not spreadsheet import" line (spec.md:139-141)
-  becomes ".txt default; --json for machine consumption" (small
-  amendment, the 5.7.0 pattern). Flag shape: bare `--json` vs
-  `--format json`; pick one and match the house modifier style. Exit
-  discipline: refusals stay 2, interrupt 130; add `--fail-on-findings`
-  (default stays 0) so audits can gate cron/CI like CalibreQuarry's;
-  make reports printable to stdout (--quiet composition) so they pipe.
+- [x] **B2: `--json` + exit-code parity.** SHIPPED in v6.0.0. **Flag shape,
+  resolved: bare `--json`** (house modifier style is bare store_true flags).
+  Uniform envelope via utils.json_report for --stats + the six tag-reading
+  audits; utils.json_summary ({mode, root, dry_run, counts}) ends the write
+  runs; --output - (utils.open_report) pipes reports; --fail-on-findings
+  exits 1 on findings (default 0; refusals 2, interrupt 130 unchanged).
+  spec.md:139's .txt line amended to the 5.7.0 pattern. Explicit-support
+  sets (_JSON_MODES/_FAIL_MODES) refuse unlisted modes with exit 2; --lyrics
+  has no JSON summary yet and is refused rather than half-supported.
+  Tests: 10 in test_json.py.
 
 - [ ] **B3: `--health`, the one-walk digest.** CalibreQuarry's --health
   translated: one screen of finding counts across the existing lenses

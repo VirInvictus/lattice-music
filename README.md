@@ -323,6 +323,21 @@ To make several roots permanent, add a `library_roots` array to `~/.config/latti
 
 The first-run prompt still saves only the single `library_root`, so a throwaway `--root` is never written to config.
 
+## Machine output (`--json`, `--output -`, `--fail-on-findings`)
+
+Reports are `.txt` by default. `--json` swaps in a machine-readable document instead: `--stats` and the tag-reading audits (`--auditTags`, `--auditAlbums`, `--auditBitrate`, `--auditReplayGain`, `--healthScore`, `--duplicates`) emit the uniform envelope `{"mode", "root", "findings", "payload"}` with counts and per-item verdicts, and the write modes end with a JSON run summary (counts plus `dry_run: true/false`, so a pipeline can tell a preview from a commit). `--output -` pipes any report to stdout, and `--fail-on-findings` makes the audits exit 1 when they have findings (the default stays 0), so a cron job or CI step can gate on a clean library:
+
+```bash
+# Machine-readable stats, piped
+lattice --stats --json --output - | jq '.payload.total_files'
+
+# Gate a CI job on tag completeness
+lattice --auditTags --fail-on-findings --output - || echo "library has tag gaps"
+
+# A write run that reports what it did as JSON
+lattice --retag ~/Music/Album "Jazz" --apply --json | jq '.counts.updated'
+```
+
 ## The `--where` selector
 
 `--where 'expr'` reuses the smart-playlist rule engine (`rating`, `genre`,

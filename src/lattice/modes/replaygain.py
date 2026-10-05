@@ -36,6 +36,7 @@ from vir_tui import core as ui
 
 from lattice.config import AUDIO_EXTENSIONS
 from lattice.tags import read_replaygain, read_replaygain_values
+from lattice.utils import json_summary
 
 __version__ = "1.2.2"
 
@@ -205,6 +206,7 @@ def run_replaygain(
     assume_yes: bool = False,
     quiet: bool = False,
     where=None,
+    json_mode: bool = False,
     _title: str = "lattice replaygain - ReplayGain 2.0 Writer",
 ) -> int:
     """Run the ReplayGain writer over one directory tree.
@@ -452,7 +454,24 @@ def run_replaygain(
         log("RG RUN END [APPLY]")
         log("=" * 70)
 
-        if not quiet:
+        if json_mode:
+            print(
+                json_summary(
+                    "replaygain",
+                    root,
+                    False,
+                    {
+                        "albums_scanned": scanned,
+                        "files": filecount,
+                        "skipped_tagged": skipped_tagged,
+                        "nested_skipped": len(nested),
+                        "noops": noops,
+                        "errors": errors,
+                    },
+                ),
+                end="",
+            )
+        elif not quiet:
             print(
                 f"Scanned {scanned} album(s), {filecount} file(s). "
                 f"Skipped {skipped_tagged}, nested skipped {len(nested)}, "

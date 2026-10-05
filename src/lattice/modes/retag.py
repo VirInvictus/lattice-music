@@ -33,6 +33,7 @@ from mutagen.apev2 import APENoHeaderError, APEv2
 from mutagen.asf import ASF
 from mutagen.id3 import ID3, TCON, ID3NoHeaderError, ParseID3v1
 from mutagen.mp4 import MP4
+from lattice.utils import json_summary
 from vir_tui import core as ui
 
 __version__ = "1.2.0"
@@ -343,6 +344,7 @@ def run_retag(
     strip_junk: bool = False,
     log_path=None,
     quiet: bool = False,
+    json_mode: bool = False,
     _title: str = "lattice retag - Universal Genre Rewriter",
 ) -> int:
     """Rewrite the genre tags on one album directory (or strip its junk ID3
@@ -421,6 +423,20 @@ def run_retag(
             tail = f"  {unchanged} unchanged." if unchanged else ""
             tail += f"  {failed} file(s) failed." if failed else ""
             log(f"  -> {verb} {updated} file(s).{tail}")
+        if json_mode:
+            print(
+                json_summary(
+                    "retag",
+                    target_dir,
+                    dry_run,
+                    {
+                        "updated": updated,
+                        "failed": failed,
+                        "unchanged": unchanged,
+                    },
+                ),
+                end="",
+            )
     finally:
         if log_fh is not None:
             log_fh.close()

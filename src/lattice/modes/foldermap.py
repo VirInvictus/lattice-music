@@ -28,6 +28,7 @@ from pathlib import Path
 
 from lattice.modes.library import _scan_album_dirs
 from lattice.utils import _make_pbar, as_roots, count_audio_files
+from lattice.utils import json_summary
 from lattice.vfs import VirtualFS
 from vir_tui import core as ui
 
@@ -631,6 +632,7 @@ def run_genremap(
     log_path=None,
     quiet: bool = False,
     where=None,
+    json_mode: bool = False,
     _title: str = "lattice genreMap - Genre Restructurer",
 ) -> int:
     """Plan (and, with apply=True, perform) the Genre/Artist/Album
@@ -687,14 +689,20 @@ def run_genremap(
 
     with Runner(manifest, dry_run=not apply, quiet=quiet) as runner:
         execute(moves, source_dirs, runner, root=directory, staging=staging)
-        _print_summary(runner.stats, not apply, label="reorganize", quiet=quiet)
-        if not quiet:
-            if apply:
-                print(f"Manifest: {manifest}")
-            else:
-                print(
-                    "\nDry run — nothing moved. Re-run with --apply to perform these moves."
-                )
+        if json_mode:
+            print(
+                json_summary("genre_map", directory, not apply, dict(runner.stats)),
+                end="",
+            )
+        else:
+            _print_summary(runner.stats, not apply, label="reorganize", quiet=quiet)
+            if not quiet:
+                if apply:
+                    print(f"Manifest: {manifest}")
+                else:
+                    print(
+                        "\nDry run — nothing moved. Re-run with --apply to perform these moves."
+                    )
     return 0
 
 

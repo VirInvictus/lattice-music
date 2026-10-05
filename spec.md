@@ -148,9 +148,15 @@ supplies default roots; the first-run prompt persists only the single
 
 ## 4. Output
 
-All output modes write `.txt` reports (not CSV). Results are grouped by
-severity or category with headers and relative paths. Designed for human
-reading, not spreadsheet import.
+All output modes write `.txt` reports by default. Results are grouped by
+severity or category with headers and relative paths; designed for human
+reading. `--json` swaps the report for a machine-readable JSON document
+(the uniform envelope `{mode, root, findings, payload}` for stats and the
+tag-reading audits; a run summary with counts and the `dry_run`/committed
+flag for the write modes), and `--output -` pipes any report to stdout.
+`--fail-on-findings` makes an audit exit 1 when it has findings (the default
+stays 0) so a cron/CI job can gate on a clean report; refusals stay exit 2
+and an interrupt stays 130.
 
 ### 4.1 Integrity Severity Tiers
 

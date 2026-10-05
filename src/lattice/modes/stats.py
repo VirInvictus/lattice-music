@@ -9,6 +9,8 @@ from lattice.utils import (
     count_audio_files,
     is_audio,
     iter_audio_dirs,
+    json_report,
+    open_report,
     parse_layout,
     read_tags_concurrent,
 )
@@ -60,6 +62,7 @@ def run_stats(
     layout: str = DEFAULT_LAYOUT,
     quiet: bool = False,
     where=None,
+    json_mode: bool = False,
 ) -> str:
     """Generate a library-wide statistics report (combined across all roots).
 
@@ -77,7 +80,7 @@ def run_stats(
             print(f"No audio files found under: {', '.join(roots)}")
         return ""
 
-    if not quiet and not utils.in_session():
+    if not quiet and not json_mode and not utils.in_session():
         print(f"Scanning {total_files} files under: {', '.join(roots)}")
 
     pbar = _make_pbar(total_files, "Gathering stats", quiet)
@@ -252,27 +255,63 @@ def run_stats(
             lines.append(f"  {artist:<35} {count:>5} tracks")
         lines.append("")
 
-    report = "\n".join(lines) + "\n"
-    if where is not None:
-        # The figures above describe the matching subset; say so where the
-        # file counts live, so a scoped report is never misread as whole-tree.
-        report = report.replace(
-            "LIBRARY STATISTICS",
-            f"LIBRARY STATISTICS (--where scoped: {matched} of {total_files} files)",
-            1,
-        )
+    if json_mode:
+        payload = {
+            "where_scoped": f"{matched} of {total_files} files"
+            if where is not None
+            else None,
+            "total_files": matched if where is not None else total_files,
+            "total_size_bytes": total_size,
+            "total_duration_s": round(total_duration, 2),
+            "artists": len(artist_dirs),
+            "albums": len(album_dirs),
+            "fully_tagged": fully_tagged,
+            "formats": {
+                ext: {"files": n, "bytes": format_sizes[ext]}
+                for ext, n in format_counts.most_common()
+            },
+            "bitrate": (
+                {
+                    "avg_kbps": round(sum(bitrates) / len(bitrates)),
+                    "min_kbps": min(bitrates),
+                    "max_kbps": max(bitrates),
+                    "below_192": sum(1 for b in bitrates if b < 192),
+                }
+                if bitrates
+                else None
+            ),
+            "ratings": rating_counts,
+            "genres": [
+                {"genre": g, "files": n} for g, n in genre_counts.most_common(15)
+            ],
+            "top_artists": [
+                {"artist": a, "tracks": n} for a, n in artist_counts.most_common(15)
+            ],
+        }
+        report = json_report("stats", as_roots(root), 0, payload)
+    else:
+        report = "\n".join(lines) + "\n"
+        if where is not None:
+            # The figures above describe the matching subset; say so where the
+            # file counts live, so a scoped report is never misread as whole-tree.
+            report = report.replace(
+                "LIBRARY STATISTICS",
+                f"LIBRARY STATISTICS (--where scoped: {matched} of {total_files} files)",
+                1,
+            )
 
-    # Write to file if output specified, otherwise stdout
-    if output:
+    # Write to file if output specified, otherwise stdout ("-" pipes too)
+    if output and output != "-":
         out_path = os.path.abspath(output)
         os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-        with open(out_path, "w", encoding="utf-8") as out_file:
+        with open_report(out_path) as out_file:
             out_file.write(report)
         if not quiet and not utils.in_session():
             print(f"\nStatistics written to: {out_path}")
     else:
         if not quiet and not utils.in_session():
-            print()
-            print(report)
+            if not json_mode:
+                print()
+            print(report, end="")
 
     return report

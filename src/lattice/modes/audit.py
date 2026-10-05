@@ -45,6 +45,8 @@ from lattice.utils import (
     is_audio,
     iter_audio_dirs,
     map_concurrent,
+    json_report,
+    open_report,
     read_tags_concurrent,
     relpath_under,
 )
@@ -396,7 +398,13 @@ def _section_track_dupes(
 
 
 def run_duplicates(
-    root: str | list[str], output: str, *, quiet: bool = False, where=None
+    root: str | list[str],
+    output: str,
+    *,
+    quiet: bool = False,
+    where=None,
+    json_mode: bool = False,
+    fail_on_findings: bool = False,
 ) -> int:
     """Detect duplicate albums, within-folder multi-format duplicates, similar
     album names, and track-level cross-library duplicates. Emits a single
@@ -432,7 +440,39 @@ def run_duplicates(
     out_path = os.path.abspath(output or DEFAULT_DUPLICATES_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
-    with open(out_path, "w", encoding="utf-8") as f:
+    if json_mode:
+        # The section helpers detect and render in one pass; the machine
+        # shape is counts-only (the text report carries the items), so the
+        # sections render into a sink and the counts feed the envelope.
+        import io
+
+        sink = io.StringIO()
+        exact_count, exact_keys = _section_exact(dirs, roots, sink)
+        mf_count = _section_multiformat(dirs, roots, sink)
+        sim_count = _section_similar(dirs, exact_keys, roots, sink)
+        trk_count = _section_track_dupes(dirs, roots, sink)
+        dup_findings = exact_count + mf_count + sim_count + trk_count
+        with open_report(out_path) as f:
+            f.write(
+                json_report(
+                    "duplicates",
+                    roots,
+                    dup_findings,
+                    {
+                        "directories": len(dirs),
+                        "audio_files": total,
+                        "exact_albums": exact_count,
+                        "within_folder_multiformat": mf_count,
+                        "similar_names": sim_count,
+                        "track_level": trk_count,
+                    },
+                )
+            )
+        if not quiet and out_path != "-":
+            print(f"Report written to: {out_path}")
+        return 1 if (fail_on_findings and dup_findings) else 0
+
+    with open_report(out_path) as f:
         f.write("DUPLICATE REPORT\n")
         f.write(f"Root: {', '.join(roots)}\n")
         f.write(f"Directories: {len(dirs)}    Audio files: {total}\n")
@@ -449,7 +489,8 @@ def run_duplicates(
         print(f"  Within-folder multi-format:   {mf_count}")
         print(f"  Similar-name candidates:      {sim_count}")
         print(f"  Track-level duplicates:       {trk_count}")
-    return 0
+    dup_total = exact_count + mf_count + sim_count + trk_count
+    return 1 if (fail_on_findings and dup_total) else 0
 
 
 # =====================================
@@ -859,6 +900,8 @@ def run_health_score(
     verbose: bool = False,
     quiet: bool = False,
     where=None,
+    json_mode: bool = False,
+    fail_on_findings: bool = False,
 ) -> int:
     """Aggregate the audit lenses into a per-album health score out of 100:
     tag completeness (--auditTags), ReplayGain coverage (--auditReplayGain),
@@ -909,11 +952,43 @@ def run_health_score(
 
     grades: Counter = Counter(_health_grade(s) for _, _, s, _, _ in albums)
     mean = round(sum(s for _, _, s, _, _ in albums) / len(albums), 1) if albums else 0.0
+    ranked = sorted(albums, key=lambda a: (a[2], a[1]))
+    flagged = [a for a in ranked if a[2] < 100]
+    full = [a for a in ranked if a[2] == 100]
 
     out_path = os.path.abspath(output or DEFAULT_HEALTH_SCORE_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
-    with open(out_path, "w", encoding="utf-8") as f:
+    if json_mode:
+        with open_report(out_path) as f:
+            f.write(
+                json_report(
+                    "health_score",
+                    roots,
+                    len(flagged),
+                    {
+                        "albums": len(albums),
+                        "files": total,
+                        "grades": {g: grades[g] for g in ("A", "B", "C", "D")},
+                        "mean": mean,
+                        "flagged": [
+                            {
+                                "path": relpath_under(a[1], roots),
+                                "score": a[2],
+                                "grade": _health_grade(a[2]),
+                                "files": a[4],
+                                "notes": a[3],
+                            }
+                            for a in flagged
+                        ],
+                    },
+                )
+            )
+        if not quiet and out_path != "-":
+            print(f"Report written to: {out_path}")
+        return 1 if (fail_on_findings and flagged) else 0
+
+    with open_report(out_path) as f:
         f.write("LIBRARY HEALTH REPORT\n")
         f.write(f"Root: {', '.join(roots)}\n")
         f.write(f"Albums: {len(albums)}    Audio files: {total}\n")
@@ -922,10 +997,6 @@ def run_health_score(
             f"D {grades['D']}    Mean: {mean}\n"
         )
         f.write("=" * 60 + "\n\n")
-
-        ranked = sorted(albums, key=lambda a: (a[2], a[1]))
-        flagged = [a for a in ranked if a[2] < 100]
-        full = [a for a in ranked if a[2] == 100]
 
         f.write(f"[ALBUMS WITH DEDUCTIONS]    ({len(flagged)} album(s))\n\n")
         for _src_root, dirpath, score, notes, n_files in flagged:
@@ -954,7 +1025,7 @@ def run_health_score(
         )
         print(f"  Deductions: {len(flagged)} album(s) below full score")
         print(f"Results written to: {out_path}")
-    return 0
+    return 1 if (fail_on_findings and flagged) else 0
 
 
 # =====================================
@@ -962,7 +1033,15 @@ def run_health_score(
 # =====================================
 
 
-def run_tag_audit(root: str | list[str], output: str, *, quiet: bool = False) -> int:
+def run_tag_audit(
+    root: str | list[str],
+    output: str,
+    *,
+    quiet: bool = False,
+    where=None,
+    json_mode: bool = False,
+    fail_on_findings: bool = False,
+) -> int:
     """Report audio files missing title, artist, track number, or genre."""
     if not HAVE_MUTAGEN_BASE:
         print("ERROR: mutagen is required for tag auditing.", file=sys.stderr)
@@ -988,6 +1067,8 @@ def run_tag_audit(root: str | list[str], output: str, *, quiet: bool = False) ->
 
     for filepath in paths:
         t = tags[filepath]
+        if where is not None and not where(t):
+            continue
         ext = os.path.splitext(filepath)[1].lower()
 
         missing_fields: list[str] = []
@@ -1024,7 +1105,31 @@ def run_tag_audit(root: str | list[str], output: str, *, quiet: bool = False) ->
         parent = os.path.dirname(issue["path"])
         by_dir[parent].append(issue)
 
-    with open(out_path, "w", encoding="utf-8") as out_file:
+    if json_mode:
+        with open_report(out_path) as out_file:
+            out_file.write(
+                json_report(
+                    "tag_audit",
+                    roots,
+                    len(issues),
+                    {
+                        "scanned": total,
+                        "items": [
+                            {
+                                "path": relpath_under(i["path"], roots),
+                                "format": i["format"],
+                                "missing": i["missing"],
+                            }
+                            for i in issues
+                        ],
+                    },
+                )
+            )
+        if not quiet and out_path != "-":
+            print(f"Report written to: {out_path}")
+        return 1 if (fail_on_findings and issues) else 0
+
+    with open_report(out_path) as out_file:
         out_file.write("TAG AUDIT REPORT\n")
         out_file.write(f"Root: {', '.join(roots)}\n")
         out_file.write(f"Scanned: {total}  Incomplete: {len(issues)}\n")
@@ -1053,7 +1158,7 @@ def run_tag_audit(root: str | list[str], output: str, *, quiet: bool = False) ->
             for field, count in field_counts.most_common():
                 print(f"    {field}: {count}")
 
-    return 0
+    return 1 if (fail_on_findings and issues) else 0
 
 
 # =====================================
@@ -1068,6 +1173,8 @@ def run_bitrate_audit(
     *,
     quiet: bool = False,
     where=None,
+    json_mode: bool = False,
+    fail_on_findings: bool = False,
 ) -> int:
     """Report audio files falling below a specified bitrate floor."""
     if not HAVE_MUTAGEN_BASE:
@@ -1117,7 +1224,32 @@ def run_bitrate_audit(
         parent = os.path.dirname(issue["path"])
         by_dir[parent].append(issue)
 
-    with open(out_path, "w", encoding="utf-8") as out_file:
+    if json_mode:
+        with open_report(out_path) as out_file:
+            out_file.write(
+                json_report(
+                    "bitrate_audit",
+                    roots,
+                    len(issues),
+                    {
+                        "floor_kbps": min_kbps,
+                        "scanned": total,
+                        "items": [
+                            {
+                                "path": relpath_under(i["path"], roots),
+                                "format": i["format"],
+                                "bitrate_kbps": int(i["bitrate"]),
+                            }
+                            for i in issues
+                        ],
+                    },
+                )
+            )
+        if not quiet and out_path != "-":
+            print(f"Report written to: {out_path}")
+        return 1 if (fail_on_findings and issues) else 0
+
+    with open_report(out_path) as out_file:
         out_file.write("BITRATE AUDIT REPORT\n")
         out_file.write(f"Root: {', '.join(roots)}\n")
         out_file.write(f"Floor: < {min_kbps} kbps\n")
@@ -1138,7 +1270,7 @@ def run_bitrate_audit(
         print(f"\nAudited {total} files. Found {len(issues)} below {min_kbps} kbps.")
         print(f"Results written to: {out_path}")
 
-    return 0
+    return 1 if (fail_on_findings and issues) else 0
 
 
 # =====================================
@@ -1186,6 +1318,8 @@ def run_replaygain_audit(
     verbose: bool = False,
     quiet: bool = False,
     where=None,
+    json_mode: bool = False,
+    fail_on_findings: bool = False,
 ) -> int:
     """Report per-album ReplayGain coverage. Format-aware: Opus R128 gain tags
     count as ReplayGain, so an album tagged the R128 way is not mis-flagged as
@@ -1236,7 +1370,34 @@ def run_replaygain_audit(
     out_path = os.path.abspath(output or DEFAULT_REPLAYGAIN_AUDIT_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
-    with open(out_path, "w", encoding="utf-8") as f:
+    rg_findings = n_noalbum + n_partial + n_missing
+    if json_mode:
+        with open_report(out_path) as f:
+            f.write(
+                json_report(
+                    "replaygain_audit",
+                    roots,
+                    rg_findings,
+                    {
+                        "albums": len(albums),
+                        "counts": {
+                            "ok": n_ok,
+                            "no_album_gain": n_noalbum,
+                            "partial": n_partial,
+                            "missing": n_missing,
+                        },
+                        "buckets": {
+                            bucket: [relpath_under(entry[0], roots) for entry in rows]
+                            for bucket, rows in by_bucket.items()
+                        },
+                    },
+                )
+            )
+        if not quiet and out_path != "-":
+            print(f"Report written to: {out_path}")
+        return 1 if (fail_on_findings and rg_findings) else 0
+
+    with open_report(out_path) as f:
         f.write("REPLAYGAIN AUDIT REPORT\n")
         f.write(f"Root: {', '.join(roots)}\n")
         f.write(f"Albums: {len(albums)}    Audio files: {total}\n")
@@ -1260,7 +1421,7 @@ def run_replaygain_audit(
         print(f"  Missing:        {n_missing}")
         print(f"Results written to: {out_path}")
 
-    return 0
+    return 1 if (fail_on_findings and rg_findings) else 0
 
 
 # =====================================
@@ -1610,6 +1771,8 @@ def run_album_consistency(
     verbose: bool = False,
     quiet: bool = False,
     where=None,
+    json_mode: bool = False,
+    fail_on_findings: bool = False,
 ) -> int:
     """Per-album consistency audit: the debris the repo's own writers and
     imports create. One read-only pass over every album folder checking
@@ -1683,7 +1846,37 @@ def run_album_consistency(
     out_path = os.path.abspath(output or DEFAULT_ALBUM_CONSISTENCY_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
-    with open(out_path, "w", encoding="utf-8") as f:
+    ac_findings = len(mixed) + len(track_issues) + len(year_issues)
+    if json_mode:
+        with open_report(out_path) as f:
+            f.write(
+                json_report(
+                    "album_consistency",
+                    roots,
+                    ac_findings,
+                    {
+                        "albums_scanned": n_albums,
+                        "mixed_codecs": [
+                            {"path": relpath_under(a, roots), "detail": d}
+                            for a, d in mixed
+                        ],
+                        "track_numbers": [
+                            {"path": relpath_under(a, roots), "detail": d}
+                            for a, d in track_issues
+                        ],
+                        "year": [
+                            {"path": relpath_under(a, roots), "detail": d}
+                            for a, d in year_issues
+                        ],
+                        "clean": [relpath_under(a, roots) for a in clean],
+                    },
+                )
+            )
+        if not quiet and out_path != "-":
+            print(f"Report written to: {out_path}")
+        return 1 if (fail_on_findings and ac_findings) else 0
+
+    with open_report(out_path) as f:
         f.write("ALBUM CONSISTENCY REPORT\n")
         f.write(f"Root: {', '.join(roots)}\n")
         f.write(
@@ -1720,7 +1913,7 @@ def run_album_consistency(
         print(f"  Year issues:        {len(year_issues)}")
         print(f"Results written to: {out_path}")
 
-    return 0
+    return 1 if (fail_on_findings and ac_findings) else 0
 
 
 # =====================================

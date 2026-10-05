@@ -64,6 +64,7 @@ from lattice.norm import (
     tag_dedupe,
     tag_fold,
 )
+from lattice.utils import json_summary
 from lattice.vfs import VirtualFS
 
 # Containers whose title/album/artist/albumartist the tag pass can rewrite. Other
@@ -792,6 +793,7 @@ def run_clean(
     layout: str = "{artist}/{album}",
     log_path=None,
     quiet: bool = False,
+    json_mode: bool = False,
     _title: str = "lattice clean - Fragmented Album Consolidator",
 ) -> int:
     """Run the consolidation/normalization passes over one library root.
@@ -897,8 +899,15 @@ def run_clean(
         run.log(f"CLEANUP RUN END [{mode}]")
         run.log("=" * 70 + "\n")
 
-        print(ui.success(f"Cleanup run complete ({mode}). See {log_path} for details."))
-        ui.print_summary(run.stats)
+        if json_mode:
+            print(json_summary("clean", root, dry_run, dict(run.stats)), end="")
+        else:
+            print(
+                ui.success(
+                    f"Cleanup run complete ({mode}). See {log_path} for details."
+                )
+            )
+            ui.print_summary(run.stats)
     finally:
         run.close()
 

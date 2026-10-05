@@ -105,6 +105,38 @@ _WHERE_MODES = frozenset(
     }
 )
 
+# Mode-flag dests that accept --json: the tag-reading audits, --stats, and the
+# write modes (JSON run summary). Everything else refuses, like --where.
+_JSON_MODES = frozenset(
+    {
+        "stats",
+        "auditTags",
+        "audit_albums",
+        "auditBitrate",
+        "auditReplayGain",
+        "health_score",
+        "duplicates",
+        "clean",
+        "apestrip",
+        "replaygain",
+        "retag",
+        "genre_tidy_apply",
+        "genre_map",
+    }
+)
+
+# The audits whose findings can gate --fail-on-findings.
+_FAIL_MODES = frozenset(
+    {
+        "auditTags",
+        "audit_albums",
+        "auditBitrate",
+        "auditReplayGain",
+        "health_score",
+        "duplicates",
+    }
+)
+
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
@@ -403,6 +435,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--quiet", action="store_true", help="Minimize output")
     p.add_argument(
+        "--json",
+        action="store_true",
+        help="Machine-readable output: the stats/audit report becomes a JSON "
+        "document, and a write mode ends with a JSON run summary (counts, "
+        "dry_run vs committed). .txt stays the default; --output - pipes",
+    )
+    p.add_argument(
+        "--fail-on-findings",
+        dest="fail_on_findings",
+        action="store_true",
+        help="Audit modes exit 1 when they have findings (default 0), so a "
+        "cron/CI job can gate on a clean report",
+    )
+    p.add_argument(
         "--genres", action="store_true", help="Include album genres in library tree"
     )
     p.add_argument(
@@ -561,6 +607,22 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
 
+        # --json / --fail-on-findings are opt-in machine shapes with the same
+        # explicit-support discipline as --where: a mode not listed refuses
+        # rather than silently ignoring the flag.
+        if args.json and not any(getattr(args, d) for d in _JSON_MODES):
+            print(
+                "error: --json does not apply to this mode",
+                file=sys.stderr,
+            )
+            return 2
+        if args.fail_on_findings and not any(getattr(args, d) for d in _FAIL_MODES):
+            print(
+                "error: --fail-on-findings applies to the audit modes only",
+                file=sys.stderr,
+            )
+            return 2
+
         # --where scopes the tag-reading modes only; a rule handed to a mode
         # that never reads tags (or whose targeting is not tag-based) is a
         # caller mistake, refused rather than silently ignored.
@@ -630,6 +692,7 @@ def main(argv: list[str] | None = None) -> int:
                 strip_junk=args.strip_junk,
                 log_path=os.path.join(args.pos_root, "retag.log"),
                 quiet=args.quiet,
+                json_mode=args.json,
             )
 
         # Every named root (positional + each --root) is scanned together;
@@ -788,7 +851,14 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.duplicates:
             output = args.output or DEFAULT_DUPLICATES_OUTPUT
-            return run_duplicates(root, output, quiet=args.quiet, where=where)
+            return run_duplicates(
+                root,
+                output,
+                quiet=args.quiet,
+                where=where,
+                json_mode=args.json,
+                fail_on_findings=args.fail_on_findings,
+            )
 
         if args.audit_audio_dupes:
             output = args.output or DEFAULT_AUDIO_DUPES_OUTPUT
@@ -796,12 +866,25 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.auditTags:
             output = args.output or DEFAULT_TAG_AUDIT_OUTPUT
-            return run_tag_audit(root, output, quiet=args.quiet, where=where)
+            return run_tag_audit(
+                root,
+                output,
+                quiet=args.quiet,
+                where=where,
+                json_mode=args.json,
+                fail_on_findings=args.fail_on_findings,
+            )
 
         if args.audit_albums:
             output = args.output or DEFAULT_ALBUM_CONSISTENCY_OUTPUT
             return run_album_consistency(
-                root, output, verbose=args.verbose, quiet=args.quiet, where=where
+                root,
+                output,
+                verbose=args.verbose,
+                quiet=args.quiet,
+                where=where,
+                json_mode=args.json,
+                fail_on_findings=args.fail_on_findings,
             )
 
         if args.audit_junk_frames:
@@ -813,13 +896,25 @@ def main(argv: list[str] | None = None) -> int:
         if args.auditBitrate:
             output = args.output or DEFAULT_BITRATE_AUDIT_OUTPUT
             return run_bitrate_audit(
-                root, output, args.min_bitrate, quiet=args.quiet, where=where
+                root,
+                output,
+                args.min_bitrate,
+                quiet=args.quiet,
+                where=where,
+                json_mode=args.json,
+                fail_on_findings=args.fail_on_findings,
             )
 
         if args.auditReplayGain:
             output = args.output or DEFAULT_REPLAYGAIN_AUDIT_OUTPUT
             return run_replaygain_audit(
-                root, output, verbose=args.verbose, quiet=args.quiet, where=where
+                root,
+                output,
+                verbose=args.verbose,
+                quiet=args.quiet,
+                where=where,
+                json_mode=args.json,
+                fail_on_findings=args.fail_on_findings,
             )
 
         if args.verify_replaygain:
@@ -848,6 +943,8 @@ def main(argv: list[str] | None = None) -> int:
                 verbose=args.verbose,
                 quiet=args.quiet,
                 where=where,
+                json_mode=args.json,
+                fail_on_findings=args.fail_on_findings,
             )
 
         if args.playlist:
@@ -864,7 +961,12 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.stats:
             run_stats(
-                root, args.output, layout=args.layout, quiet=args.quiet, where=where
+                root,
+                args.output,
+                layout=args.layout,
+                quiet=args.quiet,
+                where=where,
+                json_mode=args.json,
             )
             return 0
 
@@ -914,6 +1016,7 @@ def main(argv: list[str] | None = None) -> int:
                     normalize_tags=args.normalize_tags or args.clean_all,
                     layout=args.layout,
                     quiet=args.quiet,
+                    json_mode=args.json,
                 )
             if args.apestrip:
                 return run_apestrip(
@@ -922,6 +1025,7 @@ def main(argv: list[str] | None = None) -> int:
                     keep_metadata=args.keep_metadata,
                     repair_malformed=args.repair_malformed,
                     quiet=args.quiet,
+                    json_mode=args.json,
                 )
             if args.replaygain:
                 return run_replaygain(
@@ -933,6 +1037,7 @@ def main(argv: list[str] | None = None) -> int:
                     threads=args.threads,
                     quiet=args.quiet,
                     where=where,
+                    json_mode=args.json,
                 )
             if args.genre_tidy_build:
                 return run_genre_tidy_build(
@@ -950,6 +1055,7 @@ def main(argv: list[str] | None = None) -> int:
                     layout=args.layout,
                     quiet=args.quiet,
                     where=where,
+                    json_mode=args.json,
                 )
             if args.genre_map:
                 return run_genremap(
@@ -963,6 +1069,7 @@ def main(argv: list[str] | None = None) -> int:
                     allow_new_genre=args.allow_new_genre,
                     quiet=args.quiet,
                     where=where,
+                    json_mode=args.json,
                 )
             return run_lyrics(
                 root[0],

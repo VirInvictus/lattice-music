@@ -3,6 +3,7 @@ import shutil
 import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import contextmanager
 
 import vir_tui
 
@@ -141,6 +142,56 @@ def as_roots(root) -> list[str]:
     paths. Lets every mode accept one root or several without changing callers."""
     roots = [root] if isinstance(root, (str, os.PathLike)) else list(root)
     return [os.path.abspath(os.path.expanduser(r)) for r in roots]
+
+
+STDOUT_REPORT = "-"
+
+
+@contextmanager
+def open_report(path: str):
+    """Yield a text stream for a report: the file at `path`, or stdout when
+    path is '-' (`--output -`), so a report pipes without a temp file."""
+    if path == STDOUT_REPORT:
+        yield sys.stdout
+    else:
+        with open(path, "w", encoding="utf-8") as f:
+            yield f
+
+
+def json_report(mode: str, roots: list[str], findings: int, payload) -> str:
+    """The uniform machine-report envelope (--json): what ran, over what, how
+    much it found, and the mode's own structured payload. Written where the
+    .txt report would go (out path, or stdout with --output -)."""
+    import json
+
+    return (
+        json.dumps(
+            {"mode": mode, "root": roots, "findings": findings, "payload": payload},
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n"
+    )
+
+
+def json_summary(mode: str, root, dry_run: bool, counts: dict) -> str:
+    """The write-run machine summary (--json): the mode, the single root it
+    was pointed at, whether it committed or previewed, and the run's counters."""
+    import json
+
+    return (
+        json.dumps(
+            {
+                "mode": mode,
+                "root": str(root),
+                "dry_run": dry_run,
+                "counts": counts,
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n"
+    )
 
 
 def iter_audio_dirs(root):

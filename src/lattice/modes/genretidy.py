@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 from lattice.modes.library import _scan_album_dirs
+from lattice.utils import json_summary
 from lattice.utils import _make_pbar, as_roots, count_audio_files
 from vir_tui import core as ui
 
@@ -328,6 +329,7 @@ def run_genre_tidy_apply(
     log_path=None,
     quiet: bool = False,
     where=None,
+    json_mode: bool = False,
     _title: str = "lattice genreTidy - Genre Authority Enforcer",
 ) -> int:
     """Retag every album whose genre disagrees with the artist→genre map.
@@ -474,6 +476,8 @@ def run_genre_tidy_apply(
     if stats["errors"]:
         print(ui.info(f"  {stats['errors']} retag error(s) — see log."))
     print(ui.info(f"Log: {log_path}"))
+    if json_mode:
+        print(json_summary("genre_tidy", directory, dry_run, dict(stats)), end="")
     # Nonzero when any album failed to retag, matching the retag mode,
     # rerate.py and replaygain.py; apply used to exit 0 no matter how many
     # writes failed.
