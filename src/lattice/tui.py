@@ -34,6 +34,7 @@ from lattice.modes.audit import (
     run_audio_dupes,
     run_bitrate_audit,
     run_duplicates,
+    run_health,
     run_health_score,
     run_junk_frame_audit,
     run_replaygain_audit,
@@ -81,6 +82,7 @@ DEFAULT_ART_MISMATCH_OUTPUT = "lattice_art_mismatch.txt"
 DEFAULT_DUPLICATES_OUTPUT = "lattice_duplicates.txt"
 DEFAULT_AUDIO_DUPES_OUTPUT = "lattice_audio_dupes.txt"
 DEFAULT_HEALTH_SCORE_OUTPUT = "lattice_health_score.txt"
+DEFAULT_HEALTH_DIGEST_OUTPUT = "lattice_health_digest.txt"
 DEFAULT_TAG_AUDIT_OUTPUT = "lattice_tag_audit.txt"
 DEFAULT_JUNK_FRAME_OUTPUT = "lattice_junk_frames.txt"
 DEFAULT_BITRATE_AUDIT_OUTPUT = "lattice_bitrate_audit.txt"
@@ -134,6 +136,7 @@ _MAIN_SECTIONS = [
             "Audit album consistency",
             "Audit stray files",
             "Library health score",
+            "Library health digest (health)",
         ],
     ),
     (
@@ -215,6 +218,8 @@ _MAIN_ALIASES: dict[str, tuple | None] = {
     "albums": (3, 8),
     "strays": (3, 9),
     "health": (3, 10),
+    "digest": (3, 11),
+    "healthdigest": (3, 11),
     "clean": (4, 0),
     "apestrip": (4, 1),
     "ape": (4, 1),
@@ -727,6 +732,22 @@ def _menu_session() -> int:
                     roots,
                     output,
                     layout=layout,
+                    quiet=False,
+                    footer=out_note(output),
+                )
+
+            elif result == (3, 11):
+                output = prompt_out("Output file", DEFAULT_HEALTH_DIGEST_OUTPUT)
+                min_kbps = prompt_int("Minimum bitrate floor (kbps)", 192)
+                min_res = prompt_int("Minimum cover resolution (px)", 500)
+                run_with_capture(
+                    "Library health digest (health)",
+                    run_health,
+                    roots,
+                    output,
+                    layout=get_layout(),
+                    min_kbps=min_kbps,
+                    min_res=min_res,
                     quiet=False,
                     footer=out_note(output),
                 )

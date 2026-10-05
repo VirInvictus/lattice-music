@@ -65,6 +65,7 @@ Modern music players often hide your library behind proprietary databases. latti
 | **ReplayGain audit** | `--auditReplayGain` | Reports per-album ReplayGain coverage (missing, partial, no album gain, OK); Opus R128 gain counts as tagged |
 | **ReplayGain verification** | `--verifyReplayGain` | Re-measures every album read-only with `rsgain` and reports stored gains that disagree with the fresh measurement (with a per-row clip-protection exemption). Reference-aware: R128-tagged files verify at the -23 LUFS baseline their format implies, replaygain_* files at `--target-lufs` |
 | **Stray-file audit** | `--auditStrays` | Reports audio outside the layout's album depth, loose tracks, hidden-dir audio the scanners prune silently, and unrecognized non-audio files in album folders |
+| **Library health digest** | `--health` | One screen of finding counts across the existing lenses from a single walk (tags, bitrate, ReplayGain, art, strays, playlists, duplicate albums, worst scores), with pointers to the full reports; always exits 0 |
 | **Library health score** | `--healthScore` | Per-album score out of 100 aggregating tag completeness, ReplayGain coverage, art, and the bitrate floor, with point-by-point deductions |
 | **Clean (write)** | `--clean` | Consolidates fragmented album folders; opt-in `--normalize-names`/`--normalize-filenames`/`--normalize-tags` passes. Dry-run by default, `--apply` to write |
 | **APEv2 strip (write)** | `--apestrip` | Removes stray APEv2 tags from MP3s (`--keep-metadata` to migrate first, `--repair-malformed` for broken tags). Dry-run by default, `--apply` to write |
@@ -185,6 +186,9 @@ lattice --auditAudioDupes --output audio_dupes.txt
 
 # Scan two libraries together (repeat --root); surfaces cross-library duplicates
 lattice --duplicates --root ~/Music --root /mnt/usb/Albums --output duplicates.txt
+
+# One screen over the whole library: every lens counted in one walk
+lattice --health --output health_digest.txt
 
 # Score every album out of 100: tags, ReplayGain, art, bitrate
 lattice --healthScore --output health_score.txt
@@ -322,6 +326,27 @@ To make several roots permanent, add a `library_roots` array to `~/.config/latti
 ```
 
 The first-run prompt still saves only the single `library_root`, so a throwaway `--root` is never written to config.
+
+## Library health digest
+
+`--health` is the one-walk digest: instead of running six audits (six full
+walks), it reads each file's tags once and feeds every lens, then prints one
+screen of counts with a pointer to the full-report mode for each:
+
+```
+Tags:       32 file(s) with incomplete tags
+      full report: lattice --auditTags
+ReplayGain: 391 missing, 6 partial, 22 no album gain
+      full report: lattice --auditReplayGain
+...
+```
+
+The digest never invents its own rules: its tag lens is `--auditTags`'s
+classifier, its ReplayGain buckets are the audit's, its strays are
+`--auditStrays`'s, its scores are `--healthScore`'s, and its playlist check is
+`--checkPlaylists`'s, so the digest and the audits cannot disagree. It always
+exits 0 (the audits are the gates, not the digest); `--json` gives the same
+digest as a document.
 
 ## Machine output (`--json`, `--output -`, `--fail-on-findings`)
 

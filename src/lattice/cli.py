@@ -12,6 +12,7 @@ from lattice.config import (
     DEFAULT_BITRATE_AUDIT_OUTPUT,
     DEFAULT_DUPLICATES_OUTPUT,
     DEFAULT_FLAC_OUTPUT,
+    DEFAULT_HEALTH_OUTPUT,
     DEFAULT_HEALTH_SCORE_OUTPUT,
     DEFAULT_JUNK_FRAME_OUTPUT,
     DEFAULT_LIBRARY_OUTPUT,
@@ -43,6 +44,7 @@ from lattice.modes.audit import (
     run_audio_dupes,
     run_bitrate_audit,
     run_duplicates,
+    run_health,
     run_health_score,
     run_junk_frame_audit,
     run_replaygain_audit,
@@ -109,6 +111,7 @@ _WHERE_MODES = frozenset(
 # write modes (JSON run summary). Everything else refuses, like --where.
 _JSON_MODES = frozenset(
     {
+        "health",
         "stats",
         "auditTags",
         "audit_albums",
@@ -254,6 +257,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Per-album health score aggregating tag completeness, "
         "ReplayGain coverage, art, and the bitrate floor",
+    )
+    group.add_argument(
+        "--health",
+        action="store_true",
+        help="One-screen digest of finding counts across the existing lenses "
+        "(tags, bitrate, ReplayGain, art, strays, playlists, duplicates, "
+        "worst health scores) from a single walk, with pointers to the full "
+        "reports; read-only, always exits 0",
     )
     group.add_argument(
         "--playlist",
@@ -932,6 +943,19 @@ def main(argv: list[str] | None = None) -> int:
         if args.audit_strays:
             output = args.output or DEFAULT_STRAY_AUDIT_OUTPUT
             return run_stray_audit(root, output, layout=args.layout, quiet=args.quiet)
+
+        if args.health:
+            output = args.output or DEFAULT_HEALTH_OUTPUT
+            return run_health(
+                root,
+                output,
+                layout=args.layout,
+                min_kbps=args.min_bitrate,
+                min_res=args.min_art_res,
+                verbose=args.verbose,
+                quiet=args.quiet,
+                json_mode=args.json,
+            )
 
         if args.health_score:
             output = args.output or DEFAULT_HEALTH_SCORE_OUTPUT

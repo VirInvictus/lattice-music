@@ -17,6 +17,7 @@ from lattice.config import (
     DEFAULT_AUDIO_DUPES_OUTPUT,
     DEFAULT_BITRATE_AUDIT_OUTPUT,
     DEFAULT_DUPLICATES_OUTPUT,
+    DEFAULT_HEALTH_OUTPUT,
     DEFAULT_HEALTH_SCORE_OUTPUT,
     DEFAULT_JUNK_FRAME_OUTPUT,
     DEFAULT_REPLAYGAIN_AUDIT_OUTPUT,
@@ -37,6 +38,8 @@ from lattice.tags import (
     read_replaygain,
     read_replaygain_values_with_convention,
 )
+from vir_tui import core as ui
+
 from lattice.utils import (
     _find_cover_file,
     _make_pbar,
@@ -50,6 +53,7 @@ from lattice.utils import (
     read_tags_concurrent,
     relpath_under,
 )
+from lattice.modes.playlists import _find_playlists, check_playlist
 
 # =====================================
 # Mode: Duplicate detection
@@ -1033,6 +1037,22 @@ def run_health_score(
 # =====================================
 
 
+def _tag_findings(t) -> list[str]:
+    """The tag-completeness lens, shared verbatim by --auditTags and the
+    --health digest, so the two can never disagree about what "incomplete"
+    means (the derivation principle: digest and lens share collection code)."""
+    missing: list[str] = []
+    if not t.title:
+        missing.append("title")
+    if not t.artist:
+        missing.append("artist")
+    if t.trackno is None:
+        missing.append("tracknumber")
+    if not t.genre:
+        missing.append("genre")
+    return missing
+
+
 def run_tag_audit(
     root: str | list[str],
     output: str,
@@ -1071,15 +1091,7 @@ def run_tag_audit(
             continue
         ext = os.path.splitext(filepath)[1].lower()
 
-        missing_fields: list[str] = []
-        if not t.title:
-            missing_fields.append("title")
-        if not t.artist:
-            missing_fields.append("artist")
-        if t.trackno is None:
-            missing_fields.append("tracknumber")
-        if not t.genre:
-            missing_fields.append("genre")
+        missing_fields = _tag_findings(t)
 
         if missing_fields:
             issues.append(
@@ -1914,6 +1926,252 @@ def run_album_consistency(
         print(f"Results written to: {out_path}")
 
     return 1 if (fail_on_findings and ac_findings) else 0
+
+
+# =====================================
+# Mode: Library health digest
+# =====================================
+
+
+def _most_common_tag(bundles, field: str) -> str:
+    """Most-common non-empty value of a TagBundle field across an album's
+    files (the same dominant-value aggregation the scanner uses for
+    artist/album); empty string when the field is empty everywhere."""
+    counts: Counter = Counter()
+    for t in bundles:
+        v = getattr(t, field)
+        if v:
+            counts[v] += 1
+    return max(counts, key=lambda k: counts[k]) if counts else ""
+
+
+def run_health(
+    root: str | list[str],
+    output: str,
+    *,
+    layout: str = "{artist}/{album}",
+    min_kbps: int = 192,
+    min_res: int = 500,
+    verbose: bool = False,
+    quiet: bool = False,
+    json_mode: bool = False,
+    _title: str = "lattice health - Library Health Digest",
+) -> int:
+    """One screen of finding counts across the existing lenses, from ONE walk:
+    each file's TagBundle (and ReplayGain flags, and the art/stat checks) is
+    read once and fed to every lens, where running the six modes separately
+    would be six full walks. The digest never fabricates its own rules: tag
+    completeness is _tag_findings (the auditTags classifier), coverage is
+    _rg_bucket, scores are _album_health, strays are classify_stray, and the
+    playlist check is check_playlist — the derivation principle, so the digest
+    and the lenses cannot drift. Every line points at the full-report mode;
+    this mode always exits 0 (the audits are the gates, not the digest)."""
+    roots = as_roots(root)
+    if not quiet:
+        ui.print_header(_title)
+        print(f"Root: {', '.join(roots)}\n")
+
+    artist_depth, album_depth = _layout_depths(layout)
+
+    n_files = 0
+    n_albums = 0
+    tag_incomplete = 0
+    below_floor = 0
+    rg_counts = Counter()
+    no_art_albums = 0
+    stray_counts: Counter = Counter()
+    health_rows: list[tuple[int, str, int]] = []  # (score, rel, n_files)
+    album_keys: dict[tuple[str, str], list[str]] = {}
+    multiformat_dirs = 0
+
+    pbar = _make_pbar(count_audio_files(roots) * 2, "Health walk", quiet)
+    for src_root, dirpath, _subdirs, files in iter_audio_dirs(roots):
+        audio = sorted(f for f in files if is_audio(f))
+        if not audio:
+            continue
+        n_albums += 1
+        paths = [os.path.join(dirpath, f) for f in audio]
+        bundles = read_tags_concurrent(paths, pbar=pbar)
+        rg = map_concurrent(read_replaygain, paths, pbar=pbar)
+
+        n_track = sum(1 for p in paths if rg[p].has_track_gain)
+        n_album_gain = sum(1 for p in paths if rg[p].has_album_gain)
+        rg_counts[_rg_bucket(n_track, n_album_gain, len(paths))] += 1
+
+        cover = _find_cover_file(dirpath)
+        if not cover and not _has_embedded_art(dirpath):
+            no_art_albums += 1
+
+        exts = set()
+        album_bundles = []
+        for p in paths:
+            t = bundles[p]
+            album_bundles.append(t)
+            n_files += 1
+            if _tag_findings(t):
+                tag_incomplete += 1
+            if t.bitrate_kbps is not None and 0 < t.bitrate_kbps < min_kbps:
+                below_floor += 1
+            exts.add(os.path.splitext(p)[1].lower())
+            rel_parts = tuple(os.path.relpath(p, src_root).split(os.sep))
+            stray_counts[classify_stray(rel_parts, artist_depth, album_depth)] += 1
+
+        if len(exts) > 1:
+            multiformat_dirs += 1
+
+        dominant_artist = _most_common_tag(album_bundles, "artist")
+        dominant_album = _most_common_tag(album_bundles, "album")
+        if dominant_artist and dominant_album:
+            album_keys.setdefault((dominant_artist, dominant_album), []).append(dirpath)
+
+        score, _notes = _album_health(
+            bundles,
+            rg,
+            cover is not None,
+            None,
+            bool(cover) or _has_embedded_art(dirpath),
+            min_kbps,
+            min_res,
+        )
+        health_rows.append((score, relpath_under(dirpath, roots), len(paths)))
+
+    pbar.close()
+
+    # Duplicate albums: the same dominant artist+album in more than one
+    # directory (the exact-dupe lens of --duplicates, count-only here).
+    exact_dupe_pairs = sum(1 for v in album_keys.values() if len(v) > 1)
+
+    # Playlists are a different file set; the check reuses check_playlist so
+    # the digest and --checkPlaylists cannot disagree.
+    playlists = _find_playlists(roots)
+    pl_results = [check_playlist(p) for p in playlists]
+    pl_problems = sum(
+        1
+        for has_header, n_entries, n_missing, _m in pl_results
+        if n_missing or (not has_header and n_entries + n_missing > 0)
+    )
+
+    health_rows.sort(key=lambda r: (r[0], r[1]))
+    worst = health_rows[:5]
+    mean = (
+        round(sum(s for s, _r, _n in health_rows) / len(health_rows), 1)
+        if health_rows
+        else 0.0
+    )
+    total_findings = (
+        tag_incomplete
+        + below_floor
+        + rg_counts["MISSING"]
+        + rg_counts["PARTIAL"]
+        + rg_counts["NO_ALBUM_GAIN"]
+        + no_art_albums
+        + stray_counts["wrong-depth"]
+        + stray_counts["loose"]
+        + stray_counts["hidden"]
+        + pl_problems
+        + exact_dupe_pairs
+        + multiformat_dirs
+    )
+
+    payload = {
+        "files": n_files,
+        "albums": n_albums,
+        "tag_incomplete": tag_incomplete,
+        "below_bitrate_floor": below_floor,
+        "replaygain": {
+            "missing": rg_counts["MISSING"],
+            "partial": rg_counts["PARTIAL"],
+            "no_album_gain": rg_counts["NO_ALBUM_GAIN"],
+            "ok": rg_counts["OK"],
+        },
+        "albums_without_art": no_art_albums,
+        "strays": {
+            "wrong_depth": stray_counts["wrong-depth"],
+            "loose": stray_counts["loose"],
+            "hidden": stray_counts["hidden"],
+        },
+        "playlists_with_problems": pl_problems,
+        "playlists_total": len(playlists),
+        "exact_duplicate_albums": exact_dupe_pairs,
+        "multiformat_dirs": multiformat_dirs,
+        "health_mean": mean,
+        "worst_albums": [
+            {"path": rel, "score": score, "grade": _health_grade(score), "files": n}
+            for score, rel, n in worst
+        ],
+    }
+
+    if json_mode:
+        out_path = os.path.abspath(output or DEFAULT_HEALTH_OUTPUT)
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+        with open_report(out_path) as f:
+            f.write(json_report("health", roots, total_findings, payload))
+        if not quiet and out_path != "-":
+            print(f"Report written to: {out_path}")
+        return 0
+
+    lines: list[str] = []
+    lines.append("LIBRARY HEALTH DIGEST")
+    lines.append(f"Root: {', '.join(roots)}")
+    lines.append(
+        f"Walked once: {n_files} files in {n_albums} albums; "
+        f"{total_findings} finding(s) across the lenses"
+    )
+    lines.append("=" * 64)
+    lines.append("")
+    lens_rows = [
+        (
+            f"Tags:       {tag_incomplete} file(s) with incomplete tags",
+            "lattice --auditTags",
+        ),
+        (
+            f"Bitrate:    {below_floor} file(s) below {min_kbps} kbps",
+            "lattice --auditBitrate",
+        ),
+        (
+            f"ReplayGain: {rg_counts['MISSING']} missing, "
+            f"{rg_counts['PARTIAL']} partial, "
+            f"{rg_counts['NO_ALBUM_GAIN']} no album gain",
+            "lattice --auditReplayGain",
+        ),
+        (
+            f"Art:        {no_art_albums} album(s) without any cover",
+            "lattice --missingArt",
+        ),
+        (
+            f"Strays:     {stray_counts['wrong-depth']} wrong-depth, "
+            f"{stray_counts['loose']} loose, {stray_counts['hidden']} hidden",
+            "lattice --auditStrays",
+        ),
+        (
+            f"Playlists:  {pl_problems} of {len(playlists)} with problems",
+            "lattice --checkPlaylists",
+        ),
+        (
+            f"Duplicates: {exact_dupe_pairs} exact album pair(s), "
+            f"{multiformat_dirs} multi-format folder(s)",
+            "lattice --duplicates",
+        ),
+    ]
+    for text, pointer in lens_rows:
+        lines.append(f"  {text}")
+        lines.append(f"      full report: {pointer}")
+    lines.append(f"  Health:     mean {mean}; worst albums:")
+    for score, rel, n in worst:
+        lines.append(f"      {score:>3} {_health_grade(score)}  {rel}/  ({n} files)")
+    lines.append("      full report: lattice --healthScore")
+    lines.append("")
+    lines.append("Exit 0 by design: the digest informs, the audits gate.")
+    report = "\n".join(lines) + "\n"
+
+    out_path = os.path.abspath(output or DEFAULT_HEALTH_OUTPUT)
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    with open_report(out_path) as f:
+        f.write(report)
+    if not quiet and out_path != "-":
+        print(report)
+        print(f"Digest written to: {out_path}")
+    return 0
 
 
 # =====================================

@@ -625,15 +625,14 @@ versions below; the per-phase version targets are historical.
   has no JSON summary yet and is refused rather than half-supported.
   Tests: 10 in test_json.py.
 
-- [ ] **B3: `--health`, the one-walk digest.** CalibreQuarry's --health
-  translated: one screen of finding counts across the existing lenses
-  (tag completeness, art, RG coverage, strays, playlist checks,
-  duplicate counts, worst --healthScore entries) with pointers to the
-  full reports, exit 0 always. The point is the shared walk: running
-  six modes today is six full walks; --health reads each file's
-  TagBundle once and feeds every lens. Steal the derivation principle
-  too: digest and lenses must share collection code so they cannot
-  drift (cquarry's --audit and --health share one collect_issues).
+- [x] **B3: `--health`, the one-walk digest.** SHIPPED in v6.0.0:
+  run_health in modes/audit.py; one walk feeds tags/bitrate/RG buckets/art/
+  strays/playlists/exact-album-dupes/worst-health-scores; every row carries
+  its full-report pointer; exit 0 always (--fail-on-findings refused by
+  design; --json supported). Derivation principle structural: _tag_findings
+  extracted as the shared classifier, _rg_bucket/_album_health/
+  classify_stray/check_playlist reused as-is. TUI Metadata entry (3,11).
+  Tests: 7 in test_health.py.
 
 - [ ] **B4: `--ingest [DIR]`, the ritual, packaged.** Gated on A4 (the
   package-native version sequences modes, not scripts). One command
