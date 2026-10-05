@@ -65,8 +65,10 @@ modes/     one file per mode group: library, integrity, artwork, audit,
            write mode: the package's one genre-write path, plus the
            --strip-junk junk-frame strip), genretidy (the --genreTidy-build /
            --genreTidy-apply authority pair), foldermap (the --genreMap
-           folder-moving write mode). The shared dry-run virtual filesystem
-           both moving modes plan against lives in lattice/vfs.py.
+           folder-moving write mode), ingest (the --ingest ritual: it
+           sequences the package modes, never re-implements them). The
+           shared dry-run virtual filesystem both moving modes plan against
+           lives in lattice/vfs.py.
            Each exports run_* / write_* functions.
 ```
 
@@ -112,6 +114,7 @@ The write modes invert the script defaults on purpose: `run_clean`/`run_apestrip
 - Default to no comments; `tags.py` has a few because the format quirks aren't obvious from the code, and that's the bar.
 - The standard layout assumption is `ARTIST/ALBUM/Track.ext`, but `--layout` (default `{artist}/{album}`) lets callers override it via `utils.parse_layout`. Don't hardcode `os.sep`-counting logic; use `parse_layout`.
 
+- **`--ingest` sequences the ritual, it never re-implements** (B4): modes/ingest.py calls run_genremap -> run_apestrip -> run_clean(all passes) -> run_health in process; per-stage TTY confirm (auto-proceed on non-TTY, the house convention; the TUI's ask_yn is the gate); one summary file (<root>/ingest_summary.txt, --output overrides) points into the per-stage logs; --baseline SNAPSHOT adds a diff report. A declined stage is recorded and skipped, never fatal. Not a new write verb: no §5 change beyond A4's.
 - **`--health` is the one-walk digest** (B3): `run_health` in modes/audit.py reads each file's TagBundle once and feeds the shared lens code (the derivation principle: `_tag_findings` is auditTags' classifier, `_rg_bucket` the RG buckets, `_album_health` the scorer, `classify_stray` the stray buckets, `check_playlist` the playlist check), so digest and audits cannot drift. Always exits 0; `--json` supported (no --fail-on-findings: it informs, the audits gate). TUI entry (3, 11).
 - **`--json` / `--output -` / `--fail-on-findings`** (B2): the machine shapes. `utils.json_report` is the uniform audit/stats envelope ({mode, root, findings, payload}); `utils.json_summary` is the write-run summary ({mode, root, dry_run, counts}); `utils.open_report` implements `--output -` (stdout) for every converted report writer. Support is explicit: `_JSON_MODES` (stats, the six tag-reading audits, and the write modes except lyrics) and `_FAIL_MODES` (the six audits) in cli.py refuse unlisted modes with exit 2. Exit discipline: findings gate exit 1 only under `--fail-on-findings` (default 0), refusals stay 2, interrupt 130.
 - **`--where` is the global selector** (B1): `compile_where` in `lattice.modes.playlists` compiles the playlist rule grammar into a TagBundle predicate; `library._scan_album_dirs(roots, layout, pbar, where=...)` is the choke point for the exports and the genretidy/foldermap scans; stats and the tag-reading audits filter their own loops. Write targeting is album-granular by pinned rule (any matching track selects the whole album). The supported-mode set is `_WHERE_MODES` in cli.py: a mode not listed refuses `--where` with exit 2, so new modes opt in explicitly. The TUI does not prompt for `--where` yet (the CLI passes `where=None` by default, which the kwargs-parity binder treats as identical to the TUI's omission).

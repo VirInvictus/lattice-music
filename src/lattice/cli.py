@@ -70,6 +70,7 @@ from lattice.modes.library import (
 )
 from lattice.modes.lyrics import run_lyrics
 from lattice.modes.genretidy import run_genre_tidy_apply, run_genre_tidy_build
+from lattice.modes.ingest import run_ingest
 from lattice.modes.foldermap import revert as revert_genremap, run_genremap
 from lattice.modes.playlists import (
     RuleError,
@@ -111,6 +112,7 @@ _WHERE_MODES = frozenset(
 # write modes (JSON run summary). Everything else refuses, like --where.
 _JSON_MODES = frozenset(
     {
+        "ingest",
         "health",
         "stats",
         "auditTags",
@@ -341,6 +343,13 @@ def build_parser() -> argparse.ArgumentParser:
         "(write mode: dry-run by default, --apply to write)",
     )
     group.add_argument(
+        "--ingest",
+        action="store_true",
+        help="Run the import ritual over one root: genreMap, then apestrip, "
+        "then clean --all, then the post-state health digest (dry-run by "
+        "default, --apply to run the stages; each stage keeps its own log)",
+    )
+    group.add_argument(
         "--genreMap",
         dest="genre_map",
         action="store_true",
@@ -530,6 +539,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="--genreTidy-build / --genreTidy-apply: authority-map path "
         "(default: <root>/genre_map.tsv; the repo ships a maintained map as "
         "artist_genre_defaults.tsv)",
+    )
+    p.add_argument(
+        "--baseline",
+        metavar="SNAPSHOT",
+        default=None,
+        help="--ingest: a --snapshot TSV taken before the import; the summary "
+        "then points at a diff report showing exactly what the ritual changed",
     )
     p.add_argument(
         "--revert",
@@ -1022,6 +1038,7 @@ def main(argv: list[str] | None = None) -> int:
             or args.genre_tidy_build
             or args.genre_tidy_apply
             or args.genre_map
+            or args.ingest
         ):
             if len(root) != 1:
                 print(
@@ -1079,6 +1096,19 @@ def main(argv: list[str] | None = None) -> int:
                     layout=args.layout,
                     quiet=args.quiet,
                     where=where,
+                    json_mode=args.json,
+                )
+            if args.ingest:
+                return run_ingest(
+                    root[0],
+                    apply=args.apply and not args.dry_run,
+                    snapshot=args.baseline,
+                    # None here means the default 'Unfiltered' inbox; an
+                    # explicit empty string disables staging.
+                    staging="Unfiltered" if args.staging is None else args.staging,
+                    allow_new_genre=args.allow_new_genre,
+                    log_path=args.output,
+                    quiet=args.quiet,
                     json_mode=args.json,
                 )
             if args.genre_map:

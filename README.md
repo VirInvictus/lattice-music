@@ -74,6 +74,7 @@ Modern music players often hide your library behind proprietary databases. latti
 | **Genre rewrite (write)** | `--retag` | Hard-overwrites the genre tag(s) on one album directory: `--retag DIR GENRE [GENRE...]`, clearing the hidden MP3 genre spots (APEv2, `TXXX:GENRE`, the ID3v1 byte) as it writes; `--strip-junk` strips junk ID3 frames instead. Dry-run by default, `--apply` to write |
 | **Genre authority build** | `--genreTidy-build` | Scans the library (read-only) and writes the editable artist-to-genre authority map TSV (`--map` to override `<root>/genre_map.tsv`); re-runs preserve your edits and only append new artists |
 | **Genre authority apply (write)** | `--genreTidy-apply` | Retags every album whose genre is not on its artist's map line, collapsing it to the line's first (canonical) genre; compilations are never touched. Dry-run by default, `--apply` to write |
+| **Import ritual (write)** | `--ingest` | One command for the standard import circuit: genreMap, then apestrip, then `--clean --all`, then the post-state health digest (`--baseline` adds a snapshot diff). Dry-run by default, `--apply` runs the stages behind per-stage confirmations; each stage keeps its own log |
 | **Genre folder map (write)** | `--genreMap` | Restructures a flat Artist/Album library into Genre/Artist/Album, moving each album folder under its dominant genre tag (`--only-genre` for a staged rollout, `--refile-mismatched` to follow a retag pass, `--allow-new-genre` to lift the vocabulary gate, `--staging` for the Unfiltered/ inbox). Mv-only on one filesystem; dry-run by default, `--apply` performs, every move lands in a manifest TSV that `--revert` replays in reverse |
 | **Snapshot** | `--snapshot` | Writes a per-file library snapshot TSV (path, size, mtime, key tags, ReplayGain presence) for before/after evidence |
 | **Snapshot diff** | `--diff SNAPSHOT` | Replays a snapshot against the current tree: moved, retagged, resized, added, and removed files |
@@ -282,6 +283,17 @@ lattice --genreTidy-apply ~/Music --apply
 lattice --genreMap ~/Music
 lattice --genreMap ~/Music --apply --allow-new-genre
 lattice --genreMap --revert ~/foldermap.manifest.tsv --apply
+```
+
+- **`lattice --ingest`** packages the [import circuit](#importing-new-music-the-circuit): one command runs the genreMap stage, the apestrip stage, and the clean stage with every normalization pass (`--clean --all`), in that order, over one root. It sequences the package modes; it never re-implements them, so each stage keeps its own dry-run/apply contract and its own log, and the single-root refusal is respected across the sequence. Dry-run is the default (every stage only previews); `--apply` runs the stages behind per-stage confirmations (auto-proceeded when stdin is not a TTY), then writes the post-state health digest, and with `--baseline before.tsv` (a snapshot taken before the import) also a diff report. One top-level summary (`<root>/ingest_summary.txt`, or `--output`) records each stage's exit and points into the per-stage logs, so the whole import is one record.
+
+```bash
+# Preview the whole ritual (writes nothing but plans and the summary)
+lattice --ingest /mnt/SharedData/Music/Unfiltered
+
+# Take a before-snapshot, apply the ritual, read the after-diff
+lattice --snapshot --root /mnt/SharedData/Music --output before.tsv
+lattice --ingest /mnt/SharedData/Music --apply --baseline before.tsv
 ```
 
 The TUI exposes all of them under its Maintenance section, behind yes/no confirms (answering No to the apply question runs the preview instead). The `scripts/cleaner.py`, `scripts/apestrip.py`, `scripts/replaygain.py`, `scripts/retag.py`, `scripts/genre_tidy.py`, and `scripts/genre_foldermap.py` launchers keep their historical behavior for aliases and cron; see [Companion scripts](#companion-scripts).
@@ -586,6 +598,8 @@ lattice --clean /mnt/SharedData/Music/Unfiltered --all --apply
 # 5. Apply ReplayGain 2.0 (calculates volume peaks and tags the files; requires rsgain)
 lattice --replayGain /mnt/SharedData/Music/Unfiltered --apply
 ```
+
+Or run the whole circuit as one command: `lattice --ingest /mnt/SharedData/Music/Unfiltered --apply` sequences the genreMap, apestrip, and clean stages (steps 2-3) with per-stage logs and one summary; see [Write modes](#write-modes).
 
 Once processed, you can confidently merge these albums into your main library (`/mnt/SharedData/Music`). Over time, as your library grows, you may want to periodically maintain the entire tree by running the clean mode on the root:
 

@@ -1,0 +1,24 @@
+LIBRARY HEALTH DIGEST
+Root: /tmp/tmp7g_7ttm3/Music
+Walked once: 1 files in 1 albums; 4 finding(s) across the lenses
+================================================================
+
+  Tags:       0 file(s) with incomplete tags
+      full report: lattice --auditTags
+  Bitrate:    1 file(s) below 192 kbps
+      full report: lattice --auditBitrate
+  ReplayGain: 1 missing, 0 partial, 0 no album gain
+      full report: lattice --auditReplayGain
+  Art:        1 album(s) without any cover
+      full report: lattice --missingArt
+  Strays:     0 wrong-depth, 1 loose, 0 hidden
+      full report: lattice --auditStrays
+  Playlists:  0 of 0 with problems
+      full report: lattice --checkPlaylists
+  Duplicates: 0 exact album pair(s), 0 multi-format folder(s)
+      full report: lattice --duplicates
+  Health:     mean 48.0; worst albums:
+       48 D  Art/Album/  (1 files)
+      full report: lattice --healthScore
+
+Exit 0 by design: the digest informs, the audits gate.

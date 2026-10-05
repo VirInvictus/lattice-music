@@ -634,21 +634,18 @@ versions below; the per-phase version targets are historical.
   classify_stray/check_playlist reused as-is. TUI Metadata entry (3,11).
   Tests: 7 in test_health.py.
 
-- [ ] **B4: `--ingest [DIR]`, the ritual, packaged.** Gated on A4 (the
-  package-native version sequences modes, not scripts). One command
-  produces the combined dry-run plan for what the shell history shows
-  being typed by hand: foldermap plan, then apestrip, then
-  `clean --all`, plus a post-state delta (healthScore / duplicates
-  against a `--snapshot` baseline when one exists); `--apply` runs the
-  stages in order. Ingest sequences; it never re-implements: each stage
-  keeps its own dry-run/apply contract, its own log, and the write
-  modes' single-root refusal is respected by sequencing roots across
-  stages, never aggregating. Not a new write verb, so no §5 change
-  beyond what A4 already landed. Design points: apply granularity
-  (per-stage confirm vs one gate; the TUI walks stages with `ask_yn`)
-  and the summary shape (recommend one top-level summary file pointing
-  into the per-stage logs). Default DIR: configured root; the
-  Unfiltered/ staging-inbox semantics come from foldermap's `--staging`.
+- [x] **B4: `--ingest [DIR]`, the ritual, packaged.** SHIPPED in v6.0.0,
+  gated on A4 as planned: modes/ingest.py sequences run_genremap ->
+  run_apestrip -> run_clean(all passes) -> run_health in process, one root
+  across the stages (the single-root refusal respected by sequencing, never
+  aggregating). **Apply granularity, resolved: per-stage confirm** on a TTY
+  (auto-proceed on non-TTY, the house convention; declined = recorded skip,
+  never fatal; the TUI walks stages behind one ask_yn). **Summary shape,
+  resolved as recommended: one top-level file** (<root>/ingest_summary.txt,
+  --output overrides) pointing into the per-stage logs, plus the post-state
+  digest and an optional --baseline snapshot diff. Default DIR: configured
+  root; Unfiltered/ semantics come from the genreMap stage's --staging.
+  Tests: 7 in test_ingest.py.
 
 ### Stays a script (recorded, closed; not open work)
 

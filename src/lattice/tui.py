@@ -61,6 +61,7 @@ from lattice.modes.library import (
 from lattice.modes.lyrics import run_lyrics
 from lattice.modes.foldermap import run_genremap
 from lattice.modes.genretidy import run_genre_tidy_apply, run_genre_tidy_build
+from lattice.modes.ingest import run_ingest
 from lattice.modes.playlists import generate_playlist, run_check_playlists
 from lattice.modes.replaygain import run_replaygain
 from lattice.modes.retag import run_retag
@@ -150,6 +151,7 @@ _MAIN_SECTIONS = [
             "Build genre authority map (genreTidy build)",
             "Apply genre authority map (genreTidy apply)",
             "Reorganize into Genre/Artist/Album (genreMap)",
+            "Import ritual: genreMap + apestrip + clean (ingest)",
         ],
     ),
     (
@@ -232,6 +234,7 @@ _MAIN_ALIASES: dict[str, tuple | None] = {
     "tidyapply": (4, 6),
     "foldermap": (4, 7),
     "genremap": (4, 7),
+    "ingest": (4, 8),
     "settings": (5, 0),
     "config": (5, 0),
     "c": (5, 0),
@@ -972,6 +975,35 @@ def _menu_session() -> int:
                     staging=staging.strip() or None,
                     allow_new_genre=new_genre,
                     refile_mismatched=refile,
+                    quiet=False,
+                )
+
+            elif result == (4, 8):
+                # The ritual: dry-run by default; the ask_yn confirm decides
+                # apply, and each stage keeps its own log. The stages' own
+                # TTY prompts are suppressed inside the capture (the mode
+                # auto-proceeds on a non-TTY), which is exactly the gate's
+                # answer.
+                if len(roots) != 1:
+                    notify(
+                        "The ingest mode needs exactly one library root; "
+                        f"{len(roots)} are configured (library_roots)."
+                    )
+                    continue
+                new_genre = ask_yn("Allow creating new top-level genre folders? (y/N)")
+                baseline = ask(
+                    "Snapshot baseline for the after-diff (blank = none)", ""
+                ).strip()
+                apply = ask_yn(
+                    "APPLY the full ritual now? No = dry-run preview only (y/N)"
+                )
+                run_with_capture(
+                    "Import ritual: genreMap + apestrip + clean (ingest)",
+                    run_ingest,
+                    roots[0],
+                    apply=apply,
+                    baseline=os.path.expanduser(baseline) if baseline else None,
+                    allow_new_genre=new_genre,
                     quiet=False,
                 )
         except CancelledError:
