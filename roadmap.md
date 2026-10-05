@@ -445,3 +445,253 @@ default, `--apply`, append-only log — and runs wherever lattice runs).
 - [x] **First network seam in the suite:** the tests inject a fake fetcher
   (hand-built LRCLIB JSON) — no HTTP in the suite, matching the
   stub-at-the-boundary convention.
+
+## Research 2026-10-05: the CalibreQuarry comparison and the expansion program
+
+A four-agent read-only comparison (repo cartographies of both tools, a
+fold-feasibility pass over `scripts/`, a usefulness gap analysis) against
+CalibreQuarry v3.55.2, commissioned by Brandon 2026-10-05: "apples and
+oranges, but is there anything that makes lattice similarly more useful,
+and should more subscripts fold in (like apestrip and cleaner)?" This
+section is the build-ready record so a fresh agent can start any phase
+cold, without re-researching. Read CLAUDE.md and spec.md first (house
+rule); the fold recipe is section A of Research 2026-09-12 above, and
+`scripts/cleaner.py:26-54` is the launcher template.
+
+Owner decisions, 2026-10-05 (four prompts, on record):
+
+1. Fold set approved: `replaygain`, `retag` (plus the `genre_tidy`
+   rewiring it forces), `genre_tidy`, `genre_foldermap`. This section is
+   the asking CLAUDE.md's companion-scripts rule requires; the gate stays
+   closed for everything else.
+2. All four capability candidates queued: `--ingest`, `--where`, `--json`
+   + exit parity, `--health`.
+3. `flac2opus.py` and `slipcover.py` stay as-is (untested, dormant,
+   outside the package contract where hand-run tools belong).
+4. README "The Circuit" must present apestrip/cleaner as the package
+   modes they have been since 5.0.0; the stale `./scripts/apestrip.py -y`
+   line dies in the program's first release (Brandon: "apestrip is not a
+   script anymore, so fix that altogether").
+
+### The evidence (why selection and ingest, not more audits)
+
+atuin shell history, read-only (22,557 rows; caveat: interactive shells
+only, so TUI work is invisible except as bare `lattice`):
+
+- lattice, 387 rows: `genre_foldermap.py --apply --allow-new-genre` 92
+  (the most-typed lattice command ever; targets `/mnt/SharedData/Music`
+  and its `Unfiltered/` staging inbox); apestrip 37 script + 8 as
+  `lattice --apestrip --apply`; cleaner 35 script + 15 as
+  `lattice --clean --all --apply`; rerate 20; retag 13; flac2opus 12;
+  bare TUI 31. Every v5.4-5.7 read-only audit mode (--healthScore,
+  --auditAudioDupes, --auditStrays, --verifyReplayGain, --checkPlaylists,
+  --auditAlbums, --snapshot/--diff, --lyrics): 0 direct invocations.
+  The dominant recent shape is one ritual, run about five times:
+  foldermap, then apestrip, then clean, against a staging inbox, typed
+  from memory (one typo'd `lattice --clean-all`, not a flag, is the tell).
+- CalibreQuarry, 153 rows: the real invocations are `--search` (15, 13
+  distinct expressions) composed with `--exportlt`; its audits also get
+  typed zero times.
+
+Lesson: the audits are the safety net, not the product. What gets typed
+is (a) selection/query power and (b) the staged write ritual. The B
+phases target exactly those two; nothing here proposes a new read-only
+audit mode.
+
+### Standing constraints every phase inherits
+
+- Filesystem is the truth; no index, no cache of tag state (CLAUDE.md:
+  never grow this into a scan database). Progress files stay transient.
+- Read-only default; writes only via explicit modes: dry-run default,
+  `--apply` opt-in, append-only log, one root per write invocation (an
+  aggregated root list is refused). New write surface = spec amendment
+  first (the 5.0.0 and 5.7.0 precedents).
+- One network touchpoint in the package (LRCLIB via `--lyrics`). No
+  second one.
+- Don't thread tag reads (measured GIL regression; `tag_workers` stays
+  the only knob). The integrity `--workers` pool is unrelated.
+- Missing external decoder/tool = exit 2, never a fake-clean pass.
+- CLI/TUI parity is mandatory and test-pinned (test_tui.py kwargs
+  parity, test_write_modes.py wiring): one flag in the house
+  mutually-exclusive group, one dispatch branch, one MAINTENANCE menu
+  entry per write mode with `ask_yn`.
+- Version lockstep: `config.py` VERSION, `pyproject.toml`, spec.md
+  header; publish.yml asserts tag == pyproject == VERSION. Suite is 671
+  tests; run with `PYTHONPATH=src python -m pytest tests/ -q` (justfile).
+
+### A. The fold phases (ordered; each ships one release; recipe = Research 2026-09-12 §A)
+
+- [ ] **A1 (target v5.8.0): fold `replaygain.py` into
+  `lattice.modes.replaygain` as the `--replayGain` write mode, plus the
+  circuit truth pass.** The best candidate: its read half is already
+  package code (lazy imports of `lattice.config.AUDIO_EXTENSIONS` and
+  `lattice.tags.read_replaygain` at scripts/replaygain.py:89-104,
+  `read_replaygain_values` at :172) so writer and --verifyReplayGain
+  cannot drift; folding completes the ReplayGain trio (--auditReplayGain,
+  --verifyReplayGain, --replayGain). Steps: brain to
+  `modes/replaygain.py` as `run_replaygain(root, *, dry_run,
+  skip_tagged, target_lufs, threads, log_path, quiet)` with an
+  argparse-preserving main (keep `scan_album`'s command-builder /
+  read-back separation; tests mock rsgain, never invoke it); the package
+  default inverts to dry-run-unless-`--apply`, the launcher keeps
+  apply-by-default (the 5.0.0 inversion); scripts/replaygain.py becomes
+  a PEP 562 launcher (template: scripts/cleaner.py:26-54); retarget
+  tests/test_replaygain.py wholesale (27 tests; the sys.path hack at
+  :14-16 goes; if the hardcoded AUDIO_EXTENSIONS copy the 09-12 audit
+  noted at :22 is still there, import from lattice.config instead); CLI
+  flag + TUI MAINTENANCE entry + wiring/parity tests; rsgain stays a
+  required external binary with the exit-2 refusal; spec.md §5 names it
+  among the write modes and §6 drops it from the standalone list; README
+  + CLAUDE.md companion bullet become launcher notes; patchnotes +
+  version triple. **Same release, the circuit truth pass:** README
+  "The Circuit" (~README.md:474) rewritten so apestrip and cleaner
+  appear as package invocations (`lattice --apestrip --apply`,
+  `lattice --clean --all --apply`); the `./scripts/apestrip.py -y` line
+  is deleted, not patched (decision 4 above; the launcher re-exports the
+  package parser, which defines only `--yes`); script-shaped lines
+  survive only for the six not-yet-folded scripts and get rewritten
+  again as their phases land; verify
+  .agents/skills/lattice-import/SKILL.md stays consistent (its -y fix
+  shipped in the final blitz).
+
+- [ ] **A2 (target v5.9.0): fold `retag.py` into `lattice.modes.retag`
+  as the `--retag` write mode; rewire `genre_tidy.py` in the same
+  release.** The dedup payoff: modes/clean.py's tag pass already saves
+  "matching retag.py" (ID3v2.3 + refreshed ID3v1 on MP3; the convention
+  lives at scripts/retag.py:108), so after the fold there is one
+  genre-write path - decide the direction (clean calls retag's
+  per-container writer, or retag is the writer and clean orchestrates)
+  and document it. `--strip-junk` gets a real home; its detection half
+  already lives in `lattice.modes.audit.audit_id3_junk`
+  (scripts/retag.py:199, :246 import it); keep exactly one classifier.
+  Preserve the unique value: hidden-genre clearing (stray APEv2 deleted,
+  `TXXX:GENRE`, stale ID3v1 byte), `is_noop` idempotence, the
+  convert-or-drop junk policy. CLI shape deviation, deliberate: first
+  dir-scoped mode, `lattice --retag DIR GENRE [GENRE...]` (single album
+  directory, not a root walk); positionals in the house flag group.
+  The rewiring: genre_tidy shells out to retag.py by path
+  (scripts/genre_tidy.py:352, :416-420) and imports it as a sibling
+  (:359); both become direct calls into lattice.modes.retag so the
+  script's path never matters again; genre_tidy.py itself stays a script
+  until A3; its exit-1-on-retag-failure contract is preserved. Tests:
+  25 retarget; test_genre_tidy.py's end-to-end convergence test
+  (:275-280) follows the call path.
+
+- [ ] **A3 (target v5.10.0): fold `genre_tidy.py` into
+  `lattice.modes.genretidy` as the `--genreTidy` write mode.** Gated on
+  A2. Design point one, resolve first: the script is the only
+  subcommand-shaped tool (build/apply subparsers; main at
+  scripts/genre_tidy.py:474) and the package house style is flat flags;
+  pick two flags (--genreTidy-build writes the map, --genreTidy-apply
+  reconciles) or one mode with a positional verb, with the TUI in mind
+  (MAINTENANCE wants one entry per action; two flags map to two entries
+  naturally). Design point two, resolve on purpose: the private
+  `_QUOTE_DASH_FOLD` copy of norm's fold table (scripts/genre_tidy.py:49-66)
+  exists because it predates norm.py and re-keying saved maps is
+  unwanted; either switch to lattice.norm (and document the map-rekey
+  implication) or keep the private table inside the package with a test
+  pinning both tables' agreement on the artist path - check whether they
+  already agree before choosing. Contract to preserve: the TSV map
+  format (Artist / Genre / Genre2 lines, `#` comments, EXCLUDED artists)
+  round-trips byte-stably; build's append-only preserve-edits behavior;
+  artist_genre_defaults.tsv stays the shipped authority passed via
+  `--map`. Tests: 41 retarget.
+
+- [ ] **A4 (target v6.0.0, major): fold `genre_foldermap.py` into
+  `lattice.modes.foldermap` as the `--genreMap` write mode; land the
+  spec §5 amendment sanctioning folder moves.** The package's first
+  file-moving mode, owner-approved 2026-10-05. Amendment text: §5's
+  write-mode sentence gains folder reorganization via the explicit
+  --genreMap mode (mv-only on one filesystem, dry-run default, manifest
+  TSV + `--revert`); "no tags and no audio" holds for everything else;
+  §1, the §3 row, §6, README, and CLAUDE.md ride it; major bump per the
+  5.0.0 precedent (the spec change is the major). Mechanics:
+  classify / build_plan / Runner / execute / manifest / revert
+  (scripts/genre_foldermap.py:479-592 is the Runner) as
+  `run_genremap(...)`; this script already runs dry-run by default with
+  `--apply` (:10-13, :734), the only one needing no inversion; the
+  v1.2.0 depth-aware classify, the live genre-vocabulary gate, and the
+  v1.3.0 `--staging` (Unfiltered) inbox semantics are contract.
+  `--allow-new-genre` survives (92 of 92 recorded runs pass it); whether
+  the package default flips is a design point for the implementing agent
+  (conservative default stays off; the launcher keeps today's behavior).
+  **The real work is the Runner unification:** genre_foldermap's Runner
+  and modes/clean.py:98's `Run` are two implementations of the same
+  dry-run virtual filesystem (virtual removed/created sets,
+  existence-aware collision checks) that grew the same fixes from the
+  same audits (the dry-vs-apply parity harness box in the 2026-08 wave
+  names both as the recurring divergence pair). Extract one shared
+  virtual-FS core that both modes import; do not copy a second Run; the
+  parity harness must cover both afterwards. Tests: 71 retarget (the
+  largest script suite).
+
+### B. The capability phases (ordered; A4 gates B4)
+
+- [ ] **B1: `--where 'expr'`, the global selector.** Promote the
+  --playlist rule engine (modes/playlists.py; ast-based, e.g.
+  `rating >= 4 and genre == 'Jazz'`) into a `--where` predicate scoping
+  every read mode (library, stats, audits, exports) and supplying target
+  sets to the write modes. CalibreQuarry's `--restrict` is the model.
+  Keep the playlist engine's own grammar; do not port Calibre's search
+  grammar (different domain; the rule engine is the in-repo precedent).
+  Scan-time predicate over TagBundle; no index, no cache. Design point:
+  album-granularity semantics for write targeting (a where matching any
+  track selects its album? state and test the rule). Optional: evaluate
+  over an existing `--snapshot` TSV for the fields it carries to skip
+  the walk; never persist anything new.
+
+- [ ] **B2: `--json` + exit-code parity.** Opt-in machine shapes for
+  stats/audit/health output and write-run summaries (counts, per-item
+  verdicts, committed vs dry_run); `.txt` stays the default; spec §4's
+  ".txt (not CSV)... not spreadsheet import" line (spec.md:139-141)
+  becomes ".txt default; --json for machine consumption" (small
+  amendment, the 5.7.0 pattern). Flag shape: bare `--json` vs
+  `--format json`; pick one and match the house modifier style. Exit
+  discipline: refusals stay 2, interrupt 130; add `--fail-on-findings`
+  (default stays 0) so audits can gate cron/CI like CalibreQuarry's;
+  make reports printable to stdout (--quiet composition) so they pipe.
+
+- [ ] **B3: `--health`, the one-walk digest.** CalibreQuarry's --health
+  translated: one screen of finding counts across the existing lenses
+  (tag completeness, art, RG coverage, strays, playlist checks,
+  duplicate counts, worst --healthScore entries) with pointers to the
+  full reports, exit 0 always. The point is the shared walk: running
+  six modes today is six full walks; --health reads each file's
+  TagBundle once and feeds every lens. Steal the derivation principle
+  too: digest and lenses must share collection code so they cannot
+  drift (cquarry's --audit and --health share one collect_issues).
+
+- [ ] **B4: `--ingest [DIR]`, the ritual, packaged.** Gated on A4 (the
+  package-native version sequences modes, not scripts). One command
+  produces the combined dry-run plan for what the shell history shows
+  being typed by hand: foldermap plan, then apestrip, then
+  `clean --all`, plus a post-state delta (healthScore / duplicates
+  against a `--snapshot` baseline when one exists); `--apply` runs the
+  stages in order. Ingest sequences; it never re-implements: each stage
+  keeps its own dry-run/apply contract, its own log, and the write
+  modes' single-root refusal is respected by sequencing roots across
+  stages, never aggregating. Not a new write verb, so no §5 change
+  beyond what A4 already landed. Design points: apply granularity
+  (per-stage confirm vs one gate; the TUI walks stages with `ask_yn`)
+  and the summary shape (recommend one top-level summary file pointing
+  into the per-stage logs). Default DIR: configured root; the
+  Unfiltered/ staging-inbox semantics come from foldermap's `--staging`.
+
+### Stays a script (recorded, closed; not open work)
+
+- **rerate.py**: foldable in an afternoon (219 LOC, pure mutagen, 16
+  tests) but not worth a permanent mode: hyper-personal closed two-entry
+  POPM map, MP3-only, near-saturated (idempotent after one library
+  pass). Stays.
+- **slipcover.py**: stays. Its `--fetch` (iTunes Search API) would
+  violate the one-network-touchpoint clause if folded; it has zero
+  tests; owner ruling 2026-10-05 is leave-as-is. If it ever wakes: tests
+  first, and `--fetch` either stays scripted or the network clause gets
+  its third amendment.
+- **flac2opus.py**: stays. Audio creation/deletion is anti-contract
+  (ruled in the 09-12 landscape pass); zero tests; dormant but
+  load-bearing for the one conversion job nothing else does. Owner
+  ruling leave-as-is.
+- The CLAUDE.md companion-script gate ("don't fold without asking") is
+  answered for A1-A4 by the 2026-10-05 ruling; it remains standing for
+  everything else.
