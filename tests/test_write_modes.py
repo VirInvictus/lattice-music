@@ -189,7 +189,12 @@ class ReplaygainDispatchTests(unittest.TestCase):
     def test_apply_invokes_rsgain(self):
         # stdin is not a TTY under the test runner, so the confirmation is
         # auto-skipped (the script's non-interactive convention, preserved).
-        with mock.patch.object(rg_mode.subprocess, "run") as run:
+        # rsgain's PATH lookup is mocked too: the refusal must not depend on
+        # the runner's environment (a CI box without rsgain is normal).
+        with (
+            mock.patch.object(rg_mode.shutil, "which", return_value="/usr/bin/rsgain"),
+            mock.patch.object(rg_mode.subprocess, "run") as run,
+        ):
             run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
             rc = self._main(["--replayGain", str(self.root), "--apply"])
         self.assertEqual(rc, 0)
