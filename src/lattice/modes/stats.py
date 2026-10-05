@@ -59,12 +59,16 @@ def run_stats(
     *,
     layout: str = DEFAULT_LAYOUT,
     quiet: bool = False,
+    where=None,
 ) -> str:
     """Generate a library-wide statistics report (combined across all roots).
 
     `layout` is the path pattern used to recover the artist/album directory
     component when grouping, so the artist count is correct on a genre-first
-    tree ({genre}/{artist}/{album}) as well as the default {artist}/{album}."""
+    tree ({genre}/{artist}/{album}) as well as the default {artist}/{album}.
+    `where` (a compiled TagBundle predicate) scopes every figure to the
+    matching tracks; the report's totals and denominators then describe the
+    matching subset, not the walked library."""
     roots = as_roots(root)
 
     total_files = count_audio_files(roots)
@@ -104,7 +108,13 @@ def run_stats(
     tags = read_tags_concurrent([e[0] for e in entries], pbar=pbar)
     pbar.close()
 
+    matched = 0
+
     for filepath, src_root in entries:
+        t = tags[filepath]
+        if where is not None and not where(t):
+            continue
+        matched += 1
         ext = os.path.splitext(filepath)[1].lower()
         format_counts[ext] += 1
 
@@ -114,8 +124,6 @@ def run_stats(
             format_sizes[ext] += fsize
         except OSError:
             pass
-
-        t = tags[filepath]
 
         # Artist/album tracking from directory structure, via the configured
         # layout so the artist component is correct on a genre-first tree too.
@@ -166,7 +174,7 @@ def run_stats(
     # Overview
     lines.append("OVERVIEW")
     lines.append("-" * 40)
-    lines.append(f"  Total files:    {total_files}")
+    lines.append(f"  Total files:    {matched if where is not None else total_files}")
     lines.append(f"  Total size:     {_format_size(total_size)}")
     if total_duration > 0:
         hours = int(total_duration // 3600)
@@ -174,15 +182,16 @@ def run_stats(
         lines.append(f"  Total duration: {hours}h {mins}m")
     lines.append(f"  Artists:        {len(artist_dirs)}")
     lines.append(f"  Albums:         {len(album_dirs)}")
-    pct_tagged = (fully_tagged / total_files * 100) if total_files else 0
-    lines.append(f"  Fully tagged:   {fully_tagged}/{total_files} ({pct_tagged:.0f}%)")
+    denom = matched if where is not None else total_files
+    pct_tagged = (fully_tagged / denom * 100) if denom else 0
+    lines.append(f"  Fully tagged:   {fully_tagged}/{denom} ({pct_tagged:.0f}%)")
     lines.append("")
 
     # Format breakdown
     lines.append("FORMAT BREAKDOWN")
     lines.append("-" * 40)
     for ext, count in format_counts.most_common():
-        pct = count / total_files * 100
+        pct = count / denom * 100
         size_str = _format_size(format_sizes[ext])
         lines.append(f"  {ext:<8} {count:>6} files  ({pct:>5.1f}%)  {size_str:>10}")
     lines.append("")
@@ -203,13 +212,13 @@ def run_stats(
         lines.append("")
 
     # Rating distribution
-    rated = total_files - rating_counts["unrated"]
+    rated = denom - rating_counts["unrated"]
     lines.append(f"RATINGS ({rated} rated, {rating_counts['unrated']} unrated)")
     lines.append("-" * 40)
     for label in _RATING_LABELS:
         count = rating_counts[label]
         if count > 0:
-            bar_len = min(30, int(count / max(1, total_files) * 150))
+            bar_len = min(30, int(count / max(1, denom) * 150))
             bar = "█" * bar_len
             lines.append(f"  {label}  {count:>5}  {bar}")
     lines.append("")
@@ -219,7 +228,7 @@ def run_stats(
         lines.append(f"GENRES (top 15 of {len(genre_counts)})")
         lines.append("-" * 40)
         for genre, count in genre_counts.most_common(15):
-            pct = count / total_files * 100
+            pct = count / denom * 100
             lines.append(f"  {genre:<30} {count:>5}  ({pct:.1f}%)")
         lines.append("")
 
@@ -244,6 +253,14 @@ def run_stats(
         lines.append("")
 
     report = "\n".join(lines) + "\n"
+    if where is not None:
+        # The figures above describe the matching subset; say so where the
+        # file counts live, so a scoped report is never misread as whole-tree.
+        report = report.replace(
+            "LIBRARY STATISTICS",
+            f"LIBRARY STATISTICS (--where scoped: {matched} of {total_files} files)",
+            1,
+        )
 
     # Write to file if output specified, otherwise stdout
     if output:

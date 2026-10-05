@@ -601,18 +601,18 @@ versions below; the per-phase version targets are historical.
 
 ### B. The capability phases (ordered; A4 gates B4)
 
-- [ ] **B1: `--where 'expr'`, the global selector.** Promote the
-  --playlist rule engine (modes/playlists.py; ast-based, e.g.
-  `rating >= 4 and genre == 'Jazz'`) into a `--where` predicate scoping
-  every read mode (library, stats, audits, exports) and supplying target
-  sets to the write modes. CalibreQuarry's `--restrict` is the model.
-  Keep the playlist engine's own grammar; do not port Calibre's search
-  grammar (different domain; the rule engine is the in-repo precedent).
-  Scan-time predicate over TagBundle; no index, no cache. Design point:
-  album-granularity semantics for write targeting (a where matching any
-  track selects its album? state and test the rule). Optional: evaluate
-  over an existing `--snapshot` TSV for the fields it carries to skip
-  the walk; never persist anything new.
+- [x] **B1: `--where 'expr'`, the global selector.** SHIPPED in v6.0.0:
+  compile_where in modes/playlists.py (one grammar); scanner choke point
+  _scan_album_dirs(where=) scopes the four exports + genretidy/foldermap;
+  stats scopes every figure with an "N of M files" header; the six
+  tag-reading audits filter their walks. **Album-granularity design point,
+  stated and pinned: a where matching ANY track of an album selects the
+  WHOLE album as a write target** (genreTidy build/apply, genreMap,
+  replayGain); no partial-album writes. Modes that never read the rule's
+  tags refuse --where (exit 2) via cli._WHERE_MODES; the TUI passes
+  where=None (parity binder treats omission and None as equal). The
+  optional --snapshot evaluation shortcut is deferred (recorded, not
+  forgotten). Tests: 12 in test_where.py.
 
 - [ ] **B2: `--json` + exit-code parity.** Opt-in machine shapes for
   stats/audit/health output and write-run summaries (counts, per-item

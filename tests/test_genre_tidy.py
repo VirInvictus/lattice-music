@@ -243,7 +243,7 @@ class CmdBuildRebuildTests(unittest.TestCase):
         import io
 
         orig = gt.scan_album_dirs
-        gt.scan_album_dirs = lambda d, q, layout="{artist}/{album}": dirs
+        gt.scan_album_dirs = lambda d, q, layout="{artist}/{album}", where=None: dirs
         buf = io.StringIO()
         try:
             with contextlib.redirect_stdout(buf):
@@ -368,7 +368,7 @@ class CmdApplyTests(unittest.TestCase):
         import io
 
         orig = gt.scan_album_dirs
-        gt.scan_album_dirs = lambda d, q, layout="{artist}/{album}": records
+        gt.scan_album_dirs = lambda d, q, layout="{artist}/{album}", where=None: records
         buf = io.StringIO()
         try:
             with contextlib.redirect_stdout(buf):
@@ -495,7 +495,7 @@ class LayoutPassthroughTests(unittest.TestCase):
 
         seen = {}
 
-        def fake_scan(roots, layout, pbar):
+        def fake_scan(roots, layout, pbar, where=None):
             seen["layout"] = layout
             return []
 

@@ -215,10 +215,12 @@ def build_rows(reduced: dict[str, tuple[str, Counter]]) -> list[str]:
 # ============================ lattice (read half) ============================
 
 
-def scan_album_dirs(directory: Path, quiet: bool, layout: str = "{artist}/{album}"):
+def scan_album_dirs(
+    directory: Path, quiet: bool, layout: str = "{artist}/{album}", where=None
+):
     roots = as_roots(str(directory))
     pbar = _make_pbar(count_audio_files(roots), "Scanning", quiet)
-    dirs = _scan_album_dirs(roots, layout, pbar)
+    dirs = _scan_album_dirs(roots, layout, pbar, where=where)
     pbar.close()
     return dirs
 
@@ -256,6 +258,7 @@ def run_genre_tidy_build(
     map_path=None,
     layout: str = "{artist}/{album}",
     quiet: bool = False,
+    where=None,
     _title: str = "lattice genreTidy - Genre Authority Builder",
 ) -> int:
     """Scan one library root (read-only through the shared scanner) and write
@@ -268,7 +271,7 @@ def run_genre_tidy_build(
         return 1
 
     map_path = Path(map_path) if map_path else directory / "genre_map.tsv"
-    reduced = reduce_artists(scan_album_dirs(directory, quiet, layout))
+    reduced = reduce_artists(scan_album_dirs(directory, quiet, layout, where=where))
 
     if map_path.exists():
         existing = map_path.read_text(encoding="utf-8").splitlines()
@@ -324,6 +327,7 @@ def run_genre_tidy_apply(
     layout: str = "{artist}/{album}",
     log_path=None,
     quiet: bool = False,
+    where=None,
     _title: str = "lattice genreTidy - Genre Authority Enforcer",
 ) -> int:
     """Retag every album whose genre disagrees with the artist→genre map.
@@ -355,7 +359,7 @@ def run_genre_tidy_apply(
     from lattice.modes.retag import retag_directory
 
     entries = parse_map(map_path.read_text(encoding="utf-8").splitlines())
-    album_dirs = scan_album_dirs(directory, quiet, layout)
+    album_dirs = scan_album_dirs(directory, quiet, layout, where=where)
     log_path = Path(log_path) if log_path else directory / "genre_tidy.log"
 
     log = _Log(log_path, dry_run)

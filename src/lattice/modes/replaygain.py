@@ -204,6 +204,7 @@ def run_replaygain(
     log_path=None,
     assume_yes: bool = False,
     quiet: bool = False,
+    where=None,
     _title: str = "lattice replaygain - ReplayGain 2.0 Writer",
 ) -> int:
     """Run the ReplayGain writer over one directory tree.
@@ -251,6 +252,23 @@ def run_replaygain(
     if not albums:
         print(f"No audio files found under: {root}")
         return 0
+
+    if where is not None:
+        # Album-granular targeting (the --where rule, same as the other write
+        # modes): an album is in scope when ANY of its tracks matches, and a
+        # scan is never run over a partial album. Only the in-scope albums'
+        # tags are read (nothing here is cached).
+        from lattice.tags import get_all_tags
+
+        scoped: list[tuple[str, list[str]]] = []
+        for dirpath, audio in albums:
+            if any(where(get_all_tags(os.path.join(dirpath, f))) for f in audio):
+                scoped.append((dirpath, audio))
+        albums = scoped
+        if not albums:
+            if not quiet:
+                print("No albums match the --where rule; nothing to do.")
+            return 0
 
     if log_path is None:
         log_path = os.path.join(root, "replaygain.log")

@@ -132,6 +132,22 @@ def validate_rule(rule: str) -> str | None:
     return None
 
 
+def compile_where(rule: str):
+    """Compile a --where rule into a TagBundle predicate, sharing the playlist
+    rule engine's grammar and AST walker (one rule language in the package).
+
+    Raises RuleError with the validate_rule message when the rule can never
+    evaluate; callers turn that into their own usage error."""
+    err = validate_rule(rule)
+    if err is not None:
+        raise RuleError(err)
+
+    def pred(t) -> bool:
+        return _evaluate_rule(rule, t, {})
+
+    return pred
+
+
 def _evaluate_rule(rule: str, t, parsed_layout: dict) -> bool:
     """Evaluate a dynamic smart playlist rule against a track's metadata, using
     a restricted AST walker (see _eval_node) rather than eval()."""

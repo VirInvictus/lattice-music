@@ -88,7 +88,14 @@ When run with no arguments, the tool launches a full-screen curses TUI with:
 
 Every mode is accessible via flags (`--library`, `--testFLAC`, etc.) for
 scripting and automation. All modes accept `--root`, `--output`, `--workers`,
-`--quiet`, and `--verbose` where applicable. `--root` is repeatable: several
+`--quiet`, and `--verbose` where applicable. `--where 'expr'` is the global
+selector: it shares the `--playlist` rule engine's grammar and evaluates as a
+scan-time predicate over each file's `TagBundle` (no index, no cache). It
+scopes the library exports, `--stats`, and the tag-reading audits, and targets
+`--genreTidy-build`/`--genreTidy-apply`/`--genreMap`/`--replayGain`
+album-granularly: a rule matching any track of an album selects the whole
+album, and no write mode ever acts on a partial album. Modes that never read
+tags refuse `--where` with exit 2 rather than ignore it. `--root` is repeatable: several
 libraries scan together in one pass and results aggregate across them (a
 repeated path is de-duped). An optional `library_roots` array in the config
 supplies default roots; the first-run prompt persists only the single

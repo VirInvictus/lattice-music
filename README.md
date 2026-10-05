@@ -44,6 +44,7 @@ Modern music players often hide your library behind proprietary databases. latti
 | **Genre wings** | `--all-wings` | Generates a separate library tree file for each genre |
 | **AI wings** | `--ai-wings` | Generates separate AI-friendly flat library files per genre |
 | **Smart Playlist** | `--playlist` | Generates an .m3u playlist based on a dynamic rule (e.g. `rating >= 4`) |
+| **Where selector** | `--where EXPR` | Scopes a scan to tracks matching the rule expression (the `--playlist` grammar) across the library exports, `--stats`, and the tag-reading audits, and targets the genre/RG write modes album-granularly (any matching track selects the whole album) |
 | **Playlist check** | `--checkPlaylists` | Verifies the library's .m3u playlists: missing #EXTM3U headers and entries whose target no longer exists |
 | **Library statistics** | `--stats` | Library-wide statistics: format breakdown, bitrate, ratings, genres, top artists |
 | **FLAC integrity** | `--testFLAC` | Verifies FLAC via `flac -t` (authoritative) or FFmpeg; sorts files into severity tiers |
@@ -321,6 +322,31 @@ To make several roots permanent, add a `library_roots` array to `~/.config/latti
 ```
 
 The first-run prompt still saves only the single `library_root`, so a throwaway `--root` is never written to config.
+
+## The `--where` selector
+
+`--where 'expr'` reuses the smart-playlist rule engine (`rating`, `genre`,
+`artist`, `album`, `title`, `duration`, `bitrate`; comparisons, `and`/`or`/`not`,
+`in`) as a scan-time selector over every file's tags. There is no index and no
+cache: the walk happens as always, and non-matching tracks simply don't reach
+the report.
+
+- **Library exports** (`--library`, `--ai-library`, `--all-wings`, `--ai-wings`): only matching tracks are aggregated; an album with no matching tracks drops out of the export entirely.
+- **`--stats`**: every figure describes the matching subset, and the header says so (`--where scoped: N of M files`).
+- **Tag-reading audits** (`--auditTags`, `--auditAlbums`, `--auditBitrate`, `--auditReplayGain`, `--healthScore`, `--duplicates`): scoped to the matching tracks (audits with album-level lenses select an album when *any* of its tracks matches, and score it whole). Audits that never read tags (`--auditAudioDupes`, `--auditStrays`, `--auditJunkFrames`, the art audits) refuse `--where` rather than ignore it.
+- **Write targeting** (`--genreTidy-build`, `--genreTidy-apply`, `--genreMap`, `--replayGain`): album-granular. A rule matching **any** track of an album selects the **whole** album as a target; no mode ever writes a partial album. The folder-merging `--clean`, the file-scoped `--retag`, `--apestrip`, and `--lyrics` do not take `--where`.
+
+```bash
+# Stats over the 4-star-and-up Jazz in the library
+lattice --stats --where "rating >= 4 and genre == 'Jazz'"
+
+# Wings for one genre only
+lattice --all-wings --where "genre == 'Ambient'" --output wings_ambient/
+
+# ReplayGain for the albums that still carry no rating tags at all,
+# skipping the ones already fully tagged
+lattice --replayGain --where "rating == 0" --apply --skip-tagged
+```
 
 ## Integrity checks
 

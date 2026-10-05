@@ -395,7 +395,9 @@ def _section_track_dupes(
     return len(hits)
 
 
-def run_duplicates(root: str | list[str], output: str, *, quiet: bool = False) -> int:
+def run_duplicates(
+    root: str | list[str], output: str, *, quiet: bool = False, where=None
+) -> int:
     """Detect duplicate albums, within-folder multi-format duplicates, similar
     album names, and track-level cross-library duplicates. Emits a single
     sectioned text report. With several roots, duplicates are detected across
@@ -421,6 +423,8 @@ def run_duplicates(root: str | list[str], output: str, *, quiet: bool = False) -
         # iteration, so the library's tags are never held twice — they live on
         # only in each _DirInfo (which the later sections need anyway).
         tags = read_tags_concurrent(paths, pbar=pbar)
+        if where is not None and not any(where(t) for t in tags.values()):
+            continue  # album-granular: a where matching any track selects it
         dirs.append(_aggregate_dir(dirpath, audio_files, tags))
 
     pbar.close()
@@ -854,6 +858,7 @@ def run_health_score(
     min_res: int,
     verbose: bool = False,
     quiet: bool = False,
+    where=None,
 ) -> int:
     """Aggregate the audit lenses into a per-album health score out of 100:
     tag completeness (--auditTags), ReplayGain coverage (--auditReplayGain),
@@ -882,6 +887,8 @@ def run_health_score(
         paths = [os.path.join(dirpath, f) for f in audio_files]
         bundles = read_tags_concurrent(paths, pbar=pbar)
         rg = map_concurrent(read_replaygain, paths, pbar=pbar)
+        if where is not None and not any(where(t) for t in bundles.values()):
+            continue  # album-granular: a where matching any track selects it
 
         cover = _find_cover_file(dirpath)
         cover_res = None
@@ -1055,7 +1062,12 @@ def run_tag_audit(root: str | list[str], output: str, *, quiet: bool = False) ->
 
 
 def run_bitrate_audit(
-    root: str | list[str], output: str, min_kbps: int, *, quiet: bool = False
+    root: str | list[str],
+    output: str,
+    min_kbps: int,
+    *,
+    quiet: bool = False,
+    where=None,
 ) -> int:
     """Report audio files falling below a specified bitrate floor."""
     if not HAVE_MUTAGEN_BASE:
@@ -1082,6 +1094,8 @@ def run_bitrate_audit(
 
     for filepath in paths:
         t = tags[filepath]
+        if where is not None and not where(t):
+            continue
         if (
             t.bitrate_kbps is not None
             and t.bitrate_kbps > 0
@@ -1171,6 +1185,7 @@ def run_replaygain_audit(
     *,
     verbose: bool = False,
     quiet: bool = False,
+    where=None,
 ) -> int:
     """Report per-album ReplayGain coverage. Format-aware: Opus R128 gain tags
     count as ReplayGain, so an album tagged the R128 way is not mis-flagged as
@@ -1194,6 +1209,13 @@ def run_replaygain_audit(
             continue
         paths = [os.path.join(dirpath, f) for f in audio_files]
         statuses = map_concurrent(read_replaygain, paths, pbar=pbar)
+        if where is not None:
+            # Album-granular: a where matching any track selects the whole
+            # album, and coverage stays an album property (counts over the
+            # full file set, never a subset).
+            bundles = read_tags_concurrent(paths, pbar=pbar)
+            if not any(where(t) for t in bundles.values()):
+                continue
         n_track = sum(1 for p in paths if statuses[p].has_track_gain)
         n_album = sum(1 for p in paths if statuses[p].has_album_gain)
         albums.append((dirpath, n_track, n_album, len(paths)))
@@ -1587,6 +1609,7 @@ def run_album_consistency(
     *,
     verbose: bool = False,
     quiet: bool = False,
+    where=None,
 ) -> int:
     """Per-album consistency audit: the debris the repo's own writers and
     imports create. One read-only pass over every album folder checking
@@ -1610,10 +1633,12 @@ def run_album_consistency(
         audio = sorted(f for f in files if is_audio(f))
         if not audio:
             continue
-        n_albums += 1
         paths = [os.path.join(dirpath, f) for f in audio]
         bundles = read_tags_concurrent(paths, pbar=pbar)
         album_bundles = [bundles[p] for p in paths]
+        if where is not None and not any(where(t) for t in album_bundles):
+            continue  # album-granular: a where matching any track selects it
+        n_albums += 1
 
         album_findings: list[tuple[str, str]] = []
 

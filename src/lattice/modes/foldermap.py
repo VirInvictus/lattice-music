@@ -386,12 +386,12 @@ def _safe_iterdir(p: Path) -> list[Path]:
 # ============================ lattice (read half) ============================
 
 
-def scan_album_dirs(directory: Path, quiet: bool):
+def scan_album_dirs(directory: Path, quiet: bool, where=None):
     # Scan against the *current* on-disk layout so the path-fallback fills in
     # any untagged file's artist/album; genre always comes from the tag.
     roots = as_roots(str(directory))
     pbar = _make_pbar(count_audio_files(roots), "Scanning", quiet)
-    dirs = _scan_album_dirs(roots, "{artist}/{album}", pbar)
+    dirs = _scan_album_dirs(roots, "{artist}/{album}", pbar, where=where)
     pbar.close()
     return dirs
 
@@ -630,6 +630,7 @@ def run_genremap(
     allow_new_genre: bool = False,
     log_path=None,
     quiet: bool = False,
+    where=None,
     _title: str = "lattice genreMap - Genre Restructurer",
 ) -> int:
     """Plan (and, with apply=True, perform) the Genre/Artist/Album
@@ -659,7 +660,7 @@ def run_genremap(
         print(f"Target: {directory}")
         print(f"Manifest: {manifest}\n")
 
-    records = scan_album_dirs(directory, quiet)
+    records = scan_album_dirs(directory, quiet, where=where)
     moves, issues, source_dirs = build_plan(
         records,
         directory,

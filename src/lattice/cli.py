@@ -69,11 +69,41 @@ from lattice.modes.library import (
 from lattice.modes.lyrics import run_lyrics
 from lattice.modes.genretidy import run_genre_tidy_apply, run_genre_tidy_build
 from lattice.modes.foldermap import revert as revert_genremap, run_genremap
-from lattice.modes.playlists import generate_playlist, run_check_playlists
+from lattice.modes.playlists import (
+    RuleError,
+    compile_where,
+    generate_playlist,
+    run_check_playlists,
+)
 from lattice.modes.replaygain import run_replaygain
 from lattice.modes.retag import run_retag
 from lattice.modes.stats import run_stats
 from lattice.tui import interactive_menu
+
+
+# Mode-flag dests that accept --where: the scanner-driven exports, the
+# tag-reading audits, and the album-granular write targeting. Anything not
+# listed refuses --with an explicit error, so a new mode opts in by adding its
+# dispatch here, never by silently ignoring the rule.
+_WHERE_MODES = frozenset(
+    {
+        "library",
+        "ai_library",
+        "all_wings",
+        "ai_wings",
+        "stats",
+        "auditTags",
+        "audit_albums",
+        "auditBitrate",
+        "auditReplayGain",
+        "health_score",
+        "duplicates",
+        "genre_tidy_build",
+        "genre_tidy_apply",
+        "genre_map",
+        "replaygain",
+    }
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -301,6 +331,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Smart playlist rule (e.g. \"rating >= 4 and genre == 'Jazz'\")",
     )
     p.add_argument(
+        "--where",
+        default=None,
+        metavar="EXPR",
+        help="Scope the scan to tracks matching the rule expression (the "
+        "--playlist grammar: rating, genre, artist, album, title, duration, "
+        "bitrate). Applies to the library exports, --stats, the tag-reading "
+        "audits, and album-granular targeting of --genreTidy-*, --genreMap, "
+        "and --replayGain (a rule matching ANY track selects the whole album)",
+    )
+    p.add_argument(
         "--layout",
         default=None,
         help="Directory structure pattern for extracting tags from path "
@@ -521,6 +561,30 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 2
 
+        # --where scopes the tag-reading modes only; a rule handed to a mode
+        # that never reads tags (or whose targeting is not tag-based) is a
+        # caller mistake, refused rather than silently ignored.
+        where_pred = None
+        if args.where:
+            chosen = [dest for dest in _WHERE_MODES if getattr(args, dest)]
+            if not chosen:
+                print(
+                    "error: --where does not scope this mode (it never reads "
+                    "the tags the rule evaluates, or its targeting is not "
+                    "tag-based)",
+                    file=sys.stderr,
+                )
+                return 2
+            try:
+                where_pred = compile_where(args.where)
+            except RuleError as e:
+                print(f"error: invalid --where rule: {e}", file=sys.stderr)
+                return 1
+
+        # Where-scoped dispatch passes the compiled predicate; the other
+        # branches never see it.
+        where = where_pred
+
         # Resolve the path-extraction layout: an explicit --layout wins,
         # otherwise fall back to the configured/default layout. (The mode flags
         # are a single argparse mutually-exclusive group, so picking more than
@@ -613,12 +677,15 @@ def main(argv: list[str] | None = None) -> int:
                 layout=args.layout,
                 quiet=args.quiet,
                 show_genre=args.genres,
+                where=where,
             )
             return 0
 
         if args.ai_library:
             output = args.output or DEFAULT_AI_LIBRARY_OUTPUT
-            write_ai_library(root, output, layout=args.layout, quiet=args.quiet)
+            write_ai_library(
+                root, output, layout=args.layout, quiet=args.quiet, where=where
+            )
             return 0
 
         if args.all_wings:
@@ -630,11 +697,14 @@ def main(argv: list[str] | None = None) -> int:
                 quiet=args.quiet,
                 show_genre=args.genres,
                 show_paths=args.paths,
+                where=where,
             )
 
         if args.ai_wings:
             outdir = args.output or "wings_ai"
-            return write_ai_wings(root, outdir, layout=args.layout, quiet=args.quiet)
+            return write_ai_wings(
+                root, outdir, layout=args.layout, quiet=args.quiet, where=where
+            )
 
         if args.testFLAC:
             output = args.output or DEFAULT_FLAC_OUTPUT
@@ -718,7 +788,7 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.duplicates:
             output = args.output or DEFAULT_DUPLICATES_OUTPUT
-            return run_duplicates(root, output, quiet=args.quiet)
+            return run_duplicates(root, output, quiet=args.quiet, where=where)
 
         if args.audit_audio_dupes:
             output = args.output or DEFAULT_AUDIO_DUPES_OUTPUT
@@ -726,12 +796,12 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.auditTags:
             output = args.output or DEFAULT_TAG_AUDIT_OUTPUT
-            return run_tag_audit(root, output, quiet=args.quiet)
+            return run_tag_audit(root, output, quiet=args.quiet, where=where)
 
         if args.audit_albums:
             output = args.output or DEFAULT_ALBUM_CONSISTENCY_OUTPUT
             return run_album_consistency(
-                root, output, verbose=args.verbose, quiet=args.quiet
+                root, output, verbose=args.verbose, quiet=args.quiet, where=where
             )
 
         if args.audit_junk_frames:
@@ -742,12 +812,14 @@ def main(argv: list[str] | None = None) -> int:
 
         if args.auditBitrate:
             output = args.output or DEFAULT_BITRATE_AUDIT_OUTPUT
-            return run_bitrate_audit(root, output, args.min_bitrate, quiet=args.quiet)
+            return run_bitrate_audit(
+                root, output, args.min_bitrate, quiet=args.quiet, where=where
+            )
 
         if args.auditReplayGain:
             output = args.output or DEFAULT_REPLAYGAIN_AUDIT_OUTPUT
             return run_replaygain_audit(
-                root, output, verbose=args.verbose, quiet=args.quiet
+                root, output, verbose=args.verbose, quiet=args.quiet, where=where
             )
 
         if args.verify_replaygain:
@@ -775,6 +847,7 @@ def main(argv: list[str] | None = None) -> int:
                 min_res=args.min_art_res,
                 verbose=args.verbose,
                 quiet=args.quiet,
+                where=where,
             )
 
         if args.playlist:
@@ -790,7 +863,9 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         if args.stats:
-            run_stats(root, args.output, layout=args.layout, quiet=args.quiet)
+            run_stats(
+                root, args.output, layout=args.layout, quiet=args.quiet, where=where
+            )
             return 0
 
         if args.snapshot:
@@ -857,6 +932,7 @@ def main(argv: list[str] | None = None) -> int:
                     target_lufs=args.target_lufs,
                     threads=args.threads,
                     quiet=args.quiet,
+                    where=where,
                 )
             if args.genre_tidy_build:
                 return run_genre_tidy_build(
@@ -864,6 +940,7 @@ def main(argv: list[str] | None = None) -> int:
                     map_path=args.map_path,
                     layout=args.layout,
                     quiet=args.quiet,
+                    where=where,
                 )
             if args.genre_tidy_apply:
                 return run_genre_tidy_apply(
@@ -872,6 +949,7 @@ def main(argv: list[str] | None = None) -> int:
                     map_path=args.map_path,
                     layout=args.layout,
                     quiet=args.quiet,
+                    where=where,
                 )
             if args.genre_map:
                 return run_genremap(
@@ -884,6 +962,7 @@ def main(argv: list[str] | None = None) -> int:
                     refile_mismatched=args.refile_mismatched,
                     allow_new_genre=args.allow_new_genre,
                     quiet=args.quiet,
+                    where=where,
                 )
             return run_lyrics(
                 root[0],
