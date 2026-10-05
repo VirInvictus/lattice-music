@@ -15,7 +15,7 @@
 
 A CLI/TUI toolkit for music collectors who manage their own libraries. lattice-music handles library visualization, integrity verification, cover art extraction, and metadata auditing, built on `mutagen` and `tqdm`, with the shared `vir-tui` library powering its terminal UI and `flac` and `ffmpeg` shelled out for integrity checks.
 
-> **Read-only by default.** lattice-music reads tags and decodes audio, and it writes only reports, playlists, extracted cover art, and `.lrc` lyrics sidecars. The three exceptions are the explicit write modes: `--clean` (consolidate fragmented album folders, optionally normalize names and tags), `--apestrip` (remove stray APEv2 tags from MP3s), and `--lyrics` (fetch synced lyrics from the LRCLIB API into `.lrc` sidecars beside your audio). All are dry-run by default, write only on `--apply`, and log every change. The optional companion scripts in `scripts/` also **do** modify files (tags, rating bytes, folder layout) and must be used with caution. See [Write modes](#write-modes) and [Companion scripts](#companion-scripts).
+> **Read-only by default.** lattice-music reads tags and decodes audio, and it writes only reports, playlists, extracted cover art, and `.lrc` lyrics sidecars. The four exceptions are the explicit write modes: `--clean` (consolidate fragmented album folders, optionally normalize names and tags), `--apestrip` (remove stray APEv2 tags from MP3s), `--lyrics` (fetch synced lyrics from the LRCLIB API into `.lrc` sidecars beside your audio), and `--replayGain` (write ReplayGain 2.0 tags via `rsgain`). All are dry-run by default, write only on `--apply`, and log every change. The optional companion scripts in `scripts/` also **do** modify files (tags, rating bytes, folder layout) and must be used with caution. See [Write modes](#write-modes) and [Companion scripts](#companion-scripts).
 
 > **Note:** This is actively maintained software: bug fixes land as they come, and the audit-mode family keeps growing (see the Features table). It is thoroughly tested and known to be fully functional on the primary development environment: **Fedora Linux 44 (Workstation Edition)** on **Python 3.14**, with `flac` and `ffmpeg` from the Fedora repositories. While it is pure Python and should be cross-platform, this specific setup is the only officially tested environment.
 
@@ -68,6 +68,7 @@ Modern music players often hide your library behind proprietary databases. latti
 | **Clean (write)** | `--clean` | Consolidates fragmented album folders; opt-in `--normalize-names`/`--normalize-filenames`/`--normalize-tags` passes. Dry-run by default, `--apply` to write |
 | **APEv2 strip (write)** | `--apestrip` | Removes stray APEv2 tags from MP3s (`--keep-metadata` to migrate first, `--repair-malformed` for broken tags). Dry-run by default, `--apply` to write |
 | **Lyrics fetch (write)** | `--lyrics` | Fetches synced lyrics from the LRCLIB API into same-basename `.lrc` sidecars (`--lyrics-force` to overwrite, `--lyrics-sleep` to pace requests). Dry-run by default, `--apply` to write |
+| **ReplayGain write** | `--replayGain` | Scans and writes ReplayGain 2.0 gain/peak tags album-by-album via `rsgain` (`--skip-tagged` to skip fully-tagged albums as a unit, `--target-lufs` for a custom target, `--threads` to parallelize the scan). Dry-run by default, `--apply` to write |
 | **Snapshot** | `--snapshot` | Writes a per-file library snapshot TSV (path, size, mtime, key tags, ReplayGain presence) for before/after evidence |
 | **Snapshot diff** | `--diff SNAPSHOT` | Replays a snapshot against the current tree: moved, retagged, resized, added, and removed files |
 | **Version** | `--version` | Prints version and exits |
@@ -111,7 +112,7 @@ Runtime dependencies are `mutagen`, `tqdm`, and `vir-tui` (installed automatical
 
 - [`flac`](https://xiph.org/flac/): used by `--testFLAC` (preferred)
 - [`ffmpeg`](https://ffmpeg.org/): used by `--testMP3`, `--testOpus`, `--testWAV`, `--testWMA`, and as a fallback for `--testFLAC`
-- [`rsgain`](https://github.com/complexlogic/rsgain): used by `--verifyReplayGain` (scan-only; also used by the [`replaygain.py`](#replaygainpy) companion to write tags)
+- [`rsgain`](https://github.com/complexlogic/rsgain): used by `--verifyReplayGain` (scan-only) and `--replayGain` (writing)
 
 ```bash
 # Fedora/RHEL
@@ -220,15 +221,20 @@ lattice --clean ~/Music --apply --normalize-names --normalize-filenames --normal
 # Preview the APEv2 strip, then apply it
 lattice --apestrip ~/Music
 lattice --apestrip ~/Music --apply
+
+# Preview the ReplayGain scan plan, then scan and write (requires rsgain)
+lattice --replayGain ~/Music
+lattice --replayGain ~/Music --apply --skip-tagged --threads 4
 ```
 
 ## Write modes
 
-Three modes write to your library, and all are **dry-run by default**: without `--apply` they only preview, and every change is recorded to an append-only timestamped log.
+Four modes write to your library, and all are **dry-run by default**: without `--apply` they only preview, and every change is recorded to an append-only timestamped log.
 
 - **`lattice --clean`** consolidates fragmented album folders (the same job as [`cleaner.py`](#cleanerpy)), then applies the opt-in passes you name: `--normalize-names` (rename folders at any depth), `--normalize-filenames` (rename track files), `--normalize-tags` (library-wide typographic tag normalization; on MP3s it writes ID3v2.3 plus a refreshed ID3v1), or `--all` for all three. On a genre-first library, pass `--layout '{genre}/{artist}/{album}'` so the tag pass reads the artist level correctly. The preview predicts the real run exactly; the log defaults to `<root>/cleanup.log`.
 - **`lattice --apestrip`** strips stray APEv2 tags from MP3s (the same job as [`apestrip.py`](#apestrippy)). `--keep-metadata` migrates sole-source APE fields into ID3 first (genre is never migrated; ratings are reported, never written), and `--repair-malformed` also repairs malformed APE tags via verified atomic byte surgery. A real run prints the worklist and asks for confirmation (auto-skipped when stdin is not a TTY); the log defaults to `<root>/apestrip.log`.
 - **`lattice --lyrics`** fetches synced lyrics from the open [LRCLIB](https://lrclib.net) API and writes them as same-basename `.lrc` sidecars beside your audio files — players and servers that read sidecar lyrics (Jellyfin 10.9+ among them) then carry the lyrics with the files, so a library that syncs to several machines takes its lyrics along. Matching is artist + title (+ album and duration) with a duration-windowed search fallback; instrumental and plain-only matches are reported, never written; tracks with a sidecar are skipped unless `--lyrics-force`. The preview runs the real lookups (read-only) so its hit/miss counts are honest; requests are paced with `--lyrics-sleep`; the log defaults to `<root>/lyrics.log`.
+- **`lattice --replayGain`** writes ReplayGain 2.0 tags (the same job as [`replaygain.py`](#replaygainpy)): one album gain plus album peak per album folder and a per-track gain plus peak, computed and written by [`rsgain`](https://github.com/complexlogic/rsgain) at the 89 dB / -18 LUFS reference. Album = one folder, rescanned as a whole so album gain is correct; `--skip-tagged` skips a fully-tagged album *as a unit* (half-skipping would compute album gain over a subset and corrupt it); `--target-lufs N` switches to a custom target (e.g. -14 for the streaming-loud range); `--threads N` parallelizes each scan. The preview lists every album and its current coverage without invoking rsgain; a real run requires rsgain on PATH and exits 2 without it. The log (with the values read back after each album) defaults to `<root>/replaygain.log`.
 
 ```bash
 # Preview, then merge fragmented folders and run every normalization pass
@@ -242,9 +248,13 @@ lattice --apestrip ~/Music --apply --keep-metadata
 # Preview the LRCLIB lookups, then write the .lrc sidecars
 lattice --lyrics ~/Music
 lattice --lyrics ~/Music --apply
+
+# Preview the coverage plan, then scan and write (skipping already-tagged albums)
+lattice --replayGain ~/Music
+lattice --replayGain ~/Music --apply --skip-tagged
 ```
 
-The TUI exposes all three under its Maintenance section, behind yes/no confirms (answering No to the apply question runs the preview instead). The `scripts/cleaner.py` and `scripts/apestrip.py` launchers keep their historical apply-by-default behavior for aliases and cron; see [Companion scripts](#companion-scripts).
+The TUI exposes all four under its Maintenance section, behind yes/no confirms (answering No to the apply question runs the preview instead). The `scripts/cleaner.py`, `scripts/apestrip.py`, and `scripts/replaygain.py` launchers keep their historical apply-by-default behavior for aliases and cron; see [Companion scripts](#companion-scripts).
 
 ## AI library export
 
@@ -277,7 +287,7 @@ Produces `Alternative_Rock_Library.txt`, `East_Coast_Rap_Library.txt`, and so on
 lattice --duplicates --root ~/Music --root /mnt/usb/Albums --output duplicates.txt
 ```
 
-Every mode aggregates across the roots: combined statistics, one merged library tree, genre wings that span both, and so on. A path passed twice is de-duped. The exception is the three write modes: `--clean`, `--apestrip`, and `--lyrics` operate on exactly one tree and refuse a multi-root list. The payoff for `--duplicates` is cross-library detection: an album that lives in both libraries is grouped as a single exact duplicate, and each entry is prefixed by its root's basename (`Music/…` vs `Albums/…`) so you can tell the copies apart.
+Every mode aggregates across the roots: combined statistics, one merged library tree, genre wings that span both, and so on. A path passed twice is de-duped. The exception is the four write modes: `--clean`, `--apestrip`, `--lyrics`, and `--replayGain` operate on exactly one tree and refuse a multi-root list. The payoff for `--duplicates` is cross-library detection: an album that lives in both libraries is grouped as a single exact duplicate, and each entry is prefixed by its root's basename (`Music/…` vs `Albums/…`) so you can tell the copies apart.
 
 To make several roots permanent, add a `library_roots` array to `~/.config/lattice/config.json`:
 
@@ -446,7 +456,7 @@ options:
 
 ## Companion scripts
 
-The `scripts/` directory holds nine standalone maintenance tools. Two of them, [`cleaner.py`](#cleanerpy) and [`apestrip.py`](#apestrippy), are thin launchers over the packaged [write modes](#write-modes) (same flags, same logs, apply-by-default as they always were). The rest are **not** part of the `lattice` package and sit **outside its contract** on purpose: unlike the package's read-only modes, they **modify your files in place**, rewriting tags, rewriting rating bytes, or moving and renaming folders. Run them directly with `python3`.
+The `scripts/` directory holds nine standalone maintenance tools. Three of them, [`cleaner.py`](#cleanerpy), [`apestrip.py`](#apestrippy), and [`replaygain.py`](#replaygainpy), are thin launchers over the packaged [write modes](#write-modes) (same flags, same logs, apply-by-default as they always were). The rest are **not** part of the `lattice` package and sit **outside its contract** on purpose: unlike the package's read-only modes, they **modify your files in place**, rewriting tags, rewriting rating bytes, or moving and renaming folders. Run them directly with `python3`.
 
 **Use them with caution.** Have a backup or snapshot first, always preview with `--dry-run`, and read the log before applying. Each writes an append-only timestamped log and is idempotent, so a second run on an already-clean library is a no-op.
 
@@ -455,40 +465,41 @@ The `scripts/` directory holds nine standalone maintenance tools. Two of them, [
 | [`retag.py`](#retagpy) | Genre tags on one album directory | manual, per-album |
 | [`genre_tidy.py`](#genre_tidypy) | Genre tags library-wide (through `retag.py`) | policy map, then apply |
 | [`rerate.py`](#reratepy) | MP3 POPM rating bytes | reconcile DeaDBeeF / foobar |
-| [`cleaner.py`](#cleanerpy) | Folder names and layout (moves, merges, renames); file names with `--normalize-filenames`; title/album/artist tags (all formats) with `--normalize-tags` | filesystem (opt-in names + tags) |
+| [`cleaner.py`](#cleanerpy) | Launcher for `lattice --clean`: folder names and layout (moves, merges, renames); file names with `--normalize-filenames`; title/album/artist tags (all formats) with `--normalize-tags` | filesystem (opt-in names + tags) |
 | [`genre_foldermap.py`](#genre_foldermappy) | Restructures the tree into Genre/Artist/Album | filesystem |
-| [`replaygain.py`](#replaygainpy) | Writes ReplayGain 2.0 gain/peak tags (via `rsgain`) | album-by-album |
-| [`apestrip.py`](#apestrippy) | Removes stray APEv2 tags from MP3s (`--keep-metadata` to migrate first) | recursive, MP3-only |
+| [`replaygain.py`](#replaygainpy) | Launcher for `lattice --replayGain`: writes ReplayGain 2.0 gain/peak tags (via `rsgain`) | album-by-album |
+| [`apestrip.py`](#apestrippy) | Launcher for `lattice --apestrip`: removes stray APEv2 tags from MP3s (`--keep-metadata` to migrate first) | recursive, MP3-only |
 | [`slipcover.py`](#slipcoverpy) | Embeds folder cover images into audio files lacking embedded art (`--fetch` queries iTunes for missing covers) | recursive |
 | [`flac2opus.py`](#flac2opuspy) | Converts FLAC to Opus 128k and deletes the FLAC after verifying duration | recursive, FLAC-only |
 
 ### Importing New Music (The Circuit)
 
-When you download or import a swath of new albums (e.g. to a staging folder like `/mnt/SharedData/Music/Unfiltered`), you should run this standard "circuit" of scripts to ensure the files are transcoded, cleaned, embedded with art, and volume-normalized before moving them to your main library.
+When you download or import a swath of new albums (e.g. to a staging folder like `/mnt/SharedData/Music/Unfiltered`), you should run this standard "circuit" of tools to ensure the files are transcoded, cleaned, embedded with art, and volume-normalized before moving them to your main library. Most of the circuit is now the packaged write modes (dry-run unless `--apply`); the two remaining hand-run scripts are flagged.
 
 ```bash
 # 1. Transcode FLACs to Opus 128kbps (saves space, copies tags securely, deletes original FLAC)
 ./scripts/flac2opus.py /mnt/SharedData/Music/Unfiltered -y
 
-# 2. Strip Malformed APEv2 Tags (removes hidden APEv2 tags on MP3s that confuse players)
-./scripts/apestrip.py /mnt/SharedData/Music/Unfiltered -y
+# 2. Strip stray APEv2 tags (removes hidden APEv2 tags on MP3s that confuse players)
+lattice --apestrip /mnt/SharedData/Music/Unfiltered --apply
 
 # 3. Clean and Normalize
-# Note: You MUST pass the --normalize-names, --normalize-tags, and --normalize-filenames flags explicitly.
-# Without these, cleaner.py will only consolidate fragmented album directories, leaving messy filenames and inconsistent tags untouched.
-./scripts/cleaner.py /mnt/SharedData/Music/Unfiltered --normalize-names --normalize-tags --normalize-filenames
+# Note: --all turns on the --normalize-names, --normalize-tags, and --normalize-filenames passes.
+# Without it, --clean will only consolidate fragmented album directories, leaving messy
+# filenames and inconsistent tags untouched.
+lattice --clean /mnt/SharedData/Music/Unfiltered --all --apply
 
 # 4. Fetch and Embed Cover Art (queries iTunes for covers missing art, and embeds folder images)
 ./scripts/slipcover.py /mnt/SharedData/Music/Unfiltered --fetch -y
 
-# 5. Apply ReplayGain 2.0 (calculates volume peaks and tags the files)
-./scripts/replaygain.py /mnt/SharedData/Music/Unfiltered -y
+# 5. Apply ReplayGain 2.0 (calculates volume peaks and tags the files; requires rsgain)
+lattice --replayGain /mnt/SharedData/Music/Unfiltered --apply
 ```
 
-Once processed, you can confidently merge these albums into your main library (`/mnt/SharedData/Music`). Over time, as your library grows, you may want to periodically maintain the entire tree by running the cleaner on the root:
+Once processed, you can confidently merge these albums into your main library (`/mnt/SharedData/Music`). Over time, as your library grows, you may want to periodically maintain the entire tree by running the clean mode on the root:
 
 ```bash
-./scripts/cleaner.py /mnt/SharedData/Music --normalize-names --normalize-tags --normalize-filenames
+lattice --clean /mnt/SharedData/Music --all --apply
 ```
 
 
@@ -704,7 +715,9 @@ A tag value that joins several genres into one string with `;` or `/` never beco
 
 > **Destructive: writes ReplayGain tags in place.** Preview with `--dry-run`; a real run prints the worklist and asks for confirmation before writing (skip with `--yes`). Every album scanned, and the exact values written, are logged.
 
-The companion to the [`--auditReplayGain`](#features) audit: where the audit *reports* which albums lack ReplayGain, `replaygain.py` *writes* it. It wraps [`rsgain`](https://github.com/complexlogic/rsgain) (libebur128, ReplayGain 2.0, the `-18 LUFS` / `89 dB` reference foobar2000 uses) to do what foobar's "Scan selection as album" does: compute one album gain plus album peak per album folder and a per-track gain plus peak, then write them into the files. rsgain leaves the audio stream untouched; only metadata changes. It imports `lattice` for the format-aware ReplayGain reader, so it needs the package importable (installed via `pip`/`pipx`, or run from a checkout with `PYTHONPATH=src`).
+> **Launcher note.** Since 6.0.0 the writer lives in the package (`lattice --replayGain`); `scripts/replaygain.py` is a thin launcher over it, kept for aliases and cron with the same flags, the same `<directory>/replaygain.log`, and its historical apply-by-default contract. Everything below describes both entry points; only the default (apply here, dry-run in the package) differs.
+
+The companion to the [`--auditReplayGain`](#features) audit: where the audit *reports* which albums lack ReplayGain, `replaygain.py` *writes* it. It wraps [`rsgain`](https://github.com/complexlogic/rsgain) (libebur128, ReplayGain 2.0, the `-18 LUFS` / `89 dB` reference foobar2000 uses) to do what foobar's "Scan selection as album" does: compute one album gain plus album peak per album folder and a per-track gain plus peak, then write them into the files. rsgain leaves the audio stream untouched; only metadata changes. It shares the package's format-aware ReplayGain reader with `--verifyReplayGain`, so the writer and the verifier cannot drift.
 
 **Requires `rsgain`.** It is not bundled. On Fedora: `sudo dnf install rsgain`. Other platforms: see the [rsgain releases](https://github.com/complexlogic/rsgain/releases).
 

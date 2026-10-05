@@ -131,6 +131,7 @@ supplies default roots; the first-run prompt persists only the single
 | Clean | `--clean` | Consolidate fragmented album folders (quote/dash/case variants) with opt-in name (`--normalize-names`, `--normalize-filenames`) and tag (`--normalize-tags`) normalization passes; write mode, dry-run by default |
 | APEv2 strip | `--apestrip` | Remove stray APEv2 tags from MP3s (`--keep-metadata` to migrate sole-source fields first, `--repair-malformed` for tags mutagen cannot parse); write mode, dry-run by default |
 | Lyrics fetch | `--lyrics` | Match each track against the LRCLIB API and write its synced lyrics as a same-basename `.lrc` sidecar beside the audio (`--lyrics-force` to overwrite, `--lyrics-sleep` for request pacing); instrumental and plain-only matches are reported, never written; write mode, dry-run by default |
+| ReplayGain write | `--replayGain` | Scan and write ReplayGain 2.0 gain/peak tags album-by-album via `rsgain` (album = one folder, rescanned whole; `--skip-tagged` skips fully-tagged albums as a unit, `--target-lufs` for a custom target, `--threads` for the scan); requires `rsgain` (exit 2 without it on a real run); write mode, dry-run by default |
 
 ---
 
@@ -170,12 +171,14 @@ remainder, still producing the full report. A completed scan deletes the state.
 
 - **Not a player.** It reads tags; it does not play audio.
 - **Not a tagger.** It reads metadata; it writes metadata only via the explicit
-  `--clean`/`--apestrip` write modes (opt-in via `--apply`, logged, dry-run by
-  default). Every other mode writes no tags and no audio: its only outputs are
-  the reports and playlists it writes outside the library, cover art extracted
-  by `--extractArt`, the `.lrc` sidecar files `--lyrics` writes beside audio
-  files when applied (audio files themselves are never touched by it), and the
-  transient `--resume` state file beside an integrity report.
+  write modes `--clean`, `--apestrip`, and `--replayGain` (opt-in via `--apply`,
+  logged, dry-run by default; `--replayGain` shells out to `rsgain` and requires
+  it on PATH for a real run). Every other mode writes no tags and no audio: its
+  only outputs are the reports and playlists it writes outside the library,
+  cover art extracted by `--extractArt`, the `.lrc` sidecar files `--lyrics`
+  writes beside audio files when applied (audio files themselves are never
+  touched by it), and the transient `--resume` state file beside an integrity
+  report.
 - **Not a database.** It walks the filesystem every time; there is no index.
 - **Not a sync tool.** It does not interact with cloud services or devices. The
   single exception is `--lyrics`' read-only lookup against the open LRCLIB API:
@@ -184,14 +187,14 @@ remainder, still producing the full report. A completed scan deletes the state.
 
 ## 6. Companion Scripts
 
-Seven destructive operations remain standalone Python scripts in the `scripts/`
+Six destructive operations remain standalone Python scripts in the `scripts/`
 directory (they are not installed by `pip` or `pipx`, and are run directly).
-`cleaner.py` and `apestrip.py` were promoted into the package as the
-`--clean`/`--apestrip` write modes in 5.0.0; the scripts by those names survive
-as thin launchers over the package implementation, preserving the
-apply-by-default CLI they always had.
+`cleaner.py`, `apestrip.py`, and `replaygain.py` were promoted into the package
+as the `--clean`/`--apestrip`/`--replayGain` write modes (5.0.0 and 6.0.0); the
+scripts by those names survive as thin launchers over the package
+implementation, preserving the apply-by-default CLI they always had.
 
 Notable scripts include:
 - `slipcover.py`: Embeds existing folder cover art (`cover.jpg`, etc.) into audio files lacking embedded art, maintaining parity between the filesystem and embedded metadata.
 - `flac2opus.py`: Converts FLAC files to Opus 128kbps, guaranteeing tag and duration parity before cleanly deleting the original FLAC.
-- `retag.py`, `genre_tidy.py`, `rerate.py`, `genre_foldermap.py`, `replaygain.py`: Various other destructive and state-mutating utilities documented in `CLAUDE.md` and `README.md`. (`cleaner.py` and `apestrip.py` are now launchers over the package's `--clean`/`--apestrip` write modes.)
+- `retag.py`, `genre_tidy.py`, `rerate.py`, `genre_foldermap.py`: Various other destructive and state-mutating utilities documented in `CLAUDE.md` and `README.md`. (`cleaner.py`, `apestrip.py`, and `replaygain.py` are now launchers over the package's `--clean`/`--apestrip`/`--replayGain` write modes.)

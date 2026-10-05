@@ -8,17 +8,17 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-# replaygain.py lives in scripts/ (outside the lattice package); it shells out to
-# rsgain to write ReplayGain tags. The pure helpers are tested directly and the
-# rsgain call is mocked, so these tests never invoke rsgain or mutate a library.
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
-
-import replaygain
-import lattice.tags as tags_mod
 from mutagen.flac import FLAC
 from mutagen.id3 import ID3, TXXX
 
+import lattice.tags as tags_mod
 from lattice.config import AUDIO_EXTENSIONS as AUDIO_EXTS
+
+# The ReplayGain writer lives in the package (the 6.0.0 fold of
+# scripts/replaygain.py, now a launcher); it shells out to rsgain to write
+# tags. The pure helpers are tested directly and the rsgain call is mocked, so
+# these tests never invoke rsgain or mutate a library.
+from lattice.modes import replaygain
 
 FIXTURE = Path(__file__).parent / "fixtures" / "library"
 MP3_SRC = FIXTURE / "Cursive" / "Domestica" / "01 - The Casualty.mp3"

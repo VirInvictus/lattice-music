@@ -31,11 +31,11 @@ from lattice.modes.artwork import (
 )
 from lattice.modes.audit import (
     run_album_consistency,
-    run_junk_frame_audit,
     run_audio_dupes,
     run_bitrate_audit,
     run_duplicates,
     run_health_score,
+    run_junk_frame_audit,
     run_replaygain_audit,
     run_stray_audit,
     run_tag_audit,
@@ -49,7 +49,6 @@ from lattice.modes.integrity import (
     run_wav_mode,
     run_wma_mode,
 )
-from lattice.modes.lyrics import run_lyrics
 from lattice.modes.library import (
     diff_snapshot,
     write_ai_library,
@@ -58,7 +57,9 @@ from lattice.modes.library import (
     write_music_library_tree,
     write_snapshot,
 )
+from lattice.modes.lyrics import run_lyrics
 from lattice.modes.playlists import generate_playlist, run_check_playlists
+from lattice.modes.replaygain import run_replaygain
 from lattice.modes.stats import run_stats
 
 # TUI default output names, deliberately prefixed lattice_ so an interactive
@@ -138,6 +139,7 @@ _MAIN_SECTIONS = [
             "Consolidate fragmented albums (clean)",
             "Strip APEv2 tags (apestrip)",
             "Fetch synced lyrics (lyrics)",
+            "Write ReplayGain tags (replaygain)",
         ],
     ),
     (
@@ -211,6 +213,7 @@ _MAIN_ALIASES: dict[str, tuple | None] = {
     "ape": (4, 1),
     "lyrics": (4, 2),
     "lrc": (4, 2),
+    "rgwrite": (4, 3),
     "settings": (5, 0),
     "config": (5, 0),
     "c": (5, 0),
@@ -805,6 +808,32 @@ def _menu_session() -> int:
                     roots[0],
                     dry_run=not apply,
                     force=force,
+                    assume_yes=True,
+                    quiet=False,
+                )
+
+            elif result == (4, 3):
+                # Write mode: same gate pattern as lyrics — the ask_yn
+                # confirm decides dry-run vs apply, and the mode runs with
+                # assume_yes so its own prompt stays out of the capture.
+                if len(roots) != 1:
+                    notify(
+                        "The replaygain mode needs exactly one library root; "
+                        f"{len(roots)} are configured (library_roots)."
+                    )
+                    continue
+                skip = ask_yn("Skip albums already fully tagged? (y/N)")
+                threads = prompt_int("rsgain scan threads", 1)
+                apply = ask_yn(
+                    "APPLY ReplayGain scan now? No = dry-run preview only (y/N)"
+                )
+                run_with_capture(
+                    "Write ReplayGain tags (replaygain)",
+                    run_replaygain,
+                    roots[0],
+                    dry_run=not apply,
+                    skip_tagged=skip,
+                    threads=threads,
                     assume_yes=True,
                     quiet=False,
                 )

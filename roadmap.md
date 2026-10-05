@@ -521,38 +521,27 @@ audit mode.
 
 ### A. The fold phases (ordered; each ships one release; recipe = Research 2026-09-12 §A)
 
-- [ ] **A1 (target v5.8.0): fold `replaygain.py` into
+Superseded 2026-10-05, owner's commissioning run: all four fold phases and all
+four capability phases ship as ONE release (v6.0.0) instead of the per-phase
+versions below; the per-phase version targets are historical.
+
+- [x] **A1 (target v5.8.0): fold `replaygain.py` into
   `lattice.modes.replaygain` as the `--replayGain` write mode, plus the
-  circuit truth pass.** The best candidate: its read half is already
-  package code (lazy imports of `lattice.config.AUDIO_EXTENSIONS` and
-  `lattice.tags.read_replaygain` at scripts/replaygain.py:89-104,
-  `read_replaygain_values` at :172) so writer and --verifyReplayGain
-  cannot drift; folding completes the ReplayGain trio (--auditReplayGain,
-  --verifyReplayGain, --replayGain). Steps: brain to
-  `modes/replaygain.py` as `run_replaygain(root, *, dry_run,
-  skip_tagged, target_lufs, threads, log_path, quiet)` with an
-  argparse-preserving main (keep `scan_album`'s command-builder /
-  read-back separation; tests mock rsgain, never invoke it); the package
-  default inverts to dry-run-unless-`--apply`, the launcher keeps
-  apply-by-default (the 5.0.0 inversion); scripts/replaygain.py becomes
-  a PEP 562 launcher (template: scripts/cleaner.py:26-54); retarget
-  tests/test_replaygain.py wholesale (27 tests; the sys.path hack at
-  :14-16 goes; if the hardcoded AUDIO_EXTENSIONS copy the 09-12 audit
-  noted at :22 is still there, import from lattice.config instead); CLI
-  flag + TUI MAINTENANCE entry + wiring/parity tests; rsgain stays a
-  required external binary with the exit-2 refusal; spec.md §5 names it
-  among the write modes and §6 drops it from the standalone list; README
-  + CLAUDE.md companion bullet become launcher notes; patchnotes +
-  version triple. **Same release, the circuit truth pass:** README
-  "The Circuit" (~README.md:474) rewritten so apestrip and cleaner
-  appear as package invocations (`lattice --apestrip --apply`,
-  `lattice --clean --all --apply`); the `./scripts/apestrip.py -y` line
-  is deleted, not patched (decision 4 above; the launcher re-exports the
-  package parser, which defines only `--yes`); script-shaped lines
-  survive only for the six not-yet-folded scripts and get rewritten
-  again as their phases land; verify
-  .agents/skills/lattice-import/SKILL.md stays consistent (its -y fix
-  shipped in the final blitz).
+  circuit truth pass.** SHIPPED in the single v6.0.0 release: brain at
+  `modes/replaygain.py` (`run_replaygain(root, *, dry_run=True, skip_tagged,
+  target_lufs, threads, log_path, assume_yes, quiet)` + argparse-preserving
+  `main` for the launcher; scan_album's command-builder/read-back split kept,
+  rsgain mocked in tests); package default inverted to dry-run-unless-`--apply`,
+  launcher apply-by-default; scripts/replaygain.py is a PEP 562 launcher;
+  tests/test_replaygain.py retargeted wholesale (sys.path hack gone;
+  AUDIO_EXTENSIONS imported from lattice.config, was already); CLI flag +
+  `--skip-tagged` + `--threads` + TUI MAINTENANCE entry (4,3) +
+  wiring/parity tests (six new dispatch pins); rsgain exit-2 refusal kept
+  (dry-run needs nothing); spec.md §3/§5/§6, README, CLAUDE.md updated;
+  `--target-lufs` made optional (None default; verify resolves to -18).
+  Circuit truth pass: README Circuit now shows `lattice --apestrip --apply`,
+  `lattice --clean --all --apply`, `lattice --replayGain --apply`; the
+  `./scripts/apestrip.py -y` line deleted; SKILL.md rewritten to match.
 
 - [ ] **A2 (target v5.9.0): fold `retag.py` into `lattice.modes.retag`
   as the `--retag` write mode; rewire `genre_tidy.py` in the same

@@ -4,9 +4,9 @@ import sys
 
 from lattice.config import (
     DEFAULT_AI_LIBRARY_OUTPUT,
+    DEFAULT_ALBUM_CONSISTENCY_OUTPUT,
     DEFAULT_ART_MISMATCH_OUTPUT,
     DEFAULT_ART_QUALITY_OUTPUT,
-    DEFAULT_ALBUM_CONSISTENCY_OUTPUT,
     DEFAULT_AUDIO_DUPES_OUTPUT,
     DEFAULT_BITRATE_AUDIT_OUTPUT,
     DEFAULT_DUPLICATES_OUTPUT,
@@ -17,12 +17,12 @@ from lattice.config import (
     DEFAULT_MISSING_ART_OUTPUT,
     DEFAULT_MP3_OUTPUT,
     DEFAULT_OPUS_OUTPUT,
-    DEFAULT_PLAYLIST_OUTPUT,
     DEFAULT_PLAYLIST_CHECK_OUTPUT,
+    DEFAULT_PLAYLIST_OUTPUT,
     DEFAULT_REPLAYGAIN_AUDIT_OUTPUT,
+    DEFAULT_REPLAYGAIN_VERIFY_OUTPUT,
     DEFAULT_SNAPSHOT_DIFF_OUTPUT,
     DEFAULT_SNAPSHOT_OUTPUT,
-    DEFAULT_REPLAYGAIN_VERIFY_OUTPUT,
     DEFAULT_STRAY_AUDIT_OUTPUT,
     DEFAULT_TAG_AUDIT_OUTPUT,
     DEFAULT_WAV_OUTPUT,
@@ -57,7 +57,6 @@ from lattice.modes.integrity import (
     run_wav_mode,
     run_wma_mode,
 )
-from lattice.modes.lyrics import run_lyrics
 from lattice.modes.library import (
     diff_snapshot,
     write_ai_library,
@@ -66,7 +65,9 @@ from lattice.modes.library import (
     write_music_library_tree,
     write_snapshot,
 )
+from lattice.modes.lyrics import run_lyrics
 from lattice.modes.playlists import generate_playlist, run_check_playlists
+from lattice.modes.replaygain import run_replaygain
 from lattice.modes.stats import run_stats
 from lattice.tui import interactive_menu
 
@@ -234,6 +235,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Fetch synced lyrics from LRCLIB into .lrc sidecars (write "
         "mode: dry-run by default, --apply to write)",
     )
+    group.add_argument(
+        "--replayGain",
+        dest="replaygain",
+        action="store_true",
+        help="Scan and write ReplayGain 2.0 tags album-by-album via rsgain "
+        "(write mode: dry-run by default, --apply to write; requires rsgain)",
+    )
 
     p.add_argument(
         "--root",
@@ -275,12 +283,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--target-lufs",
         dest="target_lufs",
         type=float,
-        default=-18.0,
-        help="Assumed ReplayGain write target in LUFS for --verifyReplayGain "
-        "(default: -18, the ReplayGain 2.0 reference; verify a -14-targeted "
-        "library at -14). Applies to replaygain_*-tagged files; R128-tagged "
-        "files verify at the R128 -23 LUFS baseline their format implies "
-        "either way",
+        default=None,
+        metavar="N",
+        help="ReplayGain target loudness in LUFS. --verifyReplayGain: the "
+        "target the stored replaygain_* values are checked against (default: "
+        "-18, the ReplayGain 2.0 reference; verify a -14-targeted library at "
+        "-14). --replayGain: writing at a custom target switches rsgain to "
+        "custom mode (default: the 89 dB standard). Applies to "
+        "replaygain_*-tagged files; R128-tagged files verify at the R128 -23 "
+        "LUFS baseline their format implies either way",
     )
     p.add_argument(
         "--tolerance",
@@ -290,6 +301,19 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--workers", type=int, default=4, help="Parallel workers (integrity modes)"
+    )
+    p.add_argument(
+        "--threads",
+        type=int,
+        default=1,
+        help="--replayGain: parallel scan threads passed to rsgain (-m); "
+        "default 1 (standard mode only; ignored with --target-lufs)",
+    )
+    p.add_argument(
+        "--skip-tagged",
+        action="store_true",
+        help="--replayGain: skip albums already fully tagged (track + album "
+        "gain on every file), as a unit",
     )
     p.add_argument(
         "--prefer",
@@ -591,7 +615,8 @@ def main(argv: list[str] | None = None) -> int:
             return run_verify_replaygain(
                 root,
                 output,
-                target_lufs=args.target_lufs,
+                # None (no --target-lufs) means the standard -18 reference.
+                target_lufs=-18.0 if args.target_lufs is None else args.target_lufs,
                 tolerance=args.tolerance,
                 verbose=args.verbose,
                 quiet=args.quiet,
@@ -638,7 +663,7 @@ def main(argv: list[str] | None = None) -> int:
 
         # The write modes operate on exactly one tree (like the companion
         # scripts they replace), not on an aggregated root list.
-        if args.clean or args.apestrip or args.lyrics:
+        if args.clean or args.apestrip or args.lyrics or args.replaygain:
             if len(root) != 1:
                 print(
                     "error: this write mode needs exactly one library root; "
@@ -663,6 +688,16 @@ def main(argv: list[str] | None = None) -> int:
                     dry_run=dry_run,
                     keep_metadata=args.keep_metadata,
                     repair_malformed=args.repair_malformed,
+                    quiet=args.quiet,
+                )
+            if args.replaygain:
+                return run_replaygain(
+                    root[0],
+                    dry_run=dry_run,
+                    skip_tagged=args.skip_tagged,
+                    # None (no --target-lufs) is the standard rsgain easy pass.
+                    target_lufs=args.target_lufs,
+                    threads=args.threads,
                     quiet=args.quiet,
                 )
             return run_lyrics(
