@@ -68,6 +68,7 @@ from lattice.modes.library import (
 from lattice.modes.lyrics import run_lyrics
 from lattice.modes.playlists import generate_playlist, run_check_playlists
 from lattice.modes.replaygain import run_replaygain
+from lattice.modes.retag import run_retag
 from lattice.modes.stats import run_stats
 from lattice.tui import interactive_menu
 
@@ -242,6 +243,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Scan and write ReplayGain 2.0 tags album-by-album via rsgain "
         "(write mode: dry-run by default, --apply to write; requires rsgain)",
     )
+    group.add_argument(
+        "--retag",
+        action="store_true",
+        help="Overwrite genre tags on one album directory: --retag DIR GENRE "
+        "[GENRE...] (write mode: dry-run by default, --apply to write; "
+        "--strip-junk strips junk ID3 frames instead and takes no genres)",
+    )
 
     p.add_argument(
         "--root",
@@ -253,6 +261,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "pos_root", nargs="?", default=None, help="Root directory (positional fallback)"
+    )
+    p.add_argument(
+        "retag_genres",
+        nargs="*",
+        default=[],
+        help="--retag: one or more genres to apply to the directory (take "
+        "care to quote multi-word genres; omitted with --strip-junk)",
     )
     p.add_argument("--output", default=None, help="Output path")
     p.add_argument(
@@ -380,6 +395,12 @@ def build_parser() -> argparse.ArgumentParser:
         "by excising the tag bytes directly (verified + atomic)",
     )
     p.add_argument(
+        "--strip-junk",
+        action="store_true",
+        help="--retag: strip junk ID3 frames (obsolete v2.3-era, empty text) "
+        "instead of rewriting genres; takes no genre arguments",
+    )
+    p.add_argument(
         "--lyrics-force",
         action="store_true",
         help="--lyrics: re-fetch and overwrite existing .lrc sidecars (default: "
@@ -421,12 +442,62 @@ def main(argv: list[str] | None = None) -> int:
     try:
         args = build_parser().parse_args(argv)
 
+        # The trailing positionals exist for --retag (DIR GENRE [GENRE...]);
+        # every other mode must not silently swallow them.
+        if args.retag_genres and not args.retag:
+            print(
+                "error: extra arguments are only valid with --retag "
+                "(--retag DIR GENRE [GENRE...])",
+                file=sys.stderr,
+            )
+            return 2
+
         # Resolve the path-extraction layout: an explicit --layout wins,
         # otherwise fall back to the configured/default layout. (The mode flags
         # are a single argparse mutually-exclusive group, so picking more than
         # one mode is already rejected at parse time.)
         if args.layout is None:
             args.layout = get_layout()
+
+        # --retag is the one dir-scoped write mode: its positional is a single
+        # album directory, not a root walk. It dispatches before the root
+        # resolution so a bare `--retag` can never fall into the config-root
+        # / first-run prompt path, and --root (let alone a repeated one) is a
+        # caller mistake rather than an input.
+        if args.retag:
+            if args.root:
+                print(
+                    "error: --retag takes one directory positional "
+                    "(--retag DIR GENRE [GENRE...]), not --root",
+                    file=sys.stderr,
+                )
+                return 2
+            if args.pos_root is None:
+                print(
+                    "error: --retag needs a directory: --retag DIR GENRE [GENRE...]",
+                    file=sys.stderr,
+                )
+                return 2
+            if args.strip_junk and args.retag_genres:
+                print(
+                    "error: --strip-junk takes no genre arguments",
+                    file=sys.stderr,
+                )
+                return 2
+            if not args.strip_junk and not args.retag_genres:
+                print(
+                    "error: --retag needs one or more genres (or --strip-junk)",
+                    file=sys.stderr,
+                )
+                return 2
+            return run_retag(
+                args.pos_root,
+                args.retag_genres,
+                dry_run=args.dry_run or not args.apply,
+                strip_junk=args.strip_junk,
+                log_path=os.path.join(args.pos_root, "retag.log"),
+                quiet=args.quiet,
+            )
 
         # Every named root (positional + each --root) is scanned together;
         # de-dupe so the same path passed twice isn't walked twice.

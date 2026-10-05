@@ -5,13 +5,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-# retag.py lives in scripts/ (outside the lattice package). It writes tags, so
-# it is exercised against copies of the committed fixture files. The .flac case
-# covers the shared Vorbis branch (.flac/.ogg/.opus); the .mp3 case locks in the
-# v4.6.0 "deadbeef trap" fix. (.m4a/MP4 has no fixture and is not covered here.)
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
+# The genre rewriter lives in the package (the 6.0.0 fold of scripts/retag.py,
+# now a launcher). It writes tags, so it is exercised against copies of the
+# committed fixture files. The .flac case covers the shared Vorbis branch
+# (.flac/.ogg/.opus); the .mp3 case locks in the v4.6.0 "deadbeef trap" fix.
+# (.m4a/MP4 has no fixture and is not covered here.)
+from lattice.modes import retag
 
-import retag
 from mutagen.apev2 import APENoHeaderError, APEv2
 from mutagen.id3 import ID3, TCON, TXXX, ID3NoHeaderError
 

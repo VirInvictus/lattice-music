@@ -4,10 +4,11 @@ import unittest
 from collections import namedtuple
 from pathlib import Path
 
-# genre_tidy.py lives in scripts/ (outside the lattice package); add it to the
-# path so its pure helpers can be imported and unit-tested. The lattice scan and
-# the retag.py subprocess are not exercised here (mirrors the integrity modes:
-# the shell-out is untested, its decision logic is).
+# genre_tidy.py still lives in scripts/ (it joins the package as --genreTidy
+# in this same 6.0.0 program); its pure helpers are imported by path. The
+# lattice scan is not exercised here (mirrors the integrity modes: the scan is
+# faked, the decision logic is what is tested); apply's retag calls go through
+# lattice.modes.retag in-process and are exercised on fixture copies.
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
 
 import genre_tidy as gt
@@ -76,26 +77,63 @@ class IsCompliantTests(unittest.TestCase):
         self.assertFalse(gt.is_compliant(None, self.allowed))
 
 
-class RetagArgvTests(unittest.TestCase):
-    def setUp(self):
-        self.retag = gt.Path("/x/scripts/retag.py")
+class DirectRetagCallTests(unittest.TestCase):
+    """A2 rewiring: apply no longer shells out to retag.py; it calls
+    lattice.modes.retag.retag_directory in-process. The old argv-builder pins
+    become call-shape pins: the canonical is passed verbatim as ONE genre
+    value, and the dry-run flag propagates (writes nothing)."""
 
-    def test_single_genre(self):
-        argv = gt.retag_argv(self.retag, "/m/A/Album", "Trap", dry_run=False)
-        self.assertEqual(argv[2:], ["/m/A/Album", "Trap"])
-        self.assertEqual(argv[0], sys.executable)
+    FIXTURES = Path(__file__).parent / "fixtures" / "library"
 
-    def test_slash_canonical_stays_one_genre_arg(self):
+    def _copied_flac(self, tmp: str) -> Path:
+        import shutil
+
+        p = Path(tmp) / "t.flac"
+        shutil.copy(
+            self.FIXTURES / "Aphex Twin" / "Selected Ambient Works" / "01 - Xtal.flac",
+            p,
+        )
+        return p
+
+    def test_slash_canonical_is_one_genre_value(self):
         # H5: splitting on "/" wrote a multi-value tag that never read back
         # equal to the map (FLAC first-value read; MP3 v2.3 slash-join without
         # spaces), so apply retagged the same albums forever. The canonical is
         # passed verbatim as ONE genre value.
-        argv = gt.retag_argv(self.retag, "/m/A/Album", "Emo / Orgcore", dry_run=False)
-        self.assertEqual(argv[3:], ["Emo / Orgcore"])
+        import tempfile
 
-    def test_dry_run_appended(self):
-        argv = gt.retag_argv(self.retag, "/m/A/Album", "Trap", dry_run=True)
-        self.assertEqual(argv[-1], "--dry-run")
+        from lattice.modes import retag as retag_mod
+
+        with tempfile.TemporaryDirectory() as tmp:
+            self._copied_flac(tmp)
+            updated, failed, _unchanged = retag_mod.retag_directory(
+                tmp,
+                ["Emo / Orgcore"],
+                dry_run=False,
+                log=lambda _msg: None,
+            )
+            self.assertEqual((updated, failed), (1, 0))
+            self.assertEqual(
+                retag_mod.read_genres(str(Path(tmp) / "t.flac")), ["Emo / Orgcore"]
+            )
+
+    def test_dry_run_propagates_and_writes_nothing(self):
+        import tempfile
+
+        from lattice.modes import retag as retag_mod
+
+        with tempfile.TemporaryDirectory() as tmp:
+            p = self._copied_flac(tmp)
+            lines: list[str] = []
+            updated, failed, _unchanged = retag_mod.retag_directory(
+                tmp,
+                ["Trap"],
+                dry_run=True,
+                log=lines.append,
+            )
+            self.assertEqual((updated, failed, _unchanged), (1, 0, 0))
+            self.assertEqual(retag_mod.read_genres(str(p)), ["Electronic"])
+            self.assertTrue(any("would retag" in line for line in lines))
 
 
 class ReduceArtistsTests(unittest.TestCase):
@@ -275,7 +313,7 @@ class SlashCanonicalConvergenceTests(unittest.TestCase):
         import shutil
         import tempfile
 
-        import retag
+        from lattice.modes import retag
 
         from lattice.tags import get_all_tags
 
@@ -362,7 +400,7 @@ class CmdApplyTests(unittest.TestCase):
         rc, out = self._apply([rec])
         self.assertEqual(rc, 0)
         self.assertIn("retagged 1 album(s)", out)
-        import retag
+        from lattice.modes import retag
 
         self.assertEqual(retag.read_genres(str(self.album / "01 - Xtal.flac")), ["IDM"])
 

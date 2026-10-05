@@ -60,6 +60,7 @@ from lattice.modes.library import (
 from lattice.modes.lyrics import run_lyrics
 from lattice.modes.playlists import generate_playlist, run_check_playlists
 from lattice.modes.replaygain import run_replaygain
+from lattice.modes.retag import run_retag
 from lattice.modes.stats import run_stats
 
 # TUI default output names, deliberately prefixed lattice_ so an interactive
@@ -140,6 +141,7 @@ _MAIN_SECTIONS = [
             "Strip APEv2 tags (apestrip)",
             "Fetch synced lyrics (lyrics)",
             "Write ReplayGain tags (replaygain)",
+            "Rewrite genre tags on one album (retag)",
         ],
     ),
     (
@@ -214,6 +216,7 @@ _MAIN_ALIASES: dict[str, tuple | None] = {
     "lyrics": (4, 2),
     "lrc": (4, 2),
     "rgwrite": (4, 3),
+    "retag": (4, 4),
     "settings": (5, 0),
     "config": (5, 0),
     "c": (5, 0),
@@ -835,6 +838,42 @@ def _menu_session() -> int:
                     skip_tagged=skip,
                     threads=threads,
                     assume_yes=True,
+                    quiet=False,
+                )
+
+            elif result == (4, 4):
+                # Write mode, dir-scoped: retag targets one album directory
+                # (the CLI takes it as a positional), so the configured root
+                # is only the default suggestion. Same ask_yn gate as the
+                # other write modes; the mode runs with quiet=False and no
+                # confirmation inside (its dry-run/apply decision was the
+                # gate's answer).
+                raw = ask("Album directory to retag", roots[0] if roots else "")
+                try:
+                    target = os.path.abspath(os.path.expanduser(raw.strip()))
+                except OSError:
+                    target = ""
+                if not raw.strip():
+                    continue
+                junk = ask_yn("Strip junk ID3 frames instead of genres? (y/N)")
+                genres: list[str] = []
+                if not junk:
+                    raw_genres = ask(
+                        "Genres (comma-separated, quoted words kept as one genre)", ""
+                    ).strip()
+                    genres = [g.strip() for g in raw_genres.split(",") if g.strip()]
+                    if not genres:
+                        notify("No genres given; nothing to do.")
+                        continue
+                apply = ask_yn("APPLY now? No = dry-run preview only (y/N)")
+                run_with_capture(
+                    "Rewrite genre tags on one album (retag)",
+                    run_retag,
+                    target,
+                    genres,
+                    dry_run=not apply,
+                    strip_junk=junk,
+                    log_path=os.path.join(target, "retag.log"),
                     quiet=False,
                 )
         except CancelledError:

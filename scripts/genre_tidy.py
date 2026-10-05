@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """genre_tidy.py — build an artist→genre authority and reconcile a library to it.
 
-A two-phase companion that pairs the lattice package (the read-only scanner) with retag.py
-(the per-album genre rewriter):
+A two-phase companion that pairs the lattice package (the read-only scanner)
+with the package's retag module (the per-album genre rewriter, folded in 6.0.0;
+apply calls it in-process):
 
     genre_tidy.py build <library>   # read-only: scan, write an editable TSV map
     genre_tidy.py apply <library>   # destructive: retag albums that disagree
@@ -15,14 +16,14 @@ line per artist, listing every genre that artist is allowed to carry:
 `build` seeds each line with every genre the artist currently uses (most-common
 first), so `apply` is a no-op until you edit. To tidy, REMOVE a stray genre from
 a line: `apply` re-scans, and for every album whose genre is no longer on its
-artist's line, calls retag.py to overwrite it to the first (canonical) genre.
-Reorder the line to change the fix target; leave only the artist (no genres) to
-skip that artist entirely. Multi-genre artists also get a `#` comment with the
-per-genre counts, so low-count strays worth trimming stand out.
+artist's line, calls the retag writer to overwrite it to the first (canonical)
+genre. Reorder the line to change the fix target; leave only the artist (no
+genres) to skip that artist entirely. Multi-genre artists also get a `#` comment
+with the per-genre counts, so low-count strays worth trimming stand out.
 
-Lives in scripts/ (outside the lattice package) because it mutates tags, which
-the package's read-only contract (spec.md §5) forbids. It reads through lattice
-and writes through retag.py; the package itself stays read-only.
+Lives in scripts/ for now (it joins the package as `lattice --genreTidy` in the
+6.0.0 program). It reads through lattice's scanner and writes through
+lattice.modes.retag; the script itself holds only the map policy.
 
 Usage:
     ./genre_tidy.py build /mnt/SharedData/Music
@@ -34,7 +35,6 @@ Usage:
 import argparse
 import os
 import re
-import subprocess
 import sys
 import unicodedata
 from collections import Counter
@@ -153,20 +153,6 @@ def is_compliant(album_genre: str | None, allowed_norm: frozenset[str]) -> bool:
     (except albums in formats retag cannot write, which apply skips with an
     UNSUPPORTED FORMAT note instead of retagging into a void)."""
     return norm(album_genre) in allowed_norm
-
-
-def retag_argv(
-    retag_path: Path, album_path: str, canonical: str, *, dry_run: bool
-) -> list[str]:
-    """Build the retag.py invocation. The canonical is passed verbatim as one
-    genre value: a slash canonical like "Emo / Orgcore" is one literal genre
-    string in every container, so what apply writes is exactly what the
-    compliance check reads back. (Splitting on "/" wrote a multi-value tag
-    that never read back equal to the map, retagging the album forever.)"""
-    argv = [sys.executable, str(retag_path), album_path, canonical]
-    if dry_run:
-        argv.append("--dry-run")
-    return argv
 
 
 def reduce_artists(album_dirs) -> dict[str, tuple[str, Counter]]:
@@ -349,16 +335,20 @@ def cmd_apply(args) -> int:
         )
         return 1
 
-    retag_path = Path(__file__).resolve().parent / "retag.py"
-    if not retag_path.exists():
-        print(ui.error(f"retag.py not found at {retag_path}"), file=sys.stderr)
-        return 1
-
-    # Sibling module import for the writable-format set: importing (rather
-    # than mirroring the extensions here) means the two can't drift.
-    import retag as _retag
-
-    writable_exts = set(_retag.AUDIO_EXTENSIONS)
+    # The write half is the package's retag module (the 6.0.0 fold): direct
+    # in-process calls, so retag.py's path never matters. Importing (rather
+    # than mirroring) the writable-format set means the two can't drift.
+    try:
+        from lattice.modes.retag import AUDIO_EXTENSIONS as writable_exts
+        from lattice.modes.retag import retag_directory
+    except ImportError as e:
+        print(
+            f"error: could not import lattice ({e}).\n"
+            "Install it (pip install -e . / pipx install .) or run with "
+            "PYTHONPATH=src.",
+            file=sys.stderr,
+        )
+        sys.exit(2)
 
     entries = parse_map(map_path.read_text(encoding="utf-8").splitlines())
     album_dirs = scan_album_dirs(directory, args.quiet, args.layout)
@@ -413,18 +403,28 @@ def cmd_apply(args) -> int:
                 continue
 
             log.write(f"  RETAG {rel}: {ad.genre or '(none)'!r} -> {entry.canonical}")
-            result = subprocess.run(
-                retag_argv(retag_path, ad.path, entry.canonical, dry_run=args.dry_run),
-                capture_output=True,
-                text=True,
+            # The canonical is passed verbatim as one genre value: a slash
+            # canonical like "Emo / Orgcore" is one literal genre string in
+            # every container, so what apply writes is exactly what the
+            # compliance check reads back. (Splitting on "/" wrote a
+            # multi-value tag that never read back equal to the map,
+            # retagging the album forever.)
+            lines: list[str] = []
+            album_errors: list[str] = []
+            retag_directory(
+                str(ad.path),
+                [entry.canonical],
+                dry_run=args.dry_run,
+                log=lines.append,
+                errors=album_errors,
             )
-            for line in result.stdout.splitlines():
+            for line in lines:
                 log.write(f"      {line}")
-            if result.returncode != 0:
-                # Counted as an error, not a retag: retag exits nonzero when
-                # any file failed to write (retag.py v1.1.1).
+            if album_errors:
+                # Counted as an error, not a retag: the genre verb exits
+                # nonzero when any file failed to write (retag v1.1.1).
                 stats["errors"] += 1
-                for line in result.stderr.splitlines():
+                for line in album_errors:
                     log.write(f"      ERR {line}")
             else:
                 stats["retagged"] += 1

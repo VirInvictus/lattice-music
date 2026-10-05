@@ -543,29 +543,24 @@ versions below; the per-phase version targets are historical.
   `lattice --clean --all --apply`, `lattice --replayGain --apply`; the
   `./scripts/apestrip.py -y` line deleted; SKILL.md rewritten to match.
 
-- [ ] **A2 (target v5.9.0): fold `retag.py` into `lattice.modes.retag`
+- [x] **A2 (target v5.9.0): fold `retag.py` into `lattice.modes.retag`
   as the `--retag` write mode; rewire `genre_tidy.py` in the same
-  release.** The dedup payoff: modes/clean.py's tag pass already saves
-  "matching retag.py" (ID3v2.3 + refreshed ID3v1 on MP3; the convention
-  lives at scripts/retag.py:108), so after the fold there is one
-  genre-write path - decide the direction (clean calls retag's
-  per-container writer, or retag is the writer and clean orchestrates)
-  and document it. `--strip-junk` gets a real home; its detection half
-  already lives in `lattice.modes.audit.audit_id3_junk`
-  (scripts/retag.py:199, :246 import it); keep exactly one classifier.
-  Preserve the unique value: hidden-genre clearing (stray APEv2 deleted,
-  `TXXX:GENRE`, stale ID3v1 byte), `is_noop` idempotence, the
-  convert-or-drop junk policy. CLI shape deviation, deliberate: first
-  dir-scoped mode, `lattice --retag DIR GENRE [GENRE...]` (single album
-  directory, not a root walk); positionals in the house flag group.
-  The rewiring: genre_tidy shells out to retag.py by path
-  (scripts/genre_tidy.py:352, :416-420) and imports it as a sibling
-  (:359); both become direct calls into lattice.modes.retag so the
-  script's path never matters again; genre_tidy.py itself stays a script
-  until A3; its exit-1-on-retag-failure contract is preserved. Tests:
-  25 retarget; test_genre_tidy.py's end-to-end convergence test
-  (:275-280) follows the call path.
-
+  release.** SHIPPED in the single v6.0.0 release: brain at
+  `modes/retag.py` (`run_retag(target_dir, genres, *, dry_run=True,
+  strip_junk, log_path, quiet)` + argparse-preserving `main`; is_noop,
+  hidden-genre clearing, and the convert-or-drop junk policy verbatim;
+  `--strip-junk` kept with audit_id3_junk as the one classifier). CLI
+  shape as planned: `--retag` in the house flag group with DIR GENRE...
+  positionals (a trailing `retag_genres` nargs="*" that other modes
+  refuse), `--root` refused, log default `<dir>/retag.log` while the
+  launcher keeps `--log` opt-in. **Direction decided: `lattice.modes.retag`
+  IS the one genre-write path** (`retag_directory` + `apply_genres(errors=)`
+  for in-process callers); genre_tidy calls it directly (subprocess, path
+  lookup, and sibling import all gone; exit-1-on-retag-failure kept);
+  clean's Pass 4 never wrote genre and shares only the MP3 save convention.
+  Tests: test_retag.py retargeted (25), test_genre_tidy.py follows the
+  call path (argv-builder pins became call-shape pins), nine dispatch
+  pins in test_write_modes.py.
 - [ ] **A3 (target v5.10.0): fold `genre_tidy.py` into
   `lattice.modes.genretidy` as the `--genreTidy` write mode.** Gated on
   A2. Design point one, resolve first: the script is the only

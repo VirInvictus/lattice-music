@@ -21,6 +21,7 @@ from lattice.modes import replaygain as rg_mode
 
 FIXTURES = Path(__file__).parent / "fixtures" / "library"
 MP3_SRC = FIXTURES / "Cursive" / "Domestica" / "01 - The Casualty.mp3"
+FLAC_SRC = FIXTURES / "Aphex Twin" / "Selected Ambient Works" / "01 - Xtal.flac"
 
 
 def _fragmented_tree(root: Path) -> None:
@@ -222,6 +223,81 @@ class ReplaygainDispatchTests(unittest.TestCase):
             self._main(["--replayGain", "--clean", str(self.root)])
 
 
+class RetagDispatchTests(unittest.TestCase):
+    """The `lattice --retag` write-mode wiring (the 6.0.0 fold of
+    scripts/retag.py): the package's first dir-scoped mode (DIR GENRE...
+    positionals, not a root walk), dry-run default, --apply opts in, and the
+    genre/--strip-junk argument discipline holds. The writer's brain is
+    covered by test_retag.py; the genre_tidy call path by test_genre_tidy.py."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.album = Path(self._tmp.name) / "Album"
+        self.album.mkdir()
+        shutil.copy(FLAC_SRC, self.album / "01.flac")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _main(self, argv):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            return cli.main(argv)
+
+    def _genre(self) -> str | None:
+        from mutagen.flac import FLAC
+
+        return FLAC(str(self.album / "01.flac")).get("genre")
+
+    def test_dry_run_is_the_default(self):
+        rc = self._main(["--retag", str(self.album), "Ambient"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(self._genre(), ["Electronic"])
+        log = (self.album / "retag.log").read_text(encoding="utf-8")
+        self.assertIn("[DRY]", log)
+        self.assertIn("would retag", log)
+
+    def test_apply_writes_genre_and_logs(self):
+        rc = self._main(["--retag", str(self.album), "Ambient", "--apply"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(self._genre(), ["Ambient"])
+        log = (self.album / "retag.log").read_text(encoding="utf-8")
+        self.assertIn("retagged", log)
+        self.assertNotIn("[DRY]", log)
+
+    def test_apply_is_idempotent(self):
+        self._main(["--retag", str(self.album), "Ambient", "--apply"])
+        rc = self._main(["--retag", str(self.album), "Ambient", "--apply"])
+        self.assertEqual(rc, 0)
+        log = (self.album / "retag.log").read_text(encoding="utf-8")
+        self.assertIn("unchanged", log)
+
+    def test_multiple_genres_are_one_write(self):
+        rc = self._main(["--retag", str(self.album), "Ambient", "IDM", "--apply"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(self._genre(), ["Ambient", "IDM"])
+
+    def test_genres_are_required(self):
+        rc = self._main(["--retag", str(self.album)])
+        self.assertEqual(rc, 2)
+
+    def test_strip_junk_takes_no_genres(self):
+        rc = self._main(["--retag", str(self.album), "--strip-junk", "Ambient"])
+        self.assertEqual(rc, 2)
+
+    def test_root_flag_is_refused(self):
+        rc = self._main(["--retag", "--root", str(self.album), "Ambient"])
+        self.assertEqual(rc, 2)
+
+    def test_extra_positionals_without_the_mode_are_refused(self):
+        rc = self._main(["--stats", str(self.album), "Ambient"])
+        self.assertEqual(rc, 2)
+
+    def test_mode_flags_are_mutually_exclusive(self):
+        with self.assertRaises(SystemExit):
+            self._main(["--retag", "--clean", str(self.album), "Ambient"])
+
+
 class TuiWriteModeTests(unittest.TestCase):
     def test_maintenance_section_holds_the_write_modes(self):
         sections = {name: items for name, items in tui._MAIN_SECTIONS if name}
@@ -232,6 +308,7 @@ class TuiWriteModeTests(unittest.TestCase):
                 "Strip APEv2 tags (apestrip)",
                 "Fetch synced lyrics (lyrics)",
                 "Write ReplayGain tags (replaygain)",
+                "Rewrite genre tags on one album (retag)",
             ],
         )
 
@@ -241,6 +318,7 @@ class TuiWriteModeTests(unittest.TestCase):
         self.assertEqual(tui._MAIN_ALIASES["lyrics"], (4, 2))
         self.assertEqual(tui._MAIN_ALIASES["lrc"], (4, 2))
         self.assertEqual(tui._MAIN_ALIASES["rgwrite"], (4, 3))
+        self.assertEqual(tui._MAIN_ALIASES["retag"], (4, 4))
         self.assertEqual(tui._SEL_CHANGE_ROOT, (5, 0))
         self.assertEqual(tui._SEL_QUIT, (6, 0))
 
