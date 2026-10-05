@@ -58,6 +58,7 @@ from lattice.modes.library import (
     write_snapshot,
 )
 from lattice.modes.lyrics import run_lyrics
+from lattice.modes.foldermap import run_genremap
 from lattice.modes.genretidy import run_genre_tidy_apply, run_genre_tidy_build
 from lattice.modes.playlists import generate_playlist, run_check_playlists
 from lattice.modes.replaygain import run_replaygain
@@ -145,6 +146,7 @@ _MAIN_SECTIONS = [
             "Rewrite genre tags on one album (retag)",
             "Build genre authority map (genreTidy build)",
             "Apply genre authority map (genreTidy apply)",
+            "Reorganize into Genre/Artist/Album (genreMap)",
         ],
     ),
     (
@@ -223,6 +225,8 @@ _MAIN_ALIASES: dict[str, tuple | None] = {
     "tidybuild": (4, 5),
     "tidy": (4, 6),
     "tidyapply": (4, 6),
+    "foldermap": (4, 7),
+    "genremap": (4, 7),
     "settings": (5, 0),
     "config": (5, 0),
     "c": (5, 0),
@@ -921,6 +925,32 @@ def _menu_session() -> int:
                     dry_run=not apply,
                     map_path=os.path.expanduser(map_path) if map_path else None,
                     layout=layout,
+                    quiet=False,
+                )
+
+            elif result == (4, 7):
+                # Write mode (it moves folders): the ask_yn confirm decides
+                # dry-run vs apply, exactly like the script's --apply gate.
+                if len(roots) != 1:
+                    notify(
+                        "The genreMap mode needs exactly one library root; "
+                        f"{len(roots)} are configured (library_roots)."
+                    )
+                    continue
+                staging = ask("Staging inbox name (blank disables)", "Unfiltered")
+                new_genre = ask_yn("Allow creating new top-level genre folders? (y/N)")
+                refile = ask_yn(
+                    "Re-file organized albums whose tags disagree with their folder? (y/N)"
+                )
+                apply = ask_yn("APPLY the moves now? No = dry-run preview only (y/N)")
+                run_with_capture(
+                    "Reorganize into Genre/Artist/Album (genreMap)",
+                    run_genremap,
+                    roots[0],
+                    apply=apply,
+                    staging=staging.strip() or None,
+                    allow_new_genre=new_genre,
+                    refile_mismatched=refile,
                     quiet=False,
                 )
         except CancelledError:

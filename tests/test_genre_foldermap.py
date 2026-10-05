@@ -1,20 +1,17 @@
 import contextlib
 import io
-import os
 import re
-import sys
 import tempfile
 import unittest
 from collections import namedtuple
 from pathlib import Path
 
-# genre_foldermap.py lives in scripts/ (outside the lattice package); add it to
-# the path so its pure helpers can be imported and unit-tested. The lattice scan
-# (scan_album_dirs) is not exercised here — its records are faked — mirroring
-# test_genre_tidy.py, which tests decision logic without the shell-out/scan.
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "scripts"))
-
-import genre_foldermap as gf
+# The folder restructurer lives in the package (the 6.0.0 fold of
+# scripts/genre_foldermap.py, now a launcher); the gf alias keeps the historic
+# name. The lattice scan (scan_album_dirs) is not exercised here — its records
+# are faked — mirroring test_genre_tidy.py, which tests decision logic without
+# the scan.
+from lattice.modes import foldermap as gf
 
 # The scanner yields rows with .path and .genre; only those two fields are read.
 FakeAD = namedtuple("FakeAD", "path genre")
@@ -831,7 +828,7 @@ class CrossDeviceTests(unittest.TestCase):
             self.assertEqual(runner.stats["cross_device_refused"], 1)
             self.assertEqual(runner.stats["moved_dir"], 0)
             self.assertEqual(runner.removed, set())
-            self.assertEqual(runner.created, set())
+            self.assertEqual(runner.created, {})
 
 
 class MultiGenreTagTests(unittest.TestCase):

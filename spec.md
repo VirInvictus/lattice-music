@@ -135,6 +135,7 @@ supplies default roots; the first-run prompt persists only the single
 | Genre rewrite | `--retag DIR GENRE [GENRE...]` | Hard-overwrite the genre tag(s) on one album directory (the package's one genre-write path; MP3 writes clear APEv2/TXXX:GENRE/ID3v1 as they save ID3v2.3 + refreshed v1), or strip junk ID3 frames with `--strip-junk` (detection shared with `--auditJunkFrames`); dir-scoped (single positional, no root walk); write mode, dry-run by default |
 | Genre authority build | `--genreTidy-build` | Scan (read-only through the shared scanner) and write the editable artist-to-genre authority TSV map (`--map`; default `<root>/genre_map.tsv`); re-runs preserve edits and append only new artists; compilations are flagged EXCLUDED, never enforced |
 | Genre authority apply | `--genreTidy-apply` | Retag every album whose genre is not on its artist's map line to the line's first (canonical) genre, through the package's one genre-write path; write mode, dry-run by default, log `<root>/genre_tidy.log` |
+| Genre folder map | `--genreMap` | Restructure a flat Artist/Album library into Genre/Artist/Album, moving each album folder under its dominant genre tag (depth-aware classify, live genre-vocabulary gate, `Unfiltered/` staging-inbox semantics, `--only-genre` staged rollout, `--refile-mismatched`, `--allow-new-genre`); mv-only on one filesystem, destinations never overwritten, emptied sources pruned; the package's one folder-moving mode: dry-run by default, `--apply` performs, every move appended to a manifest TSV that `--revert` replays in reverse |
 
 ---
 
@@ -175,14 +176,19 @@ remainder, still producing the full report. A completed scan deletes the state.
 - **Not a player.** It reads tags; it does not play audio.
 - **Not a tagger.** It reads metadata; it writes metadata only via the explicit
   write modes `--clean`, `--apestrip`, `--replayGain`, `--retag`, and
-  `--genreTidy-apply` (opt-in via `--apply`, logged, dry-run by default; `--replayGain` shells out to `rsgain`
-  and requires it on PATH for a real run; `--retag` is dir-scoped to a single
-  album directory). Every other mode writes no tags and no audio: its
-  only outputs are the reports and playlists it writes outside the library,
-  cover art extracted by `--extractArt`, the `.lrc` sidecar files `--lyrics`
-  writes beside audio files when applied (audio files themselves are never
-  touched by it), and the transient `--resume` state file beside an integrity
-  report.
+  `--genreTidy-apply` (opt-in via `--apply`, logged, dry-run by default;
+  `--replayGain` shells out to `rsgain` and requires it on PATH for a real run;
+  `--retag` is dir-scoped to a single album directory). It reorganizes the tree
+  only via the explicit `--genreMap` mode, which moves album folders under
+  their dominant genre with `mv`-only semantics on one filesystem (a move is a
+  rename, so tags and audio bytes are never read or rewritten by it), dry-run
+  by default with `--apply` to perform, every move appended to a manifest TSV
+  that `--revert` replays in reverse. Every other mode writes no tags and no
+  audio: its only outputs are the reports and playlists it writes outside the
+  library, cover art extracted by `--extractArt`, the `.lrc` sidecar files
+  `--lyrics` writes beside audio files when applied (audio files themselves are
+  never touched by it), and the transient `--resume` state file beside an
+  integrity report.
 - **Not a database.** It walks the filesystem every time; there is no index.
 - **Not a sync tool.** It does not interact with cloud services or devices. The
   single exception is `--lyrics`' read-only lookup against the open LRCLIB API:
@@ -191,14 +197,14 @@ remainder, still producing the full report. A completed scan deletes the state.
 
 ## 6. Companion Scripts
 
-Four destructive operations remain standalone Python scripts in the `scripts/`
+Three destructive operations remain standalone Python scripts in the `scripts/`
 directory (they are not installed by `pip` or `pipx`, and are run directly).
-`cleaner.py`, `apestrip.py`, `replaygain.py`, `retag.py`, and `genre_tidy.py`
-were promoted into the package as write modes (5.0.0 and 6.0.0); the scripts by
-those names survive as thin launchers over the package implementation,
-preserving the apply-by-default CLI they always had.
+`cleaner.py`, `apestrip.py`, `replaygain.py`, `retag.py`, `genre_tidy.py`, and
+`genre_foldermap.py` were promoted into the package as write modes (5.0.0 and
+6.0.0); the scripts by those names survive as thin launchers over the package
+implementation, preserving their historical CLIs.
 
 Notable scripts include:
 - `slipcover.py`: Embeds existing folder cover art (`cover.jpg`, etc.) into audio files lacking embedded art, maintaining parity between the filesystem and embedded metadata.
 - `flac2opus.py`: Converts FLAC files to Opus 128kbps, guaranteeing tag and duration parity before cleanly deleting the original FLAC.
-- `rerate.py`, `genre_foldermap.py`: Various other destructive and state-mutating utilities documented in `CLAUDE.md` and `README.md`. (`cleaner.py`, `apestrip.py`, `replaygain.py`, `retag.py`, and `genre_tidy.py` are now launchers over the package's write modes.)
+- `rerate.py`: the MP3 POPM rating reconciler documented in `CLAUDE.md` and `README.md`. (`cleaner.py`, `apestrip.py`, `replaygain.py`, `retag.py`, `genre_tidy.py`, and `genre_foldermap.py` are now launchers over the package's write modes.)

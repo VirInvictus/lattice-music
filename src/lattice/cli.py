@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+from pathlib import Path
 
 from lattice.config import (
     DEFAULT_AI_LIBRARY_OUTPUT,
@@ -67,6 +68,7 @@ from lattice.modes.library import (
 )
 from lattice.modes.lyrics import run_lyrics
 from lattice.modes.genretidy import run_genre_tidy_apply, run_genre_tidy_build
+from lattice.modes.foldermap import revert as revert_genremap, run_genremap
 from lattice.modes.playlists import generate_playlist, run_check_playlists
 from lattice.modes.replaygain import run_replaygain
 from lattice.modes.retag import run_retag
@@ -265,6 +267,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Retag albums whose genre disagrees with the authority map "
         "(write mode: dry-run by default, --apply to write)",
     )
+    group.add_argument(
+        "--genreMap",
+        dest="genre_map",
+        action="store_true",
+        help="Restructure a flat Artist/Album library into Genre/Artist/Album "
+        "(write mode: dry-run by default, --apply to move; --revert replays "
+        "the manifest TSV in reverse)",
+    )
 
     p.add_argument(
         "--root",
@@ -423,6 +433,41 @@ def build_parser() -> argparse.ArgumentParser:
         help="--genreTidy-build / --genreTidy-apply: authority-map path "
         "(default: <root>/genre_map.tsv; the repo ships a maintained map as "
         "artist_genre_defaults.tsv)",
+    )
+    p.add_argument(
+        "--revert",
+        metavar="MANIFEST",
+        default=None,
+        help="--genreMap: replay a run's manifest TSV in reverse (dry-run by "
+        "default; add --apply to execute the restore)",
+    )
+    p.add_argument(
+        "--only-genre",
+        action="append",
+        metavar="GENRE",
+        help="--genreMap: restrict the plan to this genre (repeatable), for a "
+        "staged rollout",
+    )
+    p.add_argument(
+        "--staging",
+        default=None,
+        metavar="DIR",
+        help="--genreMap: name of a top-level staging inbox whose Artist/Album "
+        "contents are filed into the real taxonomy instead of read as a genre "
+        "(default: 'Unfiltered'; pass an empty string to disable)",
+    )
+    p.add_argument(
+        "--refile-mismatched",
+        action="store_true",
+        help="--genreMap: move an already-organized album whose tag genre "
+        "disagrees with its genre folder to the tag's folder (still gated by "
+        "the existing genre vocabulary)",
+    )
+    p.add_argument(
+        "--allow-new-genre",
+        action="store_true",
+        help="--genreMap: permit creating a new top-level genre folder when an "
+        "album's genre isn't one the library already uses",
     )
     p.add_argument(
         "--lyrics-force",
@@ -760,6 +805,14 @@ def main(argv: list[str] | None = None) -> int:
         # scripts they replace), not on an aggregated root list. The
         # genreTidy pair joins the guard: build writes the map beside the
         # root and apply retags under it, so both are one-root modes.
+        # --genreMap's --revert path is exempt: it reads a manifest, not a
+        # tree, and the script shape never took a directory for it.
+        if args.genre_map and args.revert:
+            return revert_genremap(
+                Path(args.revert).resolve(),
+                dry_run=args.dry_run or not args.apply,
+                quiet=args.quiet,
+            )
         if (
             args.clean
             or args.apestrip
@@ -767,6 +820,7 @@ def main(argv: list[str] | None = None) -> int:
             or args.replaygain
             or args.genre_tidy_build
             or args.genre_tidy_apply
+            or args.genre_map
         ):
             if len(root) != 1:
                 print(
@@ -817,6 +871,18 @@ def main(argv: list[str] | None = None) -> int:
                     dry_run=dry_run,
                     map_path=args.map_path,
                     layout=args.layout,
+                    quiet=args.quiet,
+                )
+            if args.genre_map:
+                return run_genremap(
+                    root[0],
+                    apply=args.apply and not args.dry_run,
+                    only_genres=args.only_genre,
+                    # None here means the default 'Unfiltered' inbox; an
+                    # explicit empty string disables staging.
+                    staging="Unfiltered" if args.staging is None else args.staging,
+                    refile_mismatched=args.refile_mismatched,
+                    allow_new_genre=args.allow_new_genre,
                     quiet=args.quiet,
                 )
             return run_lyrics(

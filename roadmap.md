@@ -578,33 +578,26 @@ versions below; the per-phase version targets are historical.
   in-process retag_directory with exit-1-on-error. Tests: 42 (sys.path
   hack gone; argv pins already became call-shape pins in A2) + 7 dispatch
   pins in test_write_modes.py.
-- [ ] **A4 (target v6.0.0, major): fold `genre_foldermap.py` into
+- [x] **A4 (target v6.0.0, major): fold `genre_foldermap.py` into
   `lattice.modes.foldermap` as the `--genreMap` write mode; land the
-  spec §5 amendment sanctioning folder moves.** The package's first
-  file-moving mode, owner-approved 2026-10-05. Amendment text: §5's
-  write-mode sentence gains folder reorganization via the explicit
-  --genreMap mode (mv-only on one filesystem, dry-run default, manifest
-  TSV + `--revert`); "no tags and no audio" holds for everything else;
-  §1, the §3 row, §6, README, and CLAUDE.md ride it; major bump per the
-  5.0.0 precedent (the spec change is the major). Mechanics:
-  classify / build_plan / Runner / execute / manifest / revert
-  (scripts/genre_foldermap.py:479-592 is the Runner) as
-  `run_genremap(...)`; this script already runs dry-run by default with
-  `--apply` (:10-13, :734), the only one needing no inversion; the
-  v1.2.0 depth-aware classify, the live genre-vocabulary gate, and the
-  v1.3.0 `--staging` (Unfiltered) inbox semantics are contract.
-  `--allow-new-genre` survives (92 of 92 recorded runs pass it); whether
-  the package default flips is a design point for the implementing agent
-  (conservative default stays off; the launcher keeps today's behavior).
-  **The real work is the Runner unification:** genre_foldermap's Runner
-  and modes/clean.py:98's `Run` are two implementations of the same
-  dry-run virtual filesystem (virtual removed/created sets,
-  existence-aware collision checks) that grew the same fixes from the
-  same audits (the dry-vs-apply parity harness box in the 2026-08 wave
-  names both as the recurring divergence pair). Extract one shared
-  virtual-FS core that both modes import; do not copy a second Run; the
-  parity harness must cover both afterwards. Tests: 71 retarget (the
-  largest script suite).
+  spec §5 amendment sanctioning folder moves.** SHIPPED in the single
+  v6.0.0 release; the §5 amendment (mv-only on one filesystem, dry-run
+  default, manifest TSV + `--revert` via `lattice --genreMap --revert
+  MANIFEST --apply`) is the major, per the 5.0.0 precedent. Mechanics as
+  planned (classify / build_plan / Runner / execute / manifest / revert as
+  `run_genremap(...)`); no default inversion (the script was always
+  dry-run-by-default with --apply); depth-aware classify, vocabulary gate,
+  and --staging inbox semantics verbatim. **--allow-new-genre design point,
+  resolved conservatively: stays off in the package** (the launcher keeps
+  today's behavior; 92/92 recorded runs pass it explicitly; pinned by a
+  dispatch test). **Runner unification: done.** The shared core is
+  `lattice/vfs.py` (`VirtualFS`: removed/created with byte-origin tracking,
+  existence-aware views, guarded move/unlink/rmdir/rename); clean's Run and
+  foldermap's Runner both compose it (delegation shims keep their
+  historical method names for the parity tests); no second Run exists, and
+  the parity harness covers the folder-moving mode (dry-vs-apply stats
+  equality + manifest round-trip + revert). Tests: 71 retargeted wholesale
+  + 5 dispatch pins. Suite 694 -> 699.
 
 ### B. The capability phases (ordered; A4 gates B4)
 

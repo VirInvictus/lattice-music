@@ -35,17 +35,15 @@ of a folder that only virtually moved are not modeled recursively, so a
 pathological chain of merges-into-merged-folders may still preview
 imperfectly; every normal fragment/rename shape is exact.
 
-This is one of the package's two write modes (the other is
-lattice.modes.apestrip). The entry points differ deliberately: `run_clean`
-(the `lattice --clean` mode) dry-runs by default and applies only on an
-explicit opt-in, while `main` keeps the companion script's historical
-apply-by-default contract for `scripts/cleaner.py`. Every write is recorded
-in an append-only timestamped log (default <root>/cleanup.log).
+This is one of the package's write modes. The entry points differ
+deliberately: `run_clean` (the `lattice --clean` mode) dry-runs by default and
+applies only on an explicit opt-in, while `main` keeps the companion script's
+historical apply-by-default contract for `scripts/cleaner.py`. Every write is
+recorded in an append-only timestamped log (default <root>/cleanup.log).
 """
 
 import argparse
 import os
-import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -66,6 +64,7 @@ from lattice.norm import (
     tag_dedupe,
     tag_fold,
 )
+from lattice.vfs import VirtualFS
 
 # Containers whose title/album/artist/albumartist the tag pass can rewrite. Other
 # AUDIO_EXT members (.wav/.aac/.alac/.ape/.wv/.aiff) carry no handled tag layout
@@ -111,13 +110,11 @@ class Run:
         # derived from the layout. Only folders at this depth seed the tag pass.
         self.artist_depth = artist_depth
         self.log_file = log_path.open("a", encoding="utf-8")
-        # Paths (virtually) removed/created this run; lets dry-run existence
-        # and emptiness checks predict the real outcome instead of seeing the
-        # unchanged filesystem. `created` maps each virtual destination to the
-        # real on-disk path currently holding its bytes, so size/kind checks
-        # against a not-yet-moved file still read real data.
-        self.removed: set[Path] = set()
-        self.created: dict[Path, Path] = {}
+        # The dry-run virtual filesystem (shared with the foldermap mode's
+        # Runner via lattice.vfs): paths (virtually) removed/created this run
+        # let dry-run existence and emptiness checks predict the real outcome
+        # instead of seeing the unchanged filesystem.
+        self.vfs = VirtualFS(dry_run)
         # (canonical_artist_name, [folders to walk]) seeded by merges/renames;
         # consumed by the Pass-4 tag pass. Folders are filtered for existence at
         # walk time, so dry-run (sources still present) and apply (sources gone,
@@ -138,6 +135,50 @@ class Run:
             "tag_unsupported_skipped": 0,
             "tag_no_id3_skipped": 0,
         }
+
+    # The virtual state and the guarded ops live on the shared VirtualFS; the
+    # underscore names below are kept as one-line delegations because the rest
+    # of this module (and the parity tests) call them by these names.
+    @property
+    def removed(self) -> set[Path]:
+        return self.vfs.removed
+
+    @property
+    def created(self) -> dict[Path, Path]:
+        return self.vfs.created
+
+    def _effective_children(self, p: Path) -> list[Path]:
+        return self.vfs.effective_children(p)
+
+    def _real(self, p: Path) -> Path:
+        return self.vfs.real(p)
+
+    def _exists(self, p: Path) -> bool:
+        return self.vfs.exists(p)
+
+    def _is_file(self, p: Path) -> bool:
+        return self.vfs.is_file(p)
+
+    def _is_dir(self, p: Path) -> bool:
+        return self.vfs.is_dir(p)
+
+    def _size(self, p: Path) -> int:
+        return self.vfs.size(p)
+
+    def _move(self, src: Path, dst: Path) -> None:
+        self.vfs.move(src, dst)
+
+    def _unlink(self, p: Path) -> None:
+        self.vfs.unlink(p)
+
+    def _rmdir(self, p: Path) -> bool:
+        return self.vfs.rmdir(p)
+
+    def _rename(self, src: Path, dst: Path) -> None:
+        self.vfs.rename(src, dst)
+
+    def _survives(self, p: Path) -> bool:
+        return self.vfs.survives(p)
 
     def _is_artist_level(self, p: Path) -> bool:
         try:
@@ -172,93 +213,6 @@ class Run:
 
     def close(self) -> None:
         self.log_file.close()
-
-    # ------- filesystem ops with dry-run guards -------
-
-    def _effective_children(self, p: Path) -> list[Path]:
-        """Children of p adjusted for this run's virtual removals/creations,
-        so a dry-run predicts whether p would really be empty."""
-        try:
-            kids = [c for c in p.iterdir() if c not in self.removed]
-        except OSError:
-            return []
-        kids += [c for c in self.created if c.parent == p and c not in kids]
-        return kids
-
-    # Virtual-aware filesystem views: identical to the plain calls during an
-    # apply run (removed/created stay empty), but a dry-run sees the state the
-    # apply run would have produced so far, which keeps collision and rename
-    # decisions (and therefore the stats) identical between the two.
-
-    def _real(self, p: Path) -> Path:
-        """The on-disk path currently holding p's bytes (p itself unless p is
-        a virtual destination of this dry-run)."""
-        return self.created.get(p, p)
-
-    def _exists(self, p: Path) -> bool:
-        return p in self.created or (p.exists() and p not in self.removed)
-
-    def _is_file(self, p: Path) -> bool:
-        real = self.created.get(p)
-        if real is not None:
-            return real.is_file()
-        return p.is_file() and p not in self.removed
-
-    def _is_dir(self, p: Path) -> bool:
-        real = self.created.get(p)
-        if real is not None:
-            return real.is_dir()
-        return p.is_dir() and p not in self.removed
-
-    def _size(self, p: Path) -> int:
-        return self._real(p).stat().st_size
-
-    def _move(self, src: Path, dst: Path) -> None:
-        if self.dry_run:
-            origin = self.created.pop(src, src)
-            self.removed.add(src)
-            self.created[dst] = origin
-            return
-        shutil.move(str(src), str(dst))
-
-    def _unlink(self, p: Path) -> None:
-        if self.dry_run:
-            self.removed.add(p)
-            self.created.pop(p, None)
-            return
-        p.unlink()
-
-    def _rmdir(self, p: Path) -> bool:
-        if self.dry_run:
-            if self._effective_children(p):
-                return False
-            self.removed.add(p)
-            return True
-        try:
-            p.rmdir()
-            return True
-        except OSError:
-            return False
-
-    def _rename(self, src: Path, dst: Path) -> None:
-        if self.dry_run:
-            origin = self.created.pop(src, src)
-            self.removed.add(src)
-            self.created[dst] = origin
-            return
-        src.rename(dst)
-
-    def _survives(self, p: Path) -> bool:
-        """Dry-run: does p's content still exist somewhere after the virtual
-        ops so far? True for untouched paths and for rename/move origins (the
-        bytes live on under a new name, so later passes must still preview
-        them, at their current on-disk path); False for merged-away or
-        unlinked paths. Always True during an apply run (both sets empty)."""
-        lineage = (p, *p.parents)
-        if not any(q in self.removed for q in lineage):
-            return True
-        alive = set(self.created.values())
-        return any(q in alive for q in lineage)
 
 
 def find_groups(directory: Path, run: Run) -> list[list[Path]]:

@@ -389,6 +389,165 @@ class GenreTidyDispatchTests(unittest.TestCase):
             self._main(["--genreTidy-apply", "--clean", str(self.root)])
 
 
+class GenreMapDispatchTests(unittest.TestCase):
+    """The `lattice --genreMap` write-mode wiring (the 6.0.0 fold of
+    scripts/genre_foldermap.py, the package's first file-moving mode): dry-run
+    is the default (no inversion; the script always was), --apply moves and
+    writes the manifest, --revert replays it, and the dry-run-vs-apply parity
+    harness covers the folder-moving mode. The brain is covered by
+    test_genre_foldermap.py."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name) / "Music"
+        album = self.root / "Aphex Twin" / "Selected Ambient Works"
+        album.mkdir(parents=True)
+        shutil.copy(FLAC_SRC, album / "01 - Xtal.flac")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _main(self, argv):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = cli.main(argv)
+        return rc, buf.getvalue()
+
+    def _tree_hash(self):
+        # The revert manifest (genre_foldermap.revert.tsv) is written beside
+        # the forward manifest inside the root; both are records, not tree.
+        import hashlib
+
+        h = hashlib.sha256()
+        for p in sorted(self.root.rglob("*")):
+            if p.suffix == ".tsv":
+                continue
+            h.update(str(p.relative_to(self.root)).encode())
+            if p.is_file():
+                h.update(p.read_bytes())
+        return h.hexdigest()
+
+    def test_dry_run_is_the_default(self):
+        before = self._tree_hash()
+        rc, out = self._main(["--genreMap", str(self.root)])
+        self.assertEqual(rc, 0)
+        self.assertIn("moved_dir=1", out)  # a flat stray plans one album move
+        self.assertIn("Dry run", out)
+        self.assertEqual(self._tree_hash(), before)
+
+    def test_dry_run_and_apply_parity(self):
+        # The parity harness over the folder-moving mode: two identical trees,
+        # one planned dry, one applied; the stats must agree (same move set,
+        # same prunes), and the dry tree must be untouched while the applied
+        # tree lands in Genre/Artist/Album.
+        from mutagen.flac import FLAC
+
+        def staged_tree(base: Path) -> Path:
+            base.mkdir(parents=True)
+            album = base / "Aphex Twin" / "Selected Ambient Works"
+            album.mkdir(parents=True)
+            shutil.copy(FLAC_SRC, album / "01 - Xtal.flac")
+            return base
+
+        genre = FLAC(str(FLAC_SRC)).get("genre")[0]
+        self.assertTrue(genre)
+
+        dry_root = staged_tree(Path(self._tmp.name) / "dry")
+        apply_root = staged_tree(Path(self._tmp.name) / "apply")
+
+        rc1, out1 = self._main(["--genreMap", str(dry_root)])
+        self.assertEqual(rc1, 0)
+        rc2, out2 = self._main(["--genreMap", str(apply_root), "--apply"])
+        self.assertEqual(rc2, 0)
+
+        dry_stats = out1.split("Would reorganize")[1].split("\n")[0]
+        apply_stats = out2.split("Done: reorganize")[1].split("\n")[0]
+        self.assertEqual(dry_stats, apply_stats)
+
+        # The dry run left the tree untouched; the apply run reorganized.
+        self.assertTrue(
+            (
+                dry_root / "Aphex Twin" / "Selected Ambient Works" / "01 - Xtal.flac"
+            ).exists()
+        )
+        self.assertTrue(
+            (
+                apply_root
+                / genre
+                / "Aphex Twin"
+                / "Selected Ambient Works"
+                / "01 - Xtal.flac"
+            ).exists()
+        )
+        self.assertFalse((dry_root / genre).exists())
+        manifest = apply_root / "genre_foldermap.manifest.tsv"
+        self.assertTrue(manifest.exists())
+        manifest_text = manifest.read_text(encoding="utf-8")
+        self.assertIn("src<TAB>dst<TAB>time", manifest_text)
+        # One real move row: src<TAB>dst<TAB>timestamp.
+        rows = [
+            ln
+            for ln in manifest_text.splitlines()
+            if "\t" in ln and not ln.startswith("#")
+        ]
+        self.assertEqual(len(rows), 1)
+        self.assertIn("Selected Ambient Works", rows[0])
+
+    def test_apply_moves_and_revert_restores(self):
+        before = self._tree_hash()
+        rc, _out = self._main(["--genreMap", str(self.root), "--apply"])
+        self.assertEqual(rc, 0)
+        moved = sorted(str(p.relative_to(self.root)) for p in self.root.rglob("*"))
+        self.assertTrue(any(p.startswith("Electronic/") for p in moved), moved)
+        manifest = self.root / "genre_foldermap.manifest.tsv"
+        rc, _out = self._main(["--genreMap", "--revert", str(manifest), "--apply"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(self._tree_hash(), before)
+
+    def test_allow_new_genre_default_stays_off(self):
+        # The vocabulary gate: with one organized album, a second stray whose
+        # genre is NOT already in use is flagged, not given a new top-level
+        # folder, unless --allow-new-genre is passed (the launcher's
+        # most-typed flag stays opt-in in the package too).
+        from mutagen.flac import FLAC
+
+        stray = self.root / "Other Artist" / "Other Album"
+        stray.mkdir(parents=True)
+        shutil.copy(FLAC_SRC, stray / "01.flac")
+        f = FLAC(str(stray / "01.flac"))
+        f["genre"] = ["Polka"]
+        f.save()
+        # Organize only the Electronic album so the vocabulary exists while
+        # the Polka stray stays flat (--only-genre is the staged rollout).
+        rc, _out = self._main(
+            ["--genreMap", str(self.root), "--only-genre", "Electronic", "--apply"]
+        )
+        self.assertEqual(rc, 0)
+        self.assertTrue(stray.exists())
+        self.assertTrue(
+            (
+                self.root / "Electronic" / "Aphex Twin" / "Selected Ambient Works"
+            ).exists()
+        )
+        # The vocabulary gate: Polka is not an existing library genre, so the
+        # dry-run flags it instead of planning a new top-level folder.
+        rc, out = self._main(["--genreMap", str(self.root)])
+        self.assertEqual(rc, 0)
+        self.assertIn("UNKNOWN GENRE", out)
+        self.assertFalse((self.root / "Polka").exists())
+        # --allow-new-genre lifts the gate (the launcher's most-typed flag
+        # stays opt-in in the package).
+        rc, _out = self._main(
+            ["--genreMap", str(self.root), "--allow-new-genre", "--apply"]
+        )
+        self.assertEqual(rc, 0)
+        self.assertTrue((self.root / "Polka" / "Other Artist" / "Other Album").exists())
+
+    def test_mode_flags_are_mutually_exclusive(self):
+        with self.assertRaises(SystemExit):
+            self._main(["--genreMap", "--clean", str(self.root)])
+
+
 class TuiWriteModeTests(unittest.TestCase):
     def test_maintenance_section_holds_the_write_modes(self):
         sections = {name: items for name, items in tui._MAIN_SECTIONS if name}
@@ -402,6 +561,7 @@ class TuiWriteModeTests(unittest.TestCase):
                 "Rewrite genre tags on one album (retag)",
                 "Build genre authority map (genreTidy build)",
                 "Apply genre authority map (genreTidy apply)",
+                "Reorganize into Genre/Artist/Album (genreMap)",
             ],
         )
 
@@ -415,6 +575,8 @@ class TuiWriteModeTests(unittest.TestCase):
         self.assertEqual(tui._MAIN_ALIASES["tidybuild"], (4, 5))
         self.assertEqual(tui._MAIN_ALIASES["tidy"], (4, 6))
         self.assertEqual(tui._MAIN_ALIASES["tidyapply"], (4, 6))
+        self.assertEqual(tui._MAIN_ALIASES["foldermap"], (4, 7))
+        self.assertEqual(tui._MAIN_ALIASES["genremap"], (4, 7))
         self.assertEqual(tui._SEL_CHANGE_ROOT, (5, 0))
         self.assertEqual(tui._SEL_QUIT, (6, 0))
 
