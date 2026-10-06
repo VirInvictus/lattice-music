@@ -1,5 +1,39 @@
 # lattice-music Patch Notes
 
+## v6.2.0 (2026-10-06)
+
+### The AI-probe batch: contradictions fixed, contracts stated, help --json
+
+The same AI-grokability probe CalibreQuarry and bindery-cli ran (a fresh
+agent learning the CLI from help alone) validated the per-mode pages and
+found the cross-mode layer inconsistent. Fixed:
+
+- **The two contradictions are gone**: the --diff page's example read in
+  the opposite order from its own usage line (snapshot first now, as the
+  parser binds it), and the --stats example filtered `format == 'FLAC'`
+  even though the rule grammar has no format field (formats are not
+  tags; --stats breaks them down natively, and the grammar listing now
+  says so). The example was the bug in both; `format` would have been a
+  RuleError at runtime.
+- **The --where entry names its modes**: all fifteen flags that accept
+  it, and the fact that everywhere else is a usage error (exit 2),
+  instead of "modes that never read tags refuse it" and a guessing game.
+- **Exit codes and the --json envelope are stated**: the index footer
+  carries the consolidated table (0 clean; 1 audit findings only with
+  --fail-on-findings; 2 usage or missing dependency; 130 interrupted),
+  and the --json entry names the two envelope shapes (read:
+  {mode, root, findings, payload}; write: {mode, root, dry_run, counts}).
+- **`lattice help --json`**: the whole registry (every mode's page
+  fields, the shared options, the rule fields, the exit-code table) as
+  deterministic JSON, generated from the registry the rendered pages
+  read, never colored. The machine surface an agent reads once instead
+  of paging through 38 modes.
+- **`lattice --help MODE` is a per-mode form now**: the token after the
+  help flag resolves like `help MODE`, and a non-topic word is an
+  unknown-topic error (exit 2) instead of silently printing the index.
+
+8 new tests (763 total).
+
 ## v6.1.0 (2026-10-06)
 
 The help-surface restructure: one registry, two levels, zero invocation changes.

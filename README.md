@@ -450,7 +450,7 @@ The filesystem is the source of truth: lattice-music walks the tree on every inv
 <summary>The mode index (<code>lattice --help</code>)</summary>
 
 ```
-lattice 6.1.0 - filesystem-first music library toolkit
+lattice 6.2.0 - filesystem-first music library toolkit
 
 usage: lattice MODE [ROOT] [options]
        lattice help MODE    full help for one mode
@@ -525,6 +525,9 @@ OPTIONS
 
 Every mode above has a full help page:
   lattice help MODE    (try: lattice help clean)
+  lattice help --json    the whole surface as JSON
+
+exit codes: 0 clean; 1 audit findings (only with --fail-on-findings); 2 usage or missing dependency; 130 interrupted
 ```
 
 </details>
