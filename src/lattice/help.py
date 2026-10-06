@@ -161,14 +161,16 @@ SHARED: dict[str, Opt] = {
         "--root DIR",
         "Library root to scan; repeat --root to scan several libraries "
         "together (a repeated path is de-duped). Default: the configured "
-        "library root, else the current directory.",
+        "library root, else the current directory. Config file: ~/.config/lattice/config.json (keys: library_root, library_roots, layout); with no config and a non-interactive stdin, the current directory is used.",
     ),
     "root_one": Opt(
         "root",
         "--root DIR",
         "The one library root to operate on (this mode takes exactly one "
         "tree). Default: the configured library root, else the current "
-        "directory.",
+        "directory. Config file: ~/.config/lattice/config.json (keys: "
+        "library_root, library_roots, layout); with no config and a "
+        "non-interactive stdin, the current directory is used.",
     ),
     "output": Opt("output", "--output PATH", "Where the report is written."),
     "layout": Opt(
@@ -202,13 +204,19 @@ SHARED: dict[str, Opt] = {
         "fail_on_findings",
         "--fail-on-findings",
         "Exit 1 when the audit found something (default 0), so a cron or CI "
-        "job can gate on a clean report.",
+        "job can gate on a clean report. Gateable by exactly six modes: "
+        "--auditTags, --auditAlbums, --auditBitrate, --auditReplayGain, "
+        "--healthScore, --duplicates (the other audits, and the integrity "
+        "scans, refuse it).",
     ),
     "apply": Opt(
         "apply",
         "--apply",
         "Write for real; without it this mode only previews (dry-run is the "
-        "default). Every run is logged.",
+        "default; an explicit --dry-run wins even alongside --apply). The "
+        "tag-writing modes ask once more on an interactive terminal and "
+        "proceed automatically when stdin is not a TTY. Committed runs are "
+        "logged (see each mode's log path).",
     ),
     "dry_run": Opt(
         "dry_run",
@@ -258,7 +266,7 @@ MODES: tuple[Mode, ...] = (
         summary="One library file per genre",
         detail="Write a separate library tree per genre into an output "
         "directory, so each wing of the library can be browsed on its own.",
-        usage="lattice --all-wings [ROOT] [--output DIR] [--genres] [--paths]",
+        usage="lattice --all-wings [ROOT] [--output DIR] [--where EXPR] [--genres] [--paths]",
         example="lattice --all-wings ~/Music --paths --output wings",
         shared=("root", "output", "layout", "where", "quiet"),
         output_note="Directory for the per-genre files (default: wings).",
@@ -331,10 +339,13 @@ MODES: tuple[Mode, ...] = (
         category="reports",
         summary="Smart .m3u playlist from a rule",
         detail="Generate an .m3u from a rule in the playlist grammar "
-        "(fields: rating, genre, artist, album, title, duration, bitrate; "
-        "combinable with and/or and comparisons; there is no format field ("
-        "formats are not tags; --stats breaks those down natively).",
-        usage="lattice --playlist [ROOT] --rule EXPR [--output PATH]",
+        "(fields: rating (0-5), genre, artist, album, title, duration "
+        "(seconds), bitrate (kbps); operators == != < <= > >= in / not in, "
+        "and/or/not (AND/OR work too), parentheses, and arithmetic like "
+        "bitrate / duration > 200; string matching is exact and "
+        "case-sensitive; there is no format field (formats are not tags; "
+        "--stats breaks those down natively).",
+        usage="lattice --playlist [ROOT] [--rule EXPR] [--output PATH]",
         example="lattice --playlist ~/Music --rule \"rating >= 4 and genre == 'Jazz'\"",
         shared=("root", "output", "layout", "quiet"),
         output_default=DEFAULT_PLAYLIST_OUTPUT,
@@ -367,7 +378,11 @@ MODES: tuple[Mode, ...] = (
         summary="Verify FLAC files (flac -t / ffmpeg)",
         detail="Decode-verify every FLAC file: the flac reference decoder by "
         "default (--prefer ffmpeg to flip), each file classified into a "
-        "severity tier. The report lists problems plus a per-tier summary. "
+        "severity tier (tiers: CORRUPT failed to decode, SUSPECT decoded "
+        "with warnings, METADATA tags-only problems, OK). Exits 1 when "
+        "any file is CORRUPT, no flag needed (--fail-on-findings does "
+        "not apply to these modes). The report lists problems plus a "
+        "per-tier summary. "
         "An interrupted scan records verdicts that --resume picks up.",
         usage="lattice --testFLAC [ROOT] [--workers N] [--resume]",
         example="lattice --testFLAC ~/Music --workers 4 --resume",
@@ -397,7 +412,8 @@ MODES: tuple[Mode, ...] = (
         category="integrity",
         summary="Decode-verify MP3 files via ffmpeg",
         detail="Decode every MP3 through ffmpeg (demuxer forced from the "
-        "extension) and classify each file into a severity tier. Only "
+        "extension) and classify each file into a severity tier (CORRUPT / "
+        "SUSPECT / METADATA / OK; exits 1 on any CORRUPT file). Only "
         "errors and warnings are written unless --no-only-errors asks for "
         "every file. --resume picks up an interrupted scan.",
         usage="lattice --testMP3 [ROOT] [--workers N] [--resume]",
@@ -428,7 +444,8 @@ MODES: tuple[Mode, ...] = (
         category="integrity",
         summary="Decode-verify Opus files via ffmpeg",
         detail="Decode every Opus file through ffmpeg and classify each into "
-        "a severity tier; only errors and warnings are written unless "
+        "a severity tier (CORRUPT / SUSPECT / METADATA / OK; exits 1 on any "
+        "CORRUPT file); only errors and warnings are written unless "
         "--no-only-errors asks for every file.",
         usage="lattice --testOpus [ROOT] [--workers N]",
         example="lattice --testOpus ~/Music",
@@ -451,7 +468,8 @@ MODES: tuple[Mode, ...] = (
         category="integrity",
         summary="Decode-verify WAV files via ffmpeg",
         detail="Decode every WAV file through ffmpeg and classify each into "
-        "a severity tier; only errors and warnings are written unless "
+        "a severity tier (CORRUPT / SUSPECT / METADATA / OK; exits 1 on any "
+        "CORRUPT file); only errors and warnings are written unless "
         "--no-only-errors asks for every file.",
         usage="lattice --testWAV [ROOT] [--workers N]",
         example="lattice --testWAV ~/Music",
@@ -474,7 +492,8 @@ MODES: tuple[Mode, ...] = (
         category="integrity",
         summary="Decode-verify WMA files via ffmpeg",
         detail="Decode every WMA file through ffmpeg and classify each into "
-        "a severity tier; only errors and warnings are written unless "
+        "a severity tier (CORRUPT / SUSPECT / METADATA / OK; exits 1 on any "
+        "CORRUPT file); only errors and warnings are written unless "
         "--no-only-errors asks for every file.",
         usage="lattice --testWMA [ROOT] [--workers N]",
         example="lattice --testWMA ~/Music",
@@ -496,10 +515,12 @@ MODES: tuple[Mode, ...] = (
         dest="extractArt",
         flag="--extractArt",
         category="artwork",
-        summary="Extract embedded cover art to folders",
+        summary="Extract embedded cover art to folders (WRITES by default: "
+        "the only mode whose default is to write; --dry-run previews; "
+        "--apply is silently ignored here)",
         detail="For every album folder, pick the best embedded image by "
         "format priority and write it out as the folder cover. --dry-run "
-        "lists what would be written.",
+        "lists what would be written. Folders that already have a cover are skipped.",
         usage="lattice --extractArt [ROOT] [--dry-run]",
         example="lattice --extractArt ~/Music --dry-run",
         shared=("root", "quiet"),
@@ -606,7 +627,7 @@ MODES: tuple[Mode, ...] = (
         category="audits",
         summary="MP3 ID3v2 junk-frame audit",
         detail="Read-only audit of MP3 ID3v2 tags for junk frames: obsolete "
-        "v2.3-era leftovers, empty text frames, duplicate unique frames, and "
+        "v2.3-era leftovers, empty text frames, and "
         "nonstandard iTunes-era frames. Frames are loaded raw so mutagen's "
         "upgrade cannot hide them; --retag --strip-junk is the fix.",
         usage="lattice --auditJunkFrames [ROOT] [--output PATH]",
@@ -968,7 +989,9 @@ MODES = MODES + (
         category="write",
         summary="Write the artist-to-genre authority map",
         detail="Scan (read-only, through the shared scanner) and write the "
-        "editable artist-to-genre TSV map: one line per artist listing "
+        "editable artist-to-genre TSV map (the WRITE happens on every run: "
+        "no dry-run/apply gate; only the scan is read-only): one line per "
+        "artist listing "
         "every genre it currently uses, most-common first. Tidying happens "
         "by removing a stray genre from a line; --genreTidy-apply then "
         "reconciles the library. Re-runs preserve edits and append only new "
@@ -1063,7 +1086,7 @@ MODES = MODES + (
         detail="Sequence the import stages over one root: genreMap, then "
         "apestrip, then clean --all, then the post-state health digest. "
         "Each stage keeps its own dry-run/apply contract and log, confirmed "
-        "per stage; a declined stage is recorded and skipped, never fatal. "
+        "per stage; a declined stage is recorded and skipped, never fatal (stages confirm on a TTY and auto-proceed when stdin is not one). "
         "One summary file points into the per-stage logs; --baseline adds a "
         "diff report against a pre-import snapshot. Sequencing only, no new "
         "write verb.",
@@ -1128,8 +1151,13 @@ def resolve_topic(token: str) -> str | None:
 
 EXIT_CODES = {
     "0": "clean",
-    "1": "audit findings, only with --fail-on-findings",
-    "2": "usage error or missing dependency",
+    "1": "findings or failure: audits only with --fail-on-findings; the "
+    "integrity scans exit 1 on any CORRUPT file without a flag; write "
+    "modes on run failure; exports when nothing matched; an invalid "
+    "--where/--playlist rule",
+    "2": "usage error or missing dependency (including --where/--json/"
+    "--fail-on-findings on a mode that refuses them, and --replayGain "
+    "--apply without rsgain)",
     "130": "interrupted",
 }
 
@@ -1149,6 +1177,22 @@ def help_json() -> str:
         "usage": "lattice MODE [ROOT] [options] | lattice help MODE",
         "exit_codes": EXIT_CODES,
         "rule_fields": list(RULE_FIELDS),
+        "rule_grammar": {
+            "fields_with_units": {
+                "rating": "0-5 (normalized)",
+                "genre": "exact, case-sensitive string",
+                "artist": "exact, case-sensitive string",
+                "album": "exact, case-sensitive string",
+                "title": "exact, case-sensitive string",
+                "duration": "seconds",
+                "bitrate": "kbps",
+            },
+            "operators": ["==", "!=", "<", "<=", ">", ">=", "in", "not in"],
+            "connectors": ["and", "or", "not", "AND", "OR"],
+            "extras": ["parentheses", "arithmetic (+ - * / %)"],
+            "no_format_field": "formats are not tags; --stats breaks them down",
+        },
+        "integrity_tiers": ["CORRUPT", "SUSPECT", "METADATA", "OK"],
         "modes": [
             {
                 "dest": m.dest,
@@ -1158,6 +1202,16 @@ def help_json() -> str:
                 "detail": " ".join(m.detail.split()),
                 "usage": m.usage,
                 "example": m.example,
+                "own_options": [
+                    {
+                        "dest": opt.dest,
+                        "flag": opt.flag,
+                        "text": " ".join(opt.text.split()),
+                    }
+                    for opt in m.own
+                ],
+                "shared": list(m.shared),
+                "output_default": m.output_default or None,
             }
             for m in MODES
         ],
@@ -1286,8 +1340,9 @@ def render_index(color: bool | None = None) -> str:
     )
     lines.append("")
     lines.append(
-        "exit codes: 0 clean; 1 audit findings (only with --fail-on-findings); "
-        "2 usage or missing dependency; 130 interrupted"
+        "exit codes: 0 clean; 1 findings or failure (audits only with "
+        "--fail-on-findings; integrity scans on any CORRUPT file; write "
+        "modes on run failure); 2 usage or missing dependency; 130 interrupted"
     )
     return "\n".join(lines)
 

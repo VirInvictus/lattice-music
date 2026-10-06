@@ -11,6 +11,7 @@ interception). Two layers are pinned:
 
 import contextlib
 import io
+import json
 import os
 import re
 import unittest
@@ -311,3 +312,54 @@ def _err_main(argv):
     with contextlib.redirect_stderr(buf):
         rc = cli.main(argv)
     return rc, buf.getvalue()
+
+
+class AuditTruthTests(unittest.TestCase):
+    """The 12-agent audit's findings, pinned: the exit legend tells the
+    truth (integrity modes exit 1 on CORRUPT without a flag), the two
+    dry-run-promise exceptions are labeled, the grammar carries its real
+    operators and units, and help --json is a complete agent surface."""
+
+    def test_exit_legend_names_the_integrity_and_failure_classes(self):
+        rc, index = _main(["--help"])
+        self.assertEqual(rc, 0)
+        self.assertIn("integrity scans on any CORRUPT file", index)
+        # the old, falsified legend must not come back
+        self.assertNotIn("only with --fail-on-findings); 2 usage", index)
+        data = json.loads(_main(["help", "--json"])[1])
+        self.assertIn("CORRUPT", data["exit_codes"]["1"])
+
+    def test_integrity_pages_carry_tiers_and_exits(self):
+        for dest in ("testFLAC", "testMP3", "testOpus", "testWAV", "testWMA"):
+            mode = next(m for m in help_mod.MODES if m.dest == dest)
+            detail = " ".join(mode.detail.split())
+            self.assertIn("CORRUPT", detail, dest)
+            self.assertIn("exits 1", detail.lower(), dest)
+            self.assertIn("CORRUPT", detail, dest)  # every shape names it
+
+    def test_write_promise_exceptions_are_labeled(self):
+        extract = next(m for m in help_mod.MODES if m.dest == "extractArt")
+        self.assertIn("WRITES by default", extract.summary)
+        build = next(m for m in help_mod.MODES if m.dest == "genre_tidy_build")
+        self.assertIn("no dry-run/apply gate", build.detail)
+
+    def test_grammar_carries_operators_units_and_scale(self):
+        data = json.loads(_main(["help", "--json"])[1])
+        grammar = data["rule_grammar"]
+        self.assertEqual(grammar["fields_with_units"]["duration"], "seconds")
+        self.assertEqual(grammar["fields_with_units"]["bitrate"], "kbps")
+        self.assertIn("in", grammar["operators"])
+        playlist = next(m for m in help_mod.MODES if m.dest == "playlist")
+        self.assertIn("not in", playlist.detail)
+
+    def test_help_json_carries_own_options_and_shared(self):
+        data = json.loads(_main(["help", "--json"])[1])
+        clean = next(m for m in data["modes"] if m["dest"] == "clean")
+        self.assertTrue(any(o["flag"] == "--all" for o in clean["own_options"]))
+        self.assertIn("apply", clean["shared"])
+        self.assertTrue(all("shared" in m for m in data["modes"]))
+
+    def test_rsgain_requirement_is_apply_scoped(self):
+        mode = next(m for m in help_mod.MODES if m.dest == "replaygain")
+        detail = " ".join(mode.detail.split())
+        self.assertIn("Requires rsgain (exit 2 without it)", detail)

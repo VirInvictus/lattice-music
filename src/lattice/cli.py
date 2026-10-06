@@ -364,7 +364,7 @@ def main(argv: list[str] | None = None) -> int:
                 where_pred = compile_where(args.where)
             except RuleError as e:
                 print(f"error: invalid --where rule: {e}", file=sys.stderr)
-                return 1
+                return 2
 
         # Where-scoped dispatch passes the compiled predicate; the other
         # branches never see it.

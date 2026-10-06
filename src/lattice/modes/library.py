@@ -16,6 +16,7 @@ from lattice.utils import (
     iter_audio_dirs,
     parse_layout,
     relpath_under,
+    resolve_output,
 )
 
 Song = tuple[str, str, TagBundle]  # (filename, filepath, tags)
@@ -208,7 +209,7 @@ def write_music_library_tree(
             print(buf.getvalue())
         return
 
-    out_path = os.path.abspath(output_file)
+    out_path = resolve_output(output_file, output_file)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     try:
@@ -252,7 +253,7 @@ def write_ai_library(
 
     albums.sort(key=lambda x: (x[0].lower(), x[1].lower()))
 
-    out_path = os.path.abspath(output_file)
+    out_path = resolve_output(output_file, output_file)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         f.write("Artist | Album | Genre | Rating | Tracks\n")
@@ -508,7 +509,7 @@ def write_snapshot(
     rows = _snapshot_rows(roots, pbar)
     pbar.close()
 
-    out_path = os.path.abspath(output_file)
+    out_path = resolve_output(output_file, output_file)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         f.write("# lattice snapshot v1\n")
@@ -653,7 +654,7 @@ def diff_snapshot(
         if changes:
             retagged.append((path, changes))
 
-    out_path = os.path.abspath(output_file)
+    out_path = resolve_output(output_file, output_file)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         f.write("SNAPSHOT DIFF REPORT\n")

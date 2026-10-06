@@ -213,11 +213,11 @@ class WriteTargetingTests(unittest.TestCase):
             rc = cli.main(["--testFLAC", "--where", "rating >= 4", str(self.root)])
         self.assertEqual(rc, 2)
 
-    def test_cli_where_invalid_rule_is_exit_1(self):
+    def test_cli_where_invalid_rule_is_exit_2(self):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             rc = cli.main(["--stats", "--where", "genre ==", str(self.root)])
-        self.assertEqual(rc, 1)
+        self.assertEqual(rc, 2)  # a rule typo is a usage error, not a findings run
 
     def test_cli_where_scopes_stats(self):
         out = Path(self._tmp.name) / "stats.txt"

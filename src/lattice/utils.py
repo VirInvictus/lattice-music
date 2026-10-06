@@ -147,6 +147,17 @@ def as_roots(root) -> list[str]:
 STDOUT_REPORT = "-"
 
 
+def resolve_output(output: str | None, default: str) -> str:
+    """The output path for a report: "-" stays "-" so open_report pipes to
+    stdout (`--output -`, as the --json help documents); anything else
+    resolves to an absolute path over `default` when unset. Every report
+    writer goes through this instead of abspath-ing the dash into a
+    literal file named '-'."""
+    if output == "-":
+        return "-"
+    return os.path.abspath(output or default)
+
+
 @contextmanager
 def open_report(path: str):
     """Yield a text stream for a report: the file at `path`, or stdout when

@@ -52,6 +52,7 @@ from lattice.utils import (
     open_report,
     read_tags_concurrent,
     relpath_under,
+    resolve_output,
 )
 from lattice.modes.playlists import _find_playlists, check_playlist
 
@@ -441,7 +442,7 @@ def run_duplicates(
 
     pbar.close()
 
-    out_path = os.path.abspath(output or DEFAULT_DUPLICATES_OUTPUT)
+    out_path = resolve_output(output, DEFAULT_DUPLICATES_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     if json_mode:
@@ -766,7 +767,7 @@ def run_audio_dupes(root: str | list[str], output: str, *, quiet: bool = False) 
     streams = [g for g in by_stream.values() if len(g) > 1]
     samples = [g for g in by_sample.values() if len(g) > 1]
 
-    out_path = os.path.abspath(output or DEFAULT_AUDIO_DUPES_OUTPUT)
+    out_path = resolve_output(output, DEFAULT_AUDIO_DUPES_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     with open(out_path, "w", encoding="utf-8") as f:
@@ -960,7 +961,7 @@ def run_health_score(
     flagged = [a for a in ranked if a[2] < 100]
     full = [a for a in ranked if a[2] == 100]
 
-    out_path = os.path.abspath(output or DEFAULT_HEALTH_SCORE_OUTPUT)
+    out_path = resolve_output(output, DEFAULT_HEALTH_SCORE_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     if json_mode:
@@ -1102,7 +1103,7 @@ def run_tag_audit(
                 }
             )
 
-    out_path = os.path.abspath(output or DEFAULT_TAG_AUDIT_OUTPUT)
+    out_path = resolve_output(output, DEFAULT_TAG_AUDIT_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     # Build breakdown counts
@@ -1228,7 +1229,7 @@ def run_bitrate_audit(
                 }
             )
 
-    out_path = os.path.abspath(output or DEFAULT_BITRATE_AUDIT_OUTPUT)
+    out_path = resolve_output(output, DEFAULT_BITRATE_AUDIT_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     by_dir: dict[str, list[dict[str, str]]] = defaultdict(list)
@@ -1379,7 +1380,7 @@ def run_replaygain_audit(
     n_partial = len(by_bucket["PARTIAL"])
     n_missing = len(by_bucket["MISSING"])
 
-    out_path = os.path.abspath(output or DEFAULT_REPLAYGAIN_AUDIT_OUTPUT)
+    out_path = resolve_output(output, DEFAULT_REPLAYGAIN_AUDIT_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     rg_findings = n_noalbum + n_partial + n_missing
@@ -1676,7 +1677,7 @@ def run_verify_replaygain(
 
     pbar.close()
 
-    out_path = os.path.abspath(output or DEFAULT_REPLAYGAIN_VERIFY_OUTPUT)
+    out_path = resolve_output(output, DEFAULT_REPLAYGAIN_VERIFY_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     with open(out_path, "w", encoding="utf-8") as f:
@@ -1855,7 +1856,7 @@ def run_album_consistency(
 
     pbar.close()
 
-    out_path = os.path.abspath(output or DEFAULT_ALBUM_CONSISTENCY_OUTPUT)
+    out_path = resolve_output(output, DEFAULT_ALBUM_CONSISTENCY_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     ac_findings = len(mixed) + len(track_issues) + len(year_issues)
@@ -2102,7 +2103,7 @@ def run_health(
     }
 
     if json_mode:
-        out_path = os.path.abspath(output or DEFAULT_HEALTH_OUTPUT)
+        out_path = resolve_output(output, DEFAULT_HEALTH_OUTPUT)
         os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
         with open_report(out_path) as f:
             f.write(json_report("health", roots, total_findings, payload))
@@ -2164,7 +2165,7 @@ def run_health(
     lines.append("Exit 0 by design: the digest informs, the audits gate.")
     report = "\n".join(lines) + "\n"
 
-    out_path = os.path.abspath(output or DEFAULT_HEALTH_OUTPUT)
+    out_path = resolve_output(output, DEFAULT_HEALTH_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open_report(out_path) as f:
         f.write(report)
@@ -2314,7 +2315,7 @@ def run_junk_frame_audit(
         "garbage": "EMPTY TEXT FRAMES",
         "nonstandard": "NONSTANDARD (iTunes-era, functional)",
     }
-    out_path = os.path.abspath(output or DEFAULT_JUNK_FRAME_OUTPUT)
+    out_path = resolve_output(output, DEFAULT_JUNK_FRAME_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         f.write("JUNK ID3 FRAME AUDIT\n")
@@ -2483,7 +2484,7 @@ def run_stray_audit(
                     )
 
     total_strays = sum(len(v) for v in strays.values())
-    out_path = os.path.abspath(output or DEFAULT_STRAY_AUDIT_OUTPUT)
+    out_path = resolve_output(output, DEFAULT_STRAY_AUDIT_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     with open(out_path, "w", encoding="utf-8") as out_file:

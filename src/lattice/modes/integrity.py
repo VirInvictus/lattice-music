@@ -25,6 +25,7 @@ from lattice.utils import (
     relpath_under,
     run_proc,
     yellow,
+    resolve_output,
 )
 
 # =====================================
@@ -336,7 +337,7 @@ def run_flac_mode(
             ex.shutdown(wait=True)
         pbar.close()
 
-    out_path = os.path.abspath(output)
+    out_path = resolve_output(output, output)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         f.write("FLAC INTEGRITY REPORT\n")

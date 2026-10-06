@@ -33,8 +33,9 @@ from mutagen.apev2 import APENoHeaderError, APEv2
 from mutagen.asf import ASF
 from mutagen.id3 import ID3, TCON, ID3NoHeaderError, ParseID3v1
 from mutagen.mp4 import MP4
-from lattice.utils import json_summary
 from vir_tui import core as ui
+
+from lattice.utils import json_summary
 
 __version__ = "1.2.0"
 
@@ -408,7 +409,20 @@ def run_retag(
     try:
         if strip_junk:
             log(f"{'[DRY RUN] ' if dry_run else ''}Junk strip: {target_dir}")
-            return run_junk_strip(target_dir, dry_run=dry_run, log=log)
+            rc = run_junk_strip(target_dir, dry_run=dry_run, log=log)
+            if json_mode:
+                # fall through to the summary, not around it: the
+                # documented envelope carries dry_run on every write run
+                print(
+                    json_summary(
+                        "retag",
+                        target_dir,
+                        dry_run,
+                        {"junk_strip": "done", "rc": rc},
+                    ),
+                    end="",
+                )
+            return rc
 
         log(f"{'[DRY RUN] ' if dry_run else ''}Tagging: {target_dir}")
         log(f"Genres:  {genres}")

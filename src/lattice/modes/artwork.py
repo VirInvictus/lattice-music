@@ -28,6 +28,7 @@ from lattice.utils import (
     is_audio,
     iter_audio_dirs,
     relpath_under,
+    resolve_output,
 )
 
 # =====================================
@@ -261,7 +262,7 @@ def run_missing_art(root: str | list[str], output: str, *, quiet: bool = False) 
                 }
             )
 
-    out_path = os.path.abspath(output or DEFAULT_MISSING_ART_OUTPUT)
+    out_path = resolve_output(output, DEFAULT_MISSING_ART_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     no_art_at_all = [m for m in missing if m["has_embedded_art"] == "no"]
@@ -397,7 +398,7 @@ def run_art_quality_audit(
 
     pbar.close()
 
-    out_path = os.path.abspath(output or DEFAULT_ART_QUALITY_OUTPUT)
+    out_path = resolve_output(output, DEFAULT_ART_QUALITY_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     with open(out_path, "w", encoding="utf-8") as f:
@@ -502,7 +503,7 @@ def run_art_mismatch_audit(
 
     pbar.close()
 
-    out_path = os.path.abspath(output or DEFAULT_ART_MISMATCH_OUTPUT)
+    out_path = resolve_output(output, DEFAULT_ART_MISMATCH_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open(out_path, "w", encoding="utf-8") as f:
         f.write("ART MISMATCH AUDIT REPORT\n")

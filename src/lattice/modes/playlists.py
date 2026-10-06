@@ -17,6 +17,7 @@ from lattice.utils import (
     iter_audio_dirs,
     parse_layout,
     relpath_under,
+    resolve_output,
 )
 
 # =====================================
@@ -182,8 +183,10 @@ def generate_playlist(
     """Generate an .m3u playlist based on a smart rule filter."""
     rule_error = validate_rule(rule)
     if rule_error is not None:
+        # a rule typo is a usage error, not a findings run: exit 2 like the
+        # other malformed-input refusals
         print(f"Invalid rule '{rule}': {rule_error}", file=sys.stderr)
-        return 1
+        return 2
 
     roots = as_roots(root_dir)
     total_files = count_audio_files(roots)
@@ -235,7 +238,7 @@ def generate_playlist(
             print(f"No tracks matched the rule: {rule}")
         return 0
 
-    out_path = os.path.abspath(output_file)
+    out_path = resolve_output(output_file, output_file)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     try:
@@ -337,7 +340,7 @@ def run_check_playlists(
     n_noheader = sum(1 for r in results if not r[1] and r[2] + r[3] > 0)
     dirty = [r for r in results if r[3] or (not r[1] and r[2] + r[3] > 0)]
 
-    out_path = os.path.abspath(output or DEFAULT_PLAYLIST_CHECK_OUTPUT)
+    out_path = resolve_output(output, DEFAULT_PLAYLIST_CHECK_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     with open(out_path, "w", encoding="utf-8") as f:

@@ -352,7 +352,24 @@ def run_replaygain(
             )
             log("RG RUN END [DRY RUN]")
             log("=" * 70)
-            if not quiet and not json_mode:
+            if json_mode:
+                # the documented write-run envelope carries dry_run: the
+                # preview emits it too, or a --json dry run prints nothing
+                print(
+                    json_summary(
+                        "replaygain",
+                        root,
+                        True,
+                        {
+                            "albums_would_scan": len(to_scan),
+                            "albums": len(worklist),
+                            "skipped_tagged": skipped_tagged,
+                            "nested_skipped": len(nested),
+                        },
+                    ),
+                    end="",
+                )
+            elif not quiet:
                 print(
                     f"Would scan {len(to_scan)} of {len(worklist)} album(s) "
                     f"({skipped_tagged} skipped as fully tagged, "
