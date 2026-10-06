@@ -13,7 +13,9 @@ cannot drift from what the CLI actually refuses.
 
 from __future__ import annotations
 
+import os
 import re
+import sys
 import textwrap
 from dataclasses import dataclass
 
@@ -47,6 +49,74 @@ from lattice.config import (
 )
 
 _WIDTH = 78
+
+# The color theme mirrors the CPython 3.14 argparse default (_colorize's
+# ColorfulTheme: bold blue headings and usage, bold magenta prog, bold cyan
+# long options, bold green short options, bold yellow metavars), so lattice's
+# help reads like `python --help` in the same terminal.
+_THEME = {
+    "heading": "\x1b[1;34m",
+    "prog": "\x1b[1;35m",
+    "long_option": "\x1b[1;36m",
+    "short_option": "\x1b[1;32m",
+    "label": "\x1b[1;33m",
+    "reset": "\x1b[0m",
+}
+
+_CSI = re.compile(r"\x1b\[[0-9;]*m")
+_LONG_OPT = re.compile(r"(?<![\w/-])--[\w][\w-]*")
+_SHORT_OPT = re.compile(r"(?<![\w-])-([A-Za-z])\b")
+_LABEL = re.compile(r"\b[A-Z][A-Z0-9]*\b")
+_PROG = re.compile(r"(?<![\w~./])lattice\b")
+
+
+def _can_color(stream=None) -> bool:
+    """FORCE_COLOR wins, then NO_COLOR and PYTHON_COLORS=0 suppress, then a
+    TTY check: piped output (tests, README embedding) stays plain."""
+    if stream is None:
+        stream = sys.stdout
+    force = os.environ.get("FORCE_COLOR")
+    if force and force != "0":
+        return True
+    if "NO_COLOR" in os.environ:
+        return False
+    if os.environ.get("PYTHON_COLORS") == "0":
+        return False
+    try:
+        return stream.isatty()
+    except ValueError:
+        return False
+
+
+class _Style:
+    """ANSI painter for one render pass. The disabled variant emits empty
+    strings so a single layout path serves both faces."""
+
+    def __init__(self, enabled: bool):
+        if enabled:
+            self.heading = _THEME["heading"]
+            self.prog = _THEME["prog"]
+            self.long_option = _THEME["long_option"]
+            self.short_option = _THEME["short_option"]
+            self.label = _THEME["label"]
+            self.reset = _THEME["reset"]
+        else:
+            self.heading = self.prog = self.long_option = ""
+            self.short_option = self.label = self.reset = ""
+
+    def tokens(self, s: str) -> str:
+        """Paint the command-shaped tokens of a usage/flag/example string:
+        long options, short options, ALL-CAPS metavars, and a leading
+        `lattice`. Prose stays plain."""
+        s = _LONG_OPT.sub(self.long_option + r"\g<0>" + self.reset, s)
+        s = _SHORT_OPT.sub(self.short_option + r"\g<0>" + self.reset, s)
+        s = _LABEL.sub(self.label + r"\g<0>" + self.reset, s)
+        s = _PROG.sub(self.prog + r"\g<0>" + self.reset, s)
+        return s
+
+
+def _visible_len(s: str) -> int:
+    return len(_CSI.sub("", s))
 
 
 @dataclass(frozen=True)
@@ -1066,9 +1136,10 @@ def single_mode_dest(argv: list[str]) -> str | None:
 
 def _two_col(rows: list[tuple[str, str]], indent: str = "  ") -> list[str]:
     """Render (left, right) rows as aligned two-column text, wrapped at
-    _WIDTH. A left column longer than the computed gutter pushes its right
+    _WIDTH. Left cells may carry ANSI codes, so the gutter is computed on
+    visible length; a left column longer than the gutter pushes its right
     text to the next line."""
-    pad = min(max((len(left) for left, _ in rows), default=0) + 2, 26)
+    pad = min(max((_visible_len(left) for left, _ in rows), default=0) + 2, 26)
     lines: list[str] = []
     for left, right in rows:
         wrapped = textwrap.wrap(
@@ -1077,76 +1148,108 @@ def _two_col(rows: list[tuple[str, str]], indent: str = "  ") -> list[str]:
         if not wrapped:
             lines.append(indent + left)
             continue
-        if len(left) + 2 > pad:
+        if _visible_len(left) + 2 > pad:
             lines.append(indent + left)
             lines.append(indent + " " * pad + wrapped[0])
         else:
-            lines.append(indent + left.ljust(pad) + wrapped[0])
+            lines.append(indent + left + " " * (pad - _visible_len(left)) + wrapped[0])
         for extra in wrapped[1:]:
             lines.append(indent + " " * pad + extra)
     return lines
 
 
-def render_index() -> str:
+def render_index(color: bool | None = None) -> str:
+    st = _Style(_can_color() if color is None else color)
     lines = [
-        f"lattice {VERSION} - filesystem-first music library toolkit",
+        st.tokens("lattice") + f" {VERSION} - filesystem-first music library toolkit",
         "",
-        "usage: lattice MODE [ROOT] [options]",
-        "       lattice help MODE    full help for one mode",
-        "       lattice              interactive TUI (no arguments)",
+        st.heading
+        + "usage:"
+        + st.reset
+        + " "
+        + st.tokens("lattice MODE [ROOT] [options]"),
+        "       " + st.tokens("lattice help MODE") + "    full help for one mode",
+        "       "
+        + st.tokens("lattice")
+        + "              interactive TUI (no arguments)",
         "",
     ]
     for key, heading in CATEGORIES:
-        rows = [((m.display or m.flag), m.summary) for m in MODES if m.category == key]
+        rows = [
+            (st.tokens(m.display or m.flag), m.summary)
+            for m in MODES
+            if m.category == key
+        ]
         if not rows:
             continue
-        lines.append(heading)
+        lines.append(st.heading + heading + st.reset)
         lines.extend(_two_col(rows))
         lines.append("")
     option_rows = [
-        ("-h, --help", 'This index; "lattice help MODE" shows one mode.'),
-        ("--version", "Show the version."),
         (
-            SHARED["root"].flag,
+            st.tokens("-h, --help"),
+            'This index; "lattice help MODE" shows one mode.',
+        ),
+        (st.tokens("--version"), "Show the version."),
+        (
+            st.tokens(SHARED["root"].flag),
             "Library root; repeatable (default: config or current dir).",
         ),
         (
-            SHARED["output"].flag,
+            st.tokens(SHARED["output"].flag),
             "Report path; each mode's default is in its help page.",
         ),
         (
-            SHARED["where"].flag,
+            st.tokens(SHARED["where"].flag),
             "Scope to tracks matching a playlist rule (tag-reading modes).",
         ),
-        (SHARED["layout"].flag, "Path pattern (default: {artist}/{album})."),
-        (SHARED["json"].flag, "Machine-readable output where supported."),
         (
-            SHARED["fail_on_findings"].flag,
+            st.tokens(SHARED["layout"].flag),
+            "Path pattern (default: {artist}/{album}).",
+        ),
+        (st.tokens(SHARED["json"].flag), "Machine-readable output where supported."),
+        (
+            st.tokens(SHARED["fail_on_findings"].flag),
             "Audits exit 1 on findings (cron/CI gating).",
         ),
         (
-            "--apply / --dry-run",
+            st.tokens("--apply / --dry-run"),
             "Write modes: commit vs preview (preview is the default).",
         ),
-        (SHARED["quiet"].flag, "Minimize output."),
-        (SHARED["verbose"].flag, "Extra detail on the audits that support it."),
+        (st.tokens(SHARED["quiet"].flag), "Minimize output."),
+        (
+            st.tokens(SHARED["verbose"].flag),
+            "Extra detail on the audits that support it.",
+        ),
     ]
-    lines.append("OPTIONS")
+    lines.append(st.heading + "OPTIONS" + st.reset)
     lines.extend(_two_col(option_rows))
     lines.append("")
-    lines.append("Every mode has its own flags and a worked example:")
-    lines.append("  lattice help MODE    (try: lattice help clean)")
+    lines.append("Every mode above has a full help page:")
+    lines.append(
+        "  "
+        + st.tokens("lattice help MODE")
+        + "    (try: "
+        + st.tokens("lattice help clean")
+        + ")"
+    )
     return "\n".join(lines)
 
 
-def render_mode(dest: str) -> str:
+def render_mode(dest: str, color: bool | None = None) -> str:
+    st = _Style(_can_color() if color is None else color)
     m = next(m for m in MODES if m.dest == dest)
-    lines = [f"{m.display or m.flag}: {m.summary.lower()}", "", f"usage: {m.usage}", ""]
+    lines = [
+        st.tokens(m.display or m.flag) + ": " + m.summary.lower(),
+        "",
+        st.heading + "usage:" + st.reset + " " + st.tokens(m.usage),
+        "",
+    ]
     lines.extend(textwrap.wrap(m.detail, width=_WIDTH))
     lines.append("")
     if m.own:
-        lines.append("mode options:")
-        lines.extend(_two_col([(o.flag, o.text) for o in m.own]))
+        lines.append(st.heading + "mode options:" + st.reset)
+        lines.extend(_two_col([(st.tokens(o.flag), o.text) for o in m.own]))
         lines.append("")
     shared_rows: list[tuple[str, str]] = []
     for dest_name in m.shared:
@@ -1157,12 +1260,12 @@ def render_mode(dest: str) -> str:
             )
         else:
             text = opt.text
-        shared_rows.append((opt.flag, text))
+        shared_rows.append((st.tokens(opt.flag), text))
     if shared_rows:
-        lines.append("options that apply:")
+        lines.append(st.heading + "options that apply:" + st.reset)
         lines.extend(_two_col(shared_rows))
         lines.append("")
-    lines.append("example:")
+    lines.append(st.heading + "example:" + st.reset)
     for example_line in m.example.splitlines():
-        lines.append(f"  {example_line}")
+        lines.append("  " + st.tokens(example_line))
     return "\n".join(lines)

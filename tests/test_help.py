@@ -11,7 +11,10 @@ interception). Two layers are pinned:
 
 import contextlib
 import io
+import os
+import re
 import unittest
+from unittest import mock
 
 from lattice import cli
 from lattice import help as help_mod
@@ -167,6 +170,64 @@ class HelpPathTests(unittest.TestCase):
             rc = cli.main(["help", "bogus"])
         self.assertEqual(rc, 2)
         self.assertIn("unknown help topic", buf.getvalue())
+
+
+class ColorTests(unittest.TestCase):
+    CSI = re.compile(r"\x1b\[[0-9;]*m")
+
+    class _TTY(io.StringIO):
+        def isatty(self):
+            return True
+
+    def test_colored_render_strips_to_the_plain_render(self):
+        # The invariant behind the visible-length column math: ANSI codes
+        # never change the layout, only decorate it.
+        for dest in ("clean", "auditBitrate", "retag", "health", "diff_snapshot"):
+            colored = help_mod.render_mode(dest, color=True)
+            self.assertEqual(
+                self.CSI.sub("", colored),
+                help_mod.render_mode(dest, color=False),
+            )
+        self.assertEqual(
+            self.CSI.sub("", help_mod.render_index(color=True)),
+            help_mod.render_index(color=False),
+        )
+
+    def test_colored_output_uses_the_cpython_argparse_theme(self):
+        idx = help_mod.render_index(color=True)
+        self.assertIn("\x1b[1;34mAUDITS (read-only reports)\x1b[0m", idx)
+        self.assertIn("\x1b[1;36m--library\x1b[0m", idx)
+        self.assertIn("\x1b[1;32m-h\x1b[0m", idx)
+        self.assertIn("\x1b[1;35mlattice\x1b[0m", idx)
+        page = help_mod.render_mode("retag", color=True)
+        self.assertIn("\x1b[1;36m--retag\x1b[0m", page)
+        self.assertIn("\x1b[1;33mGENRE\x1b[0m", page)
+
+    def test_piped_help_carries_no_ansi_codes(self):
+        # StringIO stdout is never a TTY, so auto-detection must go plain:
+        # this is the README-embedding and `| cat` face.
+        for argv in (["--help"], ["help", "clean"], ["--clean", "--help"]):
+            rc, out = _main(argv)
+            self.assertEqual(rc, 0)
+            self.assertNotIn("\x1b", out)
+
+    def test_can_color_env_contract(self):
+        # FORCE_COLOR wins, NO_COLOR and PYTHON_COLORS=0 suppress, and the
+        # fallback is the stream's TTY-ness.
+        pipe = io.StringIO()
+        with mock.patch.dict(os.environ, {"FORCE_COLOR": "1"}):
+            self.assertTrue(help_mod._can_color(pipe))
+        with mock.patch.dict(os.environ, {"NO_COLOR": "1"}):
+            self.assertFalse(help_mod._can_color(self._TTY()))
+        with mock.patch.dict(os.environ, {"PYTHON_COLORS": "0"}):
+            self.assertFalse(help_mod._can_color(self._TTY()))
+        self.assertFalse(help_mod._can_color(pipe))
+        self.assertTrue(help_mod._can_color(self._TTY()))
+
+    def test_legend_names_the_per_mode_pages(self):
+        idx = help_mod.render_index(color=False)
+        self.assertIn("Every mode above has a full help page:", idx)
+        self.assertIn("lattice help MODE", idx)
 
 
 if __name__ == "__main__":

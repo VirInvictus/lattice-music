@@ -444,7 +444,7 @@ lattice-music is a modular Python package under `src/lattice/`:
 The filesystem is the source of truth: lattice-music walks the tree on every invocation and keeps no index or database.
 ## Help
 
-`lattice --help` prints a categorized mode index (the grouping mirrors the TUI menu); `lattice help MODE` (or `--MODE --help`) prints a full page for one mode: what it does, its own options, the shared options that apply to it, and a worked example. An unknown topic exits 2.
+`lattice --help` prints a categorized mode index (the grouping mirrors the TUI menu); `lattice help MODE` (or `--MODE --help`) prints a full page for one mode: what it does, its own options, the shared options that apply to it, and a worked example. An unknown topic exits 2. On a terminal the output is ANSI-colored with the same theme Python 3.14's argparse uses (plain when piped; `NO_COLOR` and `FORCE_COLOR` are honored).
 
 <details>
 <summary>The mode index (<code>lattice --help</code>)</summary>
@@ -523,7 +523,7 @@ OPTIONS
   --quiet              Minimize output.
   --verbose            Extra detail on the audits that support it.
 
-Every mode has its own flags and a worked example:
+Every mode above has a full help page:
   lattice help MODE    (try: lattice help clean)
 ```
 
