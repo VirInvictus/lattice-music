@@ -450,7 +450,7 @@ The filesystem is the source of truth: lattice-music walks the tree on every inv
 <summary>The mode index (<code>lattice --help</code>)</summary>
 
 ```
-lattice 6.0.0 - filesystem-first music library toolkit
+lattice 6.1.0 - filesystem-first music library toolkit
 
 usage: lattice MODE [ROOT] [options]
        lattice help MODE    full help for one mode
