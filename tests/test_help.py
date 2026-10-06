@@ -14,6 +14,7 @@ import io
 import os
 import re
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from lattice import cli
@@ -232,3 +233,81 @@ class ColorTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProbeTruthTests(unittest.TestCase):
+    """The AI-grokability probe's findings, fixed: the contradictions are
+    gone, the where-mode list and exit codes are stated, and the machine
+    surface exists."""
+
+    def test_stats_example_uses_a_real_grammar_field(self):
+        # 'format' is not in the rule grammar; the old example could only
+        # fail at runtime with a RuleError
+        stats = next(m for m in help_mod.MODES if m.dest == "stats")
+        self.assertNotIn("format ==", stats.example)
+        for field in help_mod.RULE_FIELDS:
+            pass
+        self.assertIn("genre ==", stats.example)
+
+    def test_rule_fields_exclude_format_and_help_says_so(self):
+        source = Path(help_mod.__file__).read_text()
+        self.assertNotIn("format ==", source)
+        self.assertIn("no format field", source)
+
+    def test_diff_example_matches_usage_order(self):
+        page = next(m for m in help_mod.MODES if m.dest == "diff_snapshot")
+        # usage: SNAPSHOT then ROOT; the example must read the same order
+        self.assertLess(page.usage.index("SNAPSHOT"), page.usage.index("[ROOT]"))
+        self.assertLess(
+            page.example.index("before-reorg.tsv"), page.example.rindex("~/Music")
+        )
+
+    def test_where_entry_names_every_mode_flag(self):
+        parser = cli.build_parser()
+        flags = {}
+        for action in parser._actions:
+            if action.option_strings:
+                flags[action.dest] = action.option_strings[0]
+        where_text = help_mod.SHARED["where"].text
+        for dest in cli._WHERE_MODES:
+            self.assertIn(flags[dest], where_text, dest)
+        self.assertIn("exit 2", where_text)
+
+    def test_json_entry_names_the_envelope_keys(self):
+        text = help_mod.SHARED["json"].text
+        for key in ("mode", "root", "findings", "payload", "dry_run", "counts"):
+            self.assertIn(key, text, key)
+
+    def test_index_carries_exit_codes_and_the_machine_surface(self):
+        rc, index = _main(["--help"])
+        self.assertEqual(rc, 0)
+        self.assertIn("exit codes:", index)
+        self.assertIn("lattice help --json", index)
+
+    def test_help_json_is_valid_complete_deterministic_plain(self):
+        rc, first = _main(["help", "--json"])
+        self.assertEqual(rc, 0)
+        import json as jsonlib
+
+        data = jsonlib.loads(first)
+        self.assertEqual(data["tool"], "lattice")
+        self.assertEqual(len(data["modes"]), len(help_mod.MODES))
+        self.assertNotIn("format", data["rule_fields"])
+        self.assertEqual(sorted(data["exit_codes"]), ["0", "1", "130", "2"])
+        self.assertEqual(first, _main(["help", "--json"])[1])
+        self.assertNotIn("\x1b", first)
+
+    def test_help_dash_dash_mode_is_a_per_mode_form(self):
+        rc, out = _main(["--help", "stats"])
+        self.assertEqual(rc, 0)
+        self.assertIn("--stats", out)
+        rc, err_buf = _err_main(["--help", "wat"])
+        self.assertEqual(rc, 2)
+        self.assertIn("unknown help topic", err_buf)
+
+
+def _err_main(argv):
+    buf = io.StringIO()
+    with contextlib.redirect_stderr(buf):
+        rc = cli.main(argv)
+    return rc, buf.getvalue()

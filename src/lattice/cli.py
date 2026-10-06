@@ -54,6 +54,10 @@ from lattice.modes.audit import (
     run_verify_replaygain,
 )
 from lattice.modes.clean import run_clean
+from lattice.modes.foldermap import revert as revert_genremap
+from lattice.modes.foldermap import run_genremap
+from lattice.modes.genretidy import run_genre_tidy_apply, run_genre_tidy_build
+from lattice.modes.ingest import run_ingest
 from lattice.modes.integrity import (
     run_flac_mode,
     run_mp3_mode,
@@ -70,9 +74,6 @@ from lattice.modes.library import (
     write_snapshot,
 )
 from lattice.modes.lyrics import run_lyrics
-from lattice.modes.genretidy import run_genre_tidy_apply, run_genre_tidy_build
-from lattice.modes.ingest import run_ingest
-from lattice.modes.foldermap import revert as revert_genremap, run_genremap
 from lattice.modes.playlists import (
     RuleError,
     compile_where,
@@ -83,7 +84,6 @@ from lattice.modes.replaygain import run_replaygain
 from lattice.modes.retag import run_retag
 from lattice.modes.stats import run_stats
 from lattice.tui import interactive_menu
-
 
 # Mode-flag dests that accept --where: the scanner-driven exports, the
 # tag-reading audits, and the album-granular write targeting. Anything not
@@ -280,6 +280,10 @@ def main(argv: list[str] | None = None) -> int:
         if len(argv) == 1:
             print(lattice_help.render_index())
             return 0
+        if argv[1] == "--json":
+            # the machine surface: the whole registry as JSON, never colored
+            print(lattice_help.help_json())
+            return 0
         dest = lattice_help.resolve_topic(argv[1])
         if dest is None:
             print(
@@ -291,7 +295,22 @@ def main(argv: list[str] | None = None) -> int:
         print(lattice_help.render_mode(dest))
         return 0
     if "-h" in argv or "--help" in argv:
+        h = "-h" if "-h" in argv else "--help"
+        hi = argv.index(h)
         dest = lattice_help.single_mode_dest(argv)
+        if dest is None and hi + 1 < len(argv) and not argv[hi + 1].startswith("-"):
+            # `--help MODE` is a per-mode form too: the token after the help
+            # flag is a topic candidate, and a non-topic word is a typo worth
+            # surfacing rather than silently printing the index
+            candidate = argv[hi + 1]
+            dest = lattice_help.resolve_topic(candidate)
+            if dest is None:
+                print(
+                    f'error: unknown help topic "{candidate}"; '
+                    '"lattice --help" lists the modes',
+                    file=sys.stderr,
+                )
+                return 2
         if dest is not None:
             print(lattice_help.render_mode(dest))
         else:

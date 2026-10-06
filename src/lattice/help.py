@@ -184,15 +184,19 @@ SHARED: dict[str, Opt] = {
         "Scope the run to tracks matching a playlist-rule expression (the "
         "--playlist grammar: rating, genre, artist, album, title, duration, "
         "bitrate). On targeting modes a rule matching any track selects the "
-        "whole album; modes that never read tags refuse --where.",
+        "whole album. Accepted by: --library, --ai-library, --all-wings, "
+        "--ai-wings, --stats, --auditTags, --auditAlbums, --auditBitrate, "
+        "--auditReplayGain, --healthScore, --duplicates, --genreTidy-build, "
+        "--genreTidy-apply, --genreMap, --replayGain; everywhere else --where "
+        "is a usage error (exit 2).",
     ),
     "json": Opt(
         "json",
         "--json",
         "Machine-readable output: an audit/stats run writes the JSON report "
-        "envelope, a write run ends with a JSON summary (counts, dry_run vs "
-        "committed). .txt stays the default; --output - pipes. Unsupported "
-        "modes refuse --json.",
+        "envelope {mode, root, findings, payload}, a write run ends with a "
+        "JSON summary {mode, root, dry_run, counts}. .txt stays the default; "
+        "--output - pipes. Unsupported modes refuse --json.",
     ),
     "fail_on_findings": Opt(
         "fail_on_findings",
@@ -290,7 +294,7 @@ MODES: tuple[Mode, ...] = (
         "roots. Prints to the terminal unless --output names a file; --where "
         "describes the matching subset instead of the whole library.",
         usage="lattice --stats [ROOT] [--output PATH] [--where EXPR]",
-        example="lattice --stats ~/Music --where \"format == 'FLAC'\"",
+        example="lattice --stats ~/Music --where \"genre == 'Classical'\"",
         shared=("root", "output", "layout", "where", "json", "quiet"),
         output_note="Path for the report; omit it to print to the terminal.",
     ),
@@ -317,7 +321,7 @@ MODES: tuple[Mode, ...] = (
         "(size and mtime preserved at a new path), RETAGGED (per-field old -> "
         "new), RESIZED, ADDED, and REMOVED files.",
         usage="lattice --diff SNAPSHOT [ROOT] [--output PATH]",
-        example="lattice --diff ~/Music before-reorg.tsv",
+        example="lattice --diff before-reorg.tsv ~/Music",
         shared=("root", "output", "quiet"),
         output_default=DEFAULT_SNAPSHOT_DIFF_OUTPUT,
     ),
@@ -328,7 +332,8 @@ MODES: tuple[Mode, ...] = (
         summary="Smart .m3u playlist from a rule",
         detail="Generate an .m3u from a rule in the playlist grammar "
         "(fields: rating, genre, artist, album, title, duration, bitrate; "
-        "combinable with and/or and comparisons).",
+        "combinable with and/or and comparisons; there is no format field ("
+        "formats are not tags; --stats breaks those down natively).",
         usage="lattice --playlist [ROOT] --rule EXPR [--output PATH]",
         example="lattice --playlist ~/Music --rule \"rating >= 4 and genre == 'Jazz'\"",
         shared=("root", "output", "layout", "quiet"),
@@ -1121,6 +1126,49 @@ def resolve_topic(token: str) -> str | None:
     return _TOPIC_ALIASES.get(_key(token))
 
 
+EXIT_CODES = {
+    "0": "clean",
+    "1": "audit findings, only with --fail-on-findings",
+    "2": "usage error or missing dependency",
+    "130": "interrupted",
+}
+
+# The single rule grammar, stated once: help text, --where, --playlist, and
+# the machine surface all describe these seven fields and no others.
+RULE_FIELDS = ("rating", "genre", "artist", "album", "title", "duration", "bitrate")
+
+
+def help_json() -> str:
+    """The whole surface as machine-readable JSON, generated from the
+    registry (the same source the rendered pages read). Never colored."""
+    import json
+
+    payload = {
+        "tool": "lattice",
+        "version": VERSION,
+        "usage": "lattice MODE [ROOT] [options] | lattice help MODE",
+        "exit_codes": EXIT_CODES,
+        "rule_fields": list(RULE_FIELDS),
+        "modes": [
+            {
+                "dest": m.dest,
+                "flag": m.flag,
+                "category": m.category,
+                "summary": m.summary,
+                "detail": " ".join(m.detail.split()),
+                "usage": m.usage,
+                "example": m.example,
+            }
+            for m in MODES
+        ],
+        "shared_options": [
+            {"dest": key, "flag": opt.flag, "text": " ".join(opt.text.split())}
+            for key, opt in SHARED.items()
+        ],
+    }
+    return json.dumps(payload, indent=1, sort_keys=True)
+
+
 def single_mode_dest(argv: list[str]) -> str | None:
     """The one mode flag present in argv, if exactly one is; None when none
     or several are (several would be a mutually-exclusive error anyway)."""
@@ -1232,6 +1280,14 @@ def render_index(color: bool | None = None) -> str:
         + "    (try: "
         + st.tokens("lattice help clean")
         + ")"
+    )
+    lines.append(
+        "  " + st.tokens("lattice help --json") + "    the whole surface as JSON"
+    )
+    lines.append("")
+    lines.append(
+        "exit codes: 0 clean; 1 audit findings (only with --fail-on-findings); "
+        "2 usage or missing dependency; 130 interrupted"
     )
     return "\n".join(lines)
 
