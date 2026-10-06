@@ -49,6 +49,9 @@ Layer-based package under `src/lattice/`:
 ```
 cli.py     argparse + dispatch: every mode flag maps to one function call
 tui.py     curses full-screen menu shown when invoked with no args
+help.py    the two-level help surface: the categorized --help mode index and
+           the per-mode `lattice help MODE` pages, all rendered from one
+           registry; cli.py intercepts the help paths before argparse
 tags.py    get_all_tags() → TagBundle, single MutagenFile() open per file
 norm.py    pure name/tag normalization rules (the fold tables, normalize_name,
            canonical_render, tag_fold, tag_dedupe, canon_track_artist); zero I/O

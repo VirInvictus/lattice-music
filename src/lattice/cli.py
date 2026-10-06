@@ -3,6 +3,7 @@ import os
 import sys
 from pathlib import Path
 
+from lattice import help as lattice_help
 from lattice.config import (
     DEFAULT_AI_LIBRARY_OUTPUT,
     DEFAULT_ALBUM_CONSISTENCY_OUTPUT,
@@ -143,475 +144,125 @@ _FAIL_MODES = frozenset(
 )
 
 
+class _Parser(argparse.ArgumentParser):
+    # format_help renders the registry index; main() intercepts -h/--help
+    # before parse_args, so argparse's flat listing is never what a user
+    # sees. Help text lives in lattice/help.py, not on these arguments.
+    def format_help(self) -> str:
+        from lattice import help as lattice_help
+
+        return lattice_help.render_index()
+
+
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(
+    p = _Parser(
         prog="lattice",
         description="Filesystem-first music library toolkit: trees, integrity, "
         "audits, content-hash duplicate detection, health score, write modes",
+        usage="lattice MODE [ROOT] [options]  (lattice --help for the index)",
     )
     p.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
     group = p.add_mutually_exclusive_group()
-    group.add_argument("--library", action="store_true", help="Generate library tree")
+    group.add_argument("--library", action="store_true")
+    group.add_argument("--ai-library", dest="ai_library", action="store_true")
+    group.add_argument("--all-wings", dest="all_wings", action="store_true")
+    group.add_argument("--ai-wings", dest="ai_wings", action="store_true")
+    group.add_argument("--testFLAC", action="store_true")
+    group.add_argument("--testMP3", action="store_true")
+    group.add_argument("--testOpus", action="store_true")
+    group.add_argument("--testWAV", action="store_true")
+    group.add_argument("--testWMA", action="store_true")
+    group.add_argument("--extractArt", action="store_true")
+    group.add_argument("--missingArt", action="store_true")
+    group.add_argument("--auditArtQuality", action="store_true")
     group.add_argument(
-        "--ai-library",
-        dest="ai_library",
-        action="store_true",
-        help="Generate token-efficient library for AI recommendations",
+        "--auditArtMismatch", dest="audit_art_mismatch", action="store_true"
+    )
+    group.add_argument("--duplicates", action="store_true")
+    group.add_argument(
+        "--auditAudioDupes", dest="audit_audio_dupes", action="store_true"
+    )
+    group.add_argument("--auditTags", action="store_true")
+    group.add_argument(
+        "--auditJunkFrames", dest="audit_junk_frames", action="store_true"
+    )
+    group.add_argument("--auditAlbums", dest="audit_albums", action="store_true")
+    group.add_argument("--auditBitrate", action="store_true")
+    group.add_argument("--auditReplayGain", action="store_true")
+    group.add_argument(
+        "--verifyReplayGain", dest="verify_replaygain", action="store_true"
+    )
+    group.add_argument("--auditStrays", dest="audit_strays", action="store_true")
+    group.add_argument("--healthScore", dest="health_score", action="store_true")
+    group.add_argument("--health", action="store_true")
+    group.add_argument("--playlist", action="store_true")
+    group.add_argument("--checkPlaylists", dest="check_playlists", action="store_true")
+    group.add_argument("--stats", action="store_true")
+    group.add_argument("--snapshot", action="store_true")
+    group.add_argument("--diff", dest="diff_snapshot", metavar="SNAPSHOT", default=None)
+    group.add_argument("--clean", action="store_true")
+    group.add_argument("--apestrip", action="store_true")
+    group.add_argument("--lyrics", action="store_true")
+    group.add_argument("--replayGain", dest="replaygain", action="store_true")
+    group.add_argument("--retag", action="store_true")
+    group.add_argument(
+        "--genreTidy-build", dest="genre_tidy_build", action="store_true"
     )
     group.add_argument(
-        "--all-wings",
-        dest="all_wings",
-        action="store_true",
-        help="Generate separate library files for each genre",
+        "--genreTidy-apply", dest="genre_tidy_apply", action="store_true"
     )
-    group.add_argument(
-        "--ai-wings",
-        dest="ai_wings",
-        action="store_true",
-        help="Generate separate AI-friendly library files for each genre",
-    )
-    group.add_argument("--testFLAC", action="store_true", help="Verify FLAC files")
-    group.add_argument("--testMP3", action="store_true", help="Verify MP3 files")
-    group.add_argument(
-        "--testOpus", action="store_true", help="Verify Opus files via FFmpeg decode"
-    )
-    group.add_argument(
-        "--testWAV", action="store_true", help="Verify WAV files via FFmpeg decode"
-    )
-    group.add_argument(
-        "--testWMA", action="store_true", help="Verify WMA files via FFmpeg decode"
-    )
-    group.add_argument(
-        "--extractArt", action="store_true", help="Extract embedded cover art to folder"
-    )
-    group.add_argument(
-        "--missingArt", action="store_true", help="Report directories missing cover art"
-    )
-    group.add_argument(
-        "--auditArtQuality",
-        action="store_true",
-        help="Report extracted/folder covers below a resolution threshold",
-    )
-    group.add_argument(
-        "--auditArtMismatch",
-        dest="audit_art_mismatch",
-        action="store_true",
-        help="Compare embedded art against folder covers: byte-identical, "
-        "same-pixels re-encodes, and real mismatches",
-    )
-    group.add_argument(
-        "--duplicates",
-        action="store_true",
-        help="Four-section dupe report: exact albums, within-folder multi-format, similar names, track-level",
-    )
-    group.add_argument(
-        "--auditAudioDupes",
-        dest="audit_audio_dupes",
-        action="store_true",
-        help="Content-hash duplicate detection: exact sha256, audio-stream, "
-        "and head/tail sampled matches (catches retagged or renamed dupes)",
-    )
-    group.add_argument(
-        "--auditTags", action="store_true", help="Report files with incomplete tags"
-    )
-    group.add_argument(
-        "--auditJunkFrames",
-        dest="audit_junk_frames",
-        action="store_true",
-        help="Audit MP3 ID3v2 tags for junk frames: obsolete v2.3 leftovers, "
-        "empty text frames, duplicate unique frames, and nonstandard "
-        "iTunes-era frames",
-    )
-    group.add_argument(
-        "--auditAlbums",
-        dest="audit_albums",
-        action="store_true",
-        help="Per-album consistency audit: mixed codecs, track-number gaps and "
-        "duplicates, and missing or divergent year tags",
-    )
-    group.add_argument(
-        "--auditBitrate",
-        action="store_true",
-        help="Report files below a certain bitrate floor",
-    )
-    group.add_argument(
-        "--auditReplayGain",
-        action="store_true",
-        help="Report per-album ReplayGain coverage (missing, partial, no album gain)",
-    )
-    group.add_argument(
-        "--verifyReplayGain",
-        dest="verify_replaygain",
-        action="store_true",
-        help="Verify stored ReplayGain values against a fresh read-only rsgain "
-        "measurement (requires rsgain; nothing is written)",
-    )
-    group.add_argument(
-        "--auditStrays",
-        dest="audit_strays",
-        action="store_true",
-        help="Report audio outside the layout's album depth, loose tracks, "
-        "hidden-dir audio, and unrecognized non-audio files in album folders",
-    )
-    group.add_argument(
-        "--healthScore",
-        dest="health_score",
-        action="store_true",
-        help="Per-album health score aggregating tag completeness, "
-        "ReplayGain coverage, art, and the bitrate floor",
-    )
-    group.add_argument(
-        "--health",
-        action="store_true",
-        help="One-screen digest of finding counts across the existing lenses "
-        "(tags, bitrate, ReplayGain, art, strays, playlists, duplicates, "
-        "worst health scores) from a single walk, with pointers to the full "
-        "reports; read-only, always exits 0",
-    )
-    group.add_argument(
-        "--playlist",
-        action="store_true",
-        help="Generate a smart .m3u playlist based on a rule",
-    )
-    group.add_argument(
-        "--checkPlaylists",
-        dest="check_playlists",
-        action="store_true",
-        help="Verify the library's .m3u playlists: missing #EXTM3U headers and "
-        "entries whose target no longer exists",
-    )
-    group.add_argument(
-        "--stats", action="store_true", help="Library-wide statistics summary"
-    )
-    group.add_argument(
-        "--snapshot",
-        action="store_true",
-        help="Write a per-file library snapshot TSV (the --diff baseline)",
-    )
-    group.add_argument(
-        "--diff",
-        dest="diff_snapshot",
-        metavar="SNAPSHOT",
-        default=None,
-        help="Replay a --snapshot TSV against the current tree: moved, "
-        "retagged, resized, added, and removed files",
-    )
-    group.add_argument(
-        "--clean",
-        action="store_true",
-        help="Consolidate fragmented album folders; optionally normalize names "
-        "and tags (write mode: dry-run by default, --apply to write)",
-    )
-    group.add_argument(
-        "--apestrip",
-        action="store_true",
-        help="Strip stray APEv2 tags from MP3s (write mode: dry-run by "
-        "default, --apply to write)",
-    )
-    group.add_argument(
-        "--lyrics",
-        action="store_true",
-        help="Fetch synced lyrics from LRCLIB into .lrc sidecars (write "
-        "mode: dry-run by default, --apply to write)",
-    )
-    group.add_argument(
-        "--replayGain",
-        dest="replaygain",
-        action="store_true",
-        help="Scan and write ReplayGain 2.0 tags album-by-album via rsgain "
-        "(write mode: dry-run by default, --apply to write; requires rsgain)",
-    )
-    group.add_argument(
-        "--retag",
-        action="store_true",
-        help="Overwrite genre tags on one album directory: --retag DIR GENRE "
-        "[GENRE...] (write mode: dry-run by default, --apply to write; "
-        "--strip-junk strips junk ID3 frames instead and takes no genres)",
-    )
-    group.add_argument(
-        "--genreTidy-build",
-        dest="genre_tidy_build",
-        action="store_true",
-        help="Scan (read-only) and write the artist-to-genre TSV authority "
-        "map (--genreTidy-apply reconciles the library to it)",
-    )
-    group.add_argument(
-        "--genreTidy-apply",
-        dest="genre_tidy_apply",
-        action="store_true",
-        help="Retag albums whose genre disagrees with the authority map "
-        "(write mode: dry-run by default, --apply to write)",
-    )
-    group.add_argument(
-        "--ingest",
-        action="store_true",
-        help="Run the import ritual over one root: genreMap, then apestrip, "
-        "then clean --all, then the post-state health digest (dry-run by "
-        "default, --apply to run the stages; each stage keeps its own log)",
-    )
-    group.add_argument(
-        "--genreMap",
-        dest="genre_map",
-        action="store_true",
-        help="Restructure a flat Artist/Album library into Genre/Artist/Album "
-        "(write mode: dry-run by default, --apply to move; --revert replays "
-        "the manifest TSV in reverse)",
-    )
+    group.add_argument("--ingest", action="store_true")
+    group.add_argument("--genreMap", dest="genre_map", action="store_true")
 
+    p.add_argument("--root", action="append", default=None, metavar="DIR")
+    p.add_argument("pos_root", nargs="?", default=None)
+    p.add_argument("retag_genres", nargs="*", default=[])
+    p.add_argument("--output", default=None)
+    p.add_argument("--rule", default="")
+    p.add_argument("--where", default=None, metavar="EXPR")
+    p.add_argument("--layout", default=None)
+    p.add_argument("--min-art-res", type=int, default=500)
+    p.add_argument("--min-bitrate", type=int, default=192)
     p.add_argument(
-        "--root",
-        action="append",
-        default=None,
-        metavar="DIR",
-        help="Root directory; repeat --root to scan several libraries together "
-        "(default: read from config or current dir)",
+        "--target-lufs", dest="target_lufs", type=float, default=None, metavar="N"
     )
-    p.add_argument(
-        "pos_root", nargs="?", default=None, help="Root directory (positional fallback)"
-    )
-    p.add_argument(
-        "retag_genres",
-        nargs="*",
-        default=[],
-        help="--retag: one or more genres to apply to the directory (take "
-        "care to quote multi-word genres; omitted with --strip-junk)",
-    )
-    p.add_argument("--output", default=None, help="Output path")
-    p.add_argument(
-        "--rule",
-        default="",
-        help="Smart playlist rule (e.g. \"rating >= 4 and genre == 'Jazz'\")",
-    )
-    p.add_argument(
-        "--where",
-        default=None,
-        metavar="EXPR",
-        help="Scope the scan to tracks matching the rule expression (the "
-        "--playlist grammar: rating, genre, artist, album, title, duration, "
-        "bitrate). Applies to the library exports, --stats, the tag-reading "
-        "audits, and album-granular targeting of --genreTidy-*, --genreMap, "
-        "and --replayGain (a rule matching ANY track selects the whole album)",
-    )
-    p.add_argument(
-        "--layout",
-        default=None,
-        help="Directory structure pattern for extracting tags from path "
-        "(default: the `layout` config key, or {artist}/{album}). "
-        "Use {genre}/{artist}/{album} for a genre-first library.",
-    )
-    p.add_argument(
-        "--min-art-res",
-        type=int,
-        default=500,
-        help="Minimum resolution in pixels for --auditArtQuality (default: 500)",
-    )
-    p.add_argument(
-        "--min-bitrate",
-        type=int,
-        default=192,
-        help="Minimum bitrate in kbps for --auditBitrate (default: 192)",
-    )
-    p.add_argument(
-        "--target-lufs",
-        dest="target_lufs",
-        type=float,
-        default=None,
-        metavar="N",
-        help="ReplayGain target loudness in LUFS. --verifyReplayGain: the "
-        "target the stored replaygain_* values are checked against (default: "
-        "-18, the ReplayGain 2.0 reference; verify a -14-targeted library at "
-        "-14). --replayGain: writing at a custom target switches rsgain to "
-        "custom mode (default: the 89 dB standard). Applies to "
-        "replaygain_*-tagged files; R128-tagged files verify at the R128 -23 "
-        "LUFS baseline their format implies either way",
-    )
-    p.add_argument(
-        "--tolerance",
-        type=float,
-        default=0.5,
-        help="Allowed |stored - expected| in dB for --verifyReplayGain (default: 0.5)",
-    )
-    p.add_argument(
-        "--workers", type=int, default=4, help="Parallel workers (integrity modes)"
-    )
-    p.add_argument(
-        "--threads",
-        type=int,
-        default=1,
-        help="--replayGain: parallel scan threads passed to rsgain (-m); "
-        "default 1 (standard mode only; ignored with --target-lufs)",
-    )
-    p.add_argument(
-        "--skip-tagged",
-        action="store_true",
-        help="--replayGain: skip albums already fully tagged (track + album "
-        "gain on every file), as a unit",
-    )
-    p.add_argument(
-        "--prefer",
-        choices=["flac", "ffmpeg"],
-        default="flac",
-        help="Preferred tool (FLAC mode)",
-    )
-    p.add_argument("--quiet", action="store_true", help="Minimize output")
-    p.add_argument(
-        "--json",
-        action="store_true",
-        help="Machine-readable output: the stats/audit report becomes a JSON "
-        "document, and a write mode ends with a JSON run summary (counts, "
-        "dry_run vs committed). .txt stays the default; --output - pipes",
-    )
-    p.add_argument(
-        "--fail-on-findings",
-        dest="fail_on_findings",
-        action="store_true",
-        help="Audit modes exit 1 when they have findings (default 0), so a "
-        "cron/CI job can gate on a clean report",
-    )
-    p.add_argument(
-        "--genres", action="store_true", help="Include album genres in library tree"
-    )
-    p.add_argument(
-        "--paths",
-        action="store_true",
-        help="Include absolute directory paths at the album level",
-    )
-    p.add_argument(
-        "--dry-run",
-        dest="dry_run",
-        action="store_true",
-        help="Preview changes without writing (extractArt, clean, apestrip, lyrics)",
-    )
-    p.add_argument(
-        "--apply",
-        action="store_true",
-        help="Write for real (clean, apestrip, lyrics); without it these modes "
-        "only preview",
-    )
-    p.add_argument(
-        "--normalize-names",
-        action="store_true",
-        help="--clean: also rename non-duplicate folders at every depth with "
-        "non-standard characters to their normalized form",
-    )
-    p.add_argument(
-        "--normalize-filenames",
-        action="store_true",
-        help="--clean: also rename audio track files the same way (a distinct "
-        "change from --normalize-names)",
-    )
-    p.add_argument(
-        "--normalize-tags",
-        action="store_true",
-        help="--clean: library-wide typographic tag normalization (Pass 4)",
-    )
-    p.add_argument(
-        "--all",
-        dest="clean_all",
-        action="store_true",
-        help="--clean: run all normalization passes (--normalize-names, "
-        "--normalize-filenames, --normalize-tags)",
-    )
-    p.add_argument(
-        "--keep-metadata",
-        action="store_true",
-        help="--apestrip: before stripping, migrate APE fields not already in "
-        "ID3 into the matching ID3 frame (genre is never migrated, ratings "
-        "never written)",
-    )
-    p.add_argument(
-        "--repair-malformed",
-        action="store_true",
-        help="--apestrip: also repair malformed APE tags mutagen cannot parse, "
-        "by excising the tag bytes directly (verified + atomic)",
-    )
-    p.add_argument(
-        "--strip-junk",
-        action="store_true",
-        help="--retag: strip junk ID3 frames (obsolete v2.3-era, empty text) "
-        "instead of rewriting genres; takes no genre arguments",
-    )
-    p.add_argument(
-        "--map",
-        dest="map_path",
-        default=None,
-        metavar="FILE",
-        help="--genreTidy-build / --genreTidy-apply: authority-map path "
-        "(default: <root>/genre_map.tsv; the repo ships a maintained map as "
-        "artist_genre_defaults.tsv)",
-    )
-    p.add_argument(
-        "--baseline",
-        metavar="SNAPSHOT",
-        default=None,
-        help="--ingest: a --snapshot TSV taken before the import; the summary "
-        "then points at a diff report showing exactly what the ritual changed",
-    )
-    p.add_argument(
-        "--revert",
-        metavar="MANIFEST",
-        default=None,
-        help="--genreMap: replay a run's manifest TSV in reverse (dry-run by "
-        "default; add --apply to execute the restore)",
-    )
-    p.add_argument(
-        "--only-genre",
-        action="append",
-        metavar="GENRE",
-        help="--genreMap: restrict the plan to this genre (repeatable), for a "
-        "staged rollout",
-    )
-    p.add_argument(
-        "--staging",
-        default=None,
-        metavar="DIR",
-        help="--genreMap: name of a top-level staging inbox whose Artist/Album "
-        "contents are filed into the real taxonomy instead of read as a genre "
-        "(default: 'Unfiltered'; pass an empty string to disable)",
-    )
-    p.add_argument(
-        "--refile-mismatched",
-        action="store_true",
-        help="--genreMap: move an already-organized album whose tag genre "
-        "disagrees with its genre folder to the tag's folder (still gated by "
-        "the existing genre vocabulary)",
-    )
-    p.add_argument(
-        "--allow-new-genre",
-        action="store_true",
-        help="--genreMap: permit creating a new top-level genre folder when an "
-        "album's genre isn't one the library already uses",
-    )
-    p.add_argument(
-        "--lyrics-force",
-        action="store_true",
-        help="--lyrics: re-fetch and overwrite existing .lrc sidecars (default: "
-        "tracks with a sidecar are skipped)",
-    )
-    p.add_argument(
-        "--lyrics-sleep",
-        type=float,
-        default=0.5,
-        help="--lyrics: seconds to sleep between LRCLIB requests (default: 0.5)",
-    )
-    p.add_argument(
-        "--resume",
-        action="store_true",
-        help="--testFLAC / --testMP3: reuse the verdicts recorded by an "
-        "interrupted run (<output>.progress.json) and scan only the remaining "
-        "files; finishing a scan clears the state",
-    )
-
+    p.add_argument("--tolerance", type=float, default=0.5)
+    p.add_argument("--workers", type=int, default=4)
+    p.add_argument("--threads", type=int, default=1)
+    p.add_argument("--skip-tagged", action="store_true")
+    p.add_argument("--prefer", choices=["flac", "ffmpeg"], default="flac")
+    p.add_argument("--quiet", action="store_true")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--fail-on-findings", dest="fail_on_findings", action="store_true")
+    p.add_argument("--genres", action="store_true")
+    p.add_argument("--paths", action="store_true")
+    p.add_argument("--dry-run", dest="dry_run", action="store_true")
+    p.add_argument("--apply", action="store_true")
+    p.add_argument("--normalize-names", action="store_true")
+    p.add_argument("--normalize-filenames", action="store_true")
+    p.add_argument("--normalize-tags", action="store_true")
+    p.add_argument("--all", dest="clean_all", action="store_true")
+    p.add_argument("--keep-metadata", action="store_true")
+    p.add_argument("--repair-malformed", action="store_true")
+    p.add_argument("--strip-junk", action="store_true")
+    p.add_argument("--map", dest="map_path", default=None, metavar="FILE")
+    p.add_argument("--baseline", metavar="SNAPSHOT", default=None)
+    p.add_argument("--revert", metavar="MANIFEST", default=None)
+    p.add_argument("--only-genre", action="append", metavar="GENRE")
+    p.add_argument("--staging", default=None, metavar="DIR")
+    p.add_argument("--refile-mismatched", action="store_true")
+    p.add_argument("--allow-new-genre", action="store_true")
+    p.add_argument("--lyrics-force", action="store_true")
+    p.add_argument("--lyrics-sleep", type=float, default=0.5)
+    p.add_argument("--resume", action="store_true")
     p.add_argument(
         "--only-errors",
         dest="only_errors",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Write only errors/warns (MP3/Opus/WAV/WMA modes)",
     )
-
-    p.add_argument("--ffmpeg", default=None, help="Path to ffmpeg")
-    p.add_argument("--verbose", action="store_true", help="Verbose output")
+    p.add_argument("--ffmpeg", default=None)
+    p.add_argument("--verbose", action="store_true")
     return p
 
 
@@ -620,6 +271,32 @@ def main(argv: list[str] | None = None) -> int:
         argv = sys.argv[1:]
     if len(argv) == 0:
         return interactive_menu()
+
+    # The help surface is intercepted before argparse: the index and the
+    # per-mode pages render from the registry in lattice/help.py, their only
+    # home. `lattice help MODE` and `MODE --help` land here; bare -h/--help
+    # prints the index (exit 0, argparse's own convention).
+    if argv[0].lower() == "help":
+        if len(argv) == 1:
+            print(lattice_help.render_index())
+            return 0
+        dest = lattice_help.resolve_topic(argv[1])
+        if dest is None:
+            print(
+                f'error: unknown help topic "{argv[1]}"; '
+                '"lattice --help" lists the modes',
+                file=sys.stderr,
+            )
+            return 2
+        print(lattice_help.render_mode(dest))
+        return 0
+    if "-h" in argv or "--help" in argv:
+        dest = lattice_help.single_mode_dest(argv)
+        if dest is not None:
+            print(lattice_help.render_mode(dest))
+        else:
+            print(lattice_help.render_index())
+        return 0
 
     try:
         args = build_parser().parse_args(argv)

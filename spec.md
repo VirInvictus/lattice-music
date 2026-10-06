@@ -101,6 +101,14 @@ repeated path is de-duped). An optional `library_roots` array in the config
 supplies default roots; the first-run prompt persists only the single
 `library_root`.
 
+The help surface is two-level: `lattice --help` prints a categorized mode
+index (the same grouping the TUI menu uses), and `lattice help MODE` (or
+`MODE --help`) prints a full page for one mode with its own options, the
+shared options that apply to it, and a worked example; an unknown topic
+exits 2. Both render from one registry (`lattice/help.py`) whose option
+applicability is pinned against the parser and the mode-support sets by the
+test suite. Mode dispatch itself is unchanged.
+
 ---
 
 ## 3. Modes
