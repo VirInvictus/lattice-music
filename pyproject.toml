@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "lattice-music"
-version = "6.0.0"
+version = "6.1.0"
 description = "Filesystem-first music library toolkit: trees, integrity, audits, content-hash duplicate detection, health score, write modes"
 readme = "README.md"
 requires-python = ">=3.14"
