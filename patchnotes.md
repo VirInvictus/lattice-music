@@ -1,5 +1,54 @@
 # lattice-music Patch Notes
 
+## v6.3.0 (2026-10-06)
+
+### The 12-agent audit: the exit taxonomy tells the truth, --output - pipes
+
+Three waves of four lenses audited this help surface. The registry
+verified provably synchronized with the parser (zero misses, zero
+fabricated flags or fields); the defects were the exit taxonomy, two
+broken machine promises, and the thin machine surface. Approved fixes:
+
+- **--output - actually pipes now.** Every report writer abspath-ed the
+  dash into a literal file named '-' in the working directory (dead
+  '!= "-"' guards throughout showed piping was the intent); all 21
+  sites go through utils.resolve_output, which passes the dash through
+  to open_report. --stats already handled it and is unchanged.
+- **The exit legend tells the truth**: 1 is findings or failure (the
+  integrity scans exit 1 on any CORRUPT file with no flag;
+  --fail-on-findings does not apply to them and is refused with exit
+  2; write modes on run failure; exports when nothing matched; invalid
+  rules), not "audit findings only with --fail-on-findings". All five
+  integrity pages name the tiers (CORRUPT / SUSPECT / METADATA / OK)
+  and their exit rule.
+- **Behavior: an invalid --where/--playlist rule is a usage error
+  (exit 2)**, matching every other malformed-input refusal; the old
+  exit-1 pin flipped with the behavior.
+- **Behavior: the dry-run JSON summaries exist.** --replayGain --json
+  (the default preview) and --retag --strip-junk --json printed
+  nothing while the shared --json text advertises
+  {mode, root, dry_run, counts} on every write run; both emit it now.
+- **The two dry-run-promise exceptions are labeled**: --extractArt's
+  index summary says WRITES by default (--apply silently ignored) and
+  its page notes skip-existing; --genreTidy-build's page says the map
+  write happens on every run (no dry-run/apply gate).
+- **help --json is a real agent surface**: per-mode own_options,
+  shared applicability, and output_default join the dump, plus
+  rule_grammar (fields with units, operators, connectors, the
+  no-format-field note) and integrity_tiers.
+- The grammar carries its real operators (== != < <= > >= in / not in,
+  and/or/not, parentheses, arithmetic like bitrate / duration > 200)
+  and units (duration seconds, bitrate kbps, rating 0-5, exact
+  case-sensitive strings); --replayGain scopes the rsgain requirement
+  to --apply (previews never needed it); the junk-frame page drops the
+  phantom duplicate-frames class; the --playlist usage admits --rule
+  is optional (omit for all tracks); --all-wings usage shows --where;
+  --ingest states the non-TTY auto-proceed; the --apply entry states
+  the TTY-confirm convention and the --root entry the config-file path
+  with the non-interactive cwd fallback.
+
+7 pins added or updated (769 total).
+
 ## v6.2.0 (2026-10-06)
 
 ### The AI-probe batch: contradictions fixed, contracts stated, help --json

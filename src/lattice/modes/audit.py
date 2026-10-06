@@ -11,6 +11,8 @@ from collections.abc import Sequence
 from difflib import SequenceMatcher
 from typing import NamedTuple
 
+from vir_tui import core as ui
+
 from lattice.config import (
     AUDIO_EXTENSIONS,
     DEFAULT_ALBUM_CONSISTENCY_OUTPUT,
@@ -27,6 +29,7 @@ from lattice.config import (
     get_layout,
 )
 from lattice.modes.artwork import _get_image_size, _has_embedded_art
+from lattice.modes.playlists import _find_playlists, check_playlist
 from lattice.norm import QUOTE_DASH_FOLD as _NORM_QUOTE_DASH_FOLD
 from lattice.tags import (
     HAVE_MUTAGEN_BASE,
@@ -38,8 +41,6 @@ from lattice.tags import (
     read_replaygain,
     read_replaygain_values_with_convention,
 )
-from vir_tui import core as ui
-
 from lattice.utils import (
     _find_cover_file,
     _make_pbar,
@@ -47,14 +48,13 @@ from lattice.utils import (
     count_audio_files,
     is_audio,
     iter_audio_dirs,
-    map_concurrent,
     json_report,
+    map_concurrent,
     open_report,
     read_tags_concurrent,
     relpath_under,
     resolve_output,
 )
-from lattice.modes.playlists import _find_playlists, check_playlist
 
 # =====================================
 # Mode: Duplicate detection
@@ -2521,14 +2521,12 @@ def run_stray_audit(
         for title, rows, note in sections:
             out_file.write(f"== {title} ({len(rows)}) ==\n")
             out_file.write(f"   ({note})\n")
-            for row in rows:
-                out_file.write(f"  {row}\n")
+            out_file.writelines(f"  {row}\n" for row in rows)
             out_file.write("\n")
 
         out_file.write(f"== NON-AUDIO FILES IN ALBUM FOLDERS ({len(junk)}) ==\n")
         out_file.write("   (outside the audio, image, and sidecar ignore sets)\n")
-        for row in junk:
-            out_file.write(f"  {row}\n")
+        out_file.writelines(f"  {row}\n" for row in junk)
 
     if not quiet:
         print(f"\nAudited {scanned} audio files under: {', '.join(roots)}")

@@ -514,8 +514,7 @@ def write_snapshot(
     with open(out_path, "w", encoding="utf-8") as f:
         f.write("# lattice snapshot v1\n")
         f.write("\t".join(_SNAPSHOT_COLUMNS) + "\n")
-        for path in sorted(rows):
-            f.write(_format_row(rows[path]) + "\n")
+        f.writelines(_format_row(rows[path]) + "\n" for path in sorted(rows))
 
     if not quiet:
         print(f"Snapshot ({len(rows)} files) written to: {out_path}")
@@ -679,8 +678,7 @@ def diff_snapshot(
             f.write("-" * 40 + "\n")
             for path, changes in retagged:
                 f.write(f"  {relpath_under(path, roots)}\n")
-                for change in changes:
-                    f.write(f"    {change}\n")
+                f.writelines(f"    {change}\n" for change in changes)
             f.write("\n")
         if resized:
             f.write(f"RESIZED ({len(resized)})\n")

@@ -450,7 +450,7 @@ The filesystem is the source of truth: lattice-music walks the tree on every inv
 <summary>The mode index (<code>lattice --help</code>)</summary>
 
 ```
-lattice 6.2.0 - filesystem-first music library toolkit
+lattice 6.3.0 - filesystem-first music library toolkit
 
 usage: lattice MODE [ROOT] [options]
        lattice help MODE    full help for one mode
@@ -477,7 +477,9 @@ INTEGRITY (decode checks)
   --testWMA   Decode-verify WMA files via ffmpeg
 
 ARTWORK
-  --extractArt        Extract embedded cover art to folders
+  --extractArt        Extract embedded cover art to folders (WRITES by default:
+                      the only mode whose default is to write; --dry-run
+                      previews; --apply is silently ignored here)
   --missingArt        Report album folders with no cover art
   --auditArtQuality   Folder covers below a resolution floor
   --auditArtMismatch  Embedded art vs folder cover comparison
@@ -527,7 +529,7 @@ Every mode above has a full help page:
   lattice help MODE    (try: lattice help clean)
   lattice help --json    the whole surface as JSON
 
-exit codes: 0 clean; 1 audit findings (only with --fail-on-findings); 2 usage or missing dependency; 130 interrupted
+exit codes: 0 clean; 1 findings or failure (audits only with --fail-on-findings; integrity scans on any CORRUPT file; write modes on run failure); 2 usage or missing dependency; 130 interrupted
 ```
 
 </details>

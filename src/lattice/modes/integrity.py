@@ -23,9 +23,9 @@ from lattice.utils import (
     has_tool,
     red,
     relpath_under,
+    resolve_output,
     run_proc,
     yellow,
-    resolve_output,
 )
 
 # =====================================
