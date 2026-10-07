@@ -1,5 +1,43 @@
 # lattice-music Patch Notes
 
+## v6.3.1 (2026-10-06)
+
+### The 12-agent docs audit: the exit legend single-sourced, --output - complete
+
+Four lenses (a completeness census, a usability walk including live
+fixture probes, a doc-drift fact-check, and a human+AI dual read)
+audited this documentation set and found the registry provably
+synchronized (zero misses, zero fabricated flags; the README's
+embedded help block byte-identical to live output) with the defects
+concentrated in the exit legend and the machine surface:
+
+- **The exit legend exists in one hand-maintained place now.**
+  EXIT_CODES dropped two false claims (an invalid --where/--playlist
+  rule is exit 2, not 1; exports exit 0 when nothing matches), and the
+  index footer RENDERS FROM EXIT_CODES, so --help, README's embedded
+  block, and help --json can no longer disagree. The README embed was
+  regenerated; its byte-identity is preserved.
+- **--output - piping is complete.** v6.3.0 routed every output path
+  through resolve_output (dash passes through) but 15 writers then
+  bare-opened out_path, still writing a literal file named '-'; all of
+  them go through utils.open_report now, so the documented piping
+  works for every --json/--output mode. Live-verified against the
+  fixture library.
+- The write-mode census is stated once correctly (eight surfaces
+  write; seven are dry-run by default; genreTidy-build writes its map
+  directly), --ingest is counted in the multi-root refusal list, the
+  TUI is described as its nine-entry Maintenance menu with Settings
+  listed, and the --json applicability sentence is scoped (the write
+  modes except --lyrics).
+- The extractArt examples carry the writes-by-default warning inline;
+  SKILL.md's 'remove junk files' fabrication about --clean is
+  corrected; CLAUDE.md's B2 note gets a supersession marker, its
+  layout map gains lyrics.py, and its test count is current; the
+  README Contents gains the four unlisted sections, fixes the broken
+  Help anchor, and drops the doubled </details>.
+
+1 pin updated (769 total).
+
 ## v6.3.0 (2026-10-06)
 
 ### The 12-agent audit: the exit taxonomy tells the truth, --output - pipes
