@@ -323,7 +323,9 @@ class AuditTruthTests(unittest.TestCase):
     def test_exit_legend_names_the_integrity_and_failure_classes(self):
         rc, index = _main(["--help"])
         self.assertEqual(rc, 0)
-        self.assertIn("integrity scans on any CORRUPT file", index)
+        # the footer renders from EXIT_CODES (single source)
+        self.assertIn("the integrity scans exit 1 on any CORRUPT file", index)
+        self.assertIn("an invalid --where/--playlist rule", index)  # exit 2 class
         # the old, falsified legend must not come back
         self.assertNotIn("only with --fail-on-findings); 2 usage", index)
         data = json.loads(_main(["help", "--json"])[1])

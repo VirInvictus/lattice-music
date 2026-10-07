@@ -29,13 +29,14 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from vir_tui import core as ui
+
 from lattice.modes.apestrip import run_apestrip
 from lattice.modes.audit import run_health
 from lattice.modes.clean import run_clean
 from lattice.modes.foldermap import STAGING_DIR, run_genremap
 from lattice.modes.library import diff_snapshot
 from lattice.utils import json_summary
-from vir_tui import core as ui
 
 
 def _confirm(stage: str) -> bool:

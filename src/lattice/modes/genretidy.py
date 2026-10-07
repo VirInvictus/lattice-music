@@ -38,10 +38,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import NamedTuple
 
-from lattice.modes.library import _scan_album_dirs
-from lattice.utils import json_summary
-from lattice.utils import _make_pbar, as_roots, count_audio_files
 from vir_tui import core as ui
+
+from lattice.modes.library import _scan_album_dirs
+from lattice.utils import _make_pbar, as_roots, count_audio_files, json_summary
 
 __version__ = "1.3.0"
 

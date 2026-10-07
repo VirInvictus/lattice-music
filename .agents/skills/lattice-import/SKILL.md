@@ -22,7 +22,7 @@ Run these commands in order on the target directory (e.g., `/mnt/SharedData/Musi
    `lattice --apestrip /mnt/SharedData/Music/Unfiltered --apply`
 
 3. **Clean and Normalize (Crucial Step)**
-   Consolidate fragmented albums, remove junk files, and normalize folder names, filenames, and tags.
+   Consolidate fragmented albums, consolidate fragmented folders and apply the opt-in rename/tag-fold passes, and normalize folder names, filenames, and tags.
    *Important: `--all` turns on the `--normalize-names`, `--normalize-tags`, and `--normalize-filenames` passes; without it `--clean` only consolidates directories.*
    `lattice --clean /mnt/SharedData/Music/Unfiltered --all --apply`
 

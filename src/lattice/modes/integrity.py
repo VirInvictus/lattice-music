@@ -21,6 +21,7 @@ from lattice.utils import (
     as_roots,
     green,
     has_tool,
+    open_report,
     red,
     relpath_under,
     resolve_output,
@@ -339,7 +340,7 @@ def run_flac_mode(
 
     out_path = resolve_output(output, output)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-    with open(out_path, "w", encoding="utf-8") as f:
+    with open_report(out_path) as f:
         f.write("FLAC INTEGRITY REPORT\n")
         f.write(f"Root: {', '.join(roots)}\n")
         f.write(
@@ -661,7 +662,7 @@ def _run_decode_scan(
                 handle.write(f"    {meta}\n")
             handle.write("\n")
 
-    with open(out_path, "w", encoding="utf-8") as f:
+    with open_report(out_path) as f:
         f.write(f"{report_title}\n")
         f.write(f"Root: {', '.join(roots)}\n")
         f.write(

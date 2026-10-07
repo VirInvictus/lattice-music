@@ -43,6 +43,9 @@ from lattice.modes.audit import (
     run_verify_replaygain,
 )
 from lattice.modes.clean import run_clean
+from lattice.modes.foldermap import run_genremap
+from lattice.modes.genretidy import run_genre_tidy_apply, run_genre_tidy_build
+from lattice.modes.ingest import run_ingest
 from lattice.modes.integrity import (
     run_flac_mode,
     run_mp3_mode,
@@ -59,9 +62,6 @@ from lattice.modes.library import (
     write_snapshot,
 )
 from lattice.modes.lyrics import run_lyrics
-from lattice.modes.foldermap import run_genremap
-from lattice.modes.genretidy import run_genre_tidy_apply, run_genre_tidy_build
-from lattice.modes.ingest import run_ingest
 from lattice.modes.playlists import generate_playlist, run_check_playlists
 from lattice.modes.replaygain import run_replaygain
 from lattice.modes.retag import run_retag

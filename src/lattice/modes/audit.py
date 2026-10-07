@@ -770,7 +770,7 @@ def run_audio_dupes(root: str | list[str], output: str, *, quiet: bool = False) 
     out_path = resolve_output(output, DEFAULT_AUDIO_DUPES_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
-    with open(out_path, "w", encoding="utf-8") as f:
+    with open_report(out_path) as f:
         f.write("AUDIO DUPLICATE REPORT\n")
         f.write(f"Root: {', '.join(roots)}\n")
         f.write(
@@ -1680,7 +1680,7 @@ def run_verify_replaygain(
     out_path = resolve_output(output, DEFAULT_REPLAYGAIN_VERIFY_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
-    with open(out_path, "w", encoding="utf-8") as f:
+    with open_report(out_path) as f:
         f.write("REPLAYGAIN VERIFICATION REPORT\n")
         f.write(f"Root: {', '.join(roots)}\n")
         f.write(
@@ -2317,7 +2317,7 @@ def run_junk_frame_audit(
     }
     out_path = resolve_output(output, DEFAULT_JUNK_FRAME_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-    with open(out_path, "w", encoding="utf-8") as f:
+    with open_report(out_path) as f:
         f.write("JUNK ID3 FRAME AUDIT\n")
         f.write(f"Root: {', '.join(roots)}\n")
         f.write(
@@ -2487,7 +2487,7 @@ def run_stray_audit(
     out_path = resolve_output(output, DEFAULT_STRAY_AUDIT_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
-    with open(out_path, "w", encoding="utf-8") as out_file:
+    with open_report(out_path) as out_file:
         out_file.write("STRAY-FILE AUDIT\n")
         out_file.write(f"Root: {', '.join(roots)}\n")
         out_file.write(

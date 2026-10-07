@@ -15,6 +15,7 @@ from lattice.utils import (
     count_audio_files,
     is_audio,
     iter_audio_dirs,
+    open_report,
     parse_layout,
     relpath_under,
     resolve_output,
@@ -242,7 +243,7 @@ def generate_playlist(
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     try:
-        with open(out_path, "w", encoding="utf-8") as f:
+        with open_report(out_path) as f:
             f.write("#EXTM3U\n")
             f.writelines(f"{entry}\n" for entry in playlist_entries)
     except OSError as e:
@@ -343,7 +344,7 @@ def run_check_playlists(
     out_path = resolve_output(output, DEFAULT_PLAYLIST_CHECK_OUTPUT)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
-    with open(out_path, "w", encoding="utf-8") as f:
+    with open_report(out_path) as f:
         f.write("PLAYLIST CHECK REPORT\n")
         f.write(f"Root: {', '.join(roots)}\n")
         f.write(

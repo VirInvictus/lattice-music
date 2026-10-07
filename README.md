@@ -25,9 +25,10 @@ A CLI/TUI toolkit for music collectors who manage their own libraries. lattice-m
 - [Features](#features) · [Sample output](#sample-output)
 - [Installation](#installation) · [Requirements](#requirements)
 - [Usage](#usage)
+- [Library health digest](#library-health-digest) · [Machine output](#machine-output) · [The `--where` selector](#the---where-selector)
 - Modes: [Write modes](#write-modes) · [AI library export](#ai-library-export) · [Genre wings](#genre-wings) · [Multi-root scanning](#multi-root-scanning) · [Integrity checks](#integrity-checks) · [Library statistics](#library-statistics) · [Cover art extraction](#cover-art-extraction) · [Color output](#color-output) · [Supported formats](#supported-formats)
 - [Architecture](#architecture)
-- [Full help output](#full-help-output)
+- [Help](#help)
 - [Companion scripts](#companion-scripts) (destructive): [`retag.py`](#retagpy) · [`genre_tidy.py`](#genre_tidypy) · [`rerate.py`](#reratepy) · [`cleaner.py`](#cleanerpy) · [`genre_foldermap.py`](#genre_foldermappy) · [`replaygain.py`](#replaygainpy) · [`apestrip.py`](#apestrippy) · [`slipcover.py`](#slipcoverpy) · [`flac2opus.py`](#flac2opuspy)
 - [Credits & Acknowledgements](#credits--acknowledgements) · [Support](#support)
 
@@ -80,7 +81,7 @@ Modern music players often hide your library behind proprietary databases. latti
 | **Snapshot diff** | `--diff SNAPSHOT` | Replays a snapshot against the current tree: moved, retagged, resized, added, and removed files |
 | **Version** | `--version` | Prints version and exits |
 
-Running with no arguments launches an interactive TUI: a full-screen curses interface with arrow-key navigation, color-coded section groups (Library, Integrity, Artwork, Metadata, Maintenance), and a highlighted selection cursor. Menus, parameter prompts, and pause screens all render inside styled Unicode boxes for a consistent experience. Library tree, AI export, and genre wings live in a dedicated submenu; the two write modes live under Maintenance behind yes/no confirms. Long reports open in a scrollable, pannable results pager with `/` search and `n`/`N` match jumping. Falls back to typed input if curses is unavailable.
+Running with no arguments launches an interactive TUI: a full-screen curses interface with arrow-key navigation, color-coded section groups (Library, Integrity, Artwork, Metadata, Maintenance), and a highlighted selection cursor. Menus, parameter prompts, and pause screens all render inside styled Unicode boxes for a consistent experience. Library tree, AI export, and genre wings live in a dedicated submenu; all the write modes (nine entries) live under Maintenance behind yes/no confirms. Long reports open in a scrollable, pannable results pager with `/` search and `n`/`N` match jumping. Falls back to typed input if curses is unavailable.
 
 ## Sample output
 
@@ -166,7 +167,7 @@ lattice --testMP3 --output mp3_errors.txt --workers 4
 # Verify Opus files for decode errors
 lattice --testOpus --output opus_errors.txt --workers 4
 
-# Extract cover art (FLAC > Opus > M4A > MP3 priority)
+# Extract cover art (WRITES covers by default; --dry-run previews)
 lattice --extractArt
 
 # Preview art extraction without writing files
@@ -243,7 +244,7 @@ lattice --retag "~/Music/Kanye West/Yeezus" "Alternative Rap" --apply
 
 ## Write modes
 
-Seven modes write to your library, and all are **dry-run by default**: without `--apply` they only preview, and every change is recorded to an append-only timestamped log (the folder-moving `--genreMap` records its moves to a manifest TSV instead).
+Eight surfaces write to your library (seven are dry-run by default; `--genreTidy-build` writes its map file directly), and all are **dry-run by default**: without `--apply` they only preview, and every change is recorded to an append-only timestamped log (the folder-moving `--genreMap` records its moves to a manifest TSV instead).
 
 - **`lattice --clean`** consolidates fragmented album folders (the same job as [`cleaner.py`](#cleanerpy)), then applies the opt-in passes you name: `--normalize-names` (rename folders at any depth), `--normalize-filenames` (rename track files), `--normalize-tags` (library-wide typographic tag normalization; on MP3s it writes ID3v2.3 plus a refreshed ID3v1), or `--all` for all three. On a genre-first library, pass `--layout '{genre}/{artist}/{album}'` so the tag pass reads the artist level correctly. The preview predicts the real run exactly; the log defaults to `<root>/cleanup.log`.
 - **`lattice --apestrip`** strips stray APEv2 tags from MP3s (the same job as [`apestrip.py`](#apestrippy)). `--keep-metadata` migrates sole-source APE fields into ID3 first (genre is never migrated; ratings are reported, never written), and `--repair-malformed` also repairs malformed APE tags via verified atomic byte surgery. A real run prints the worklist and asks for confirmation (auto-skipped when stdin is not a TTY); the log defaults to `<root>/apestrip.log`.
@@ -329,7 +330,7 @@ Produces `Alternative_Rock_Library.txt`, `East_Coast_Rap_Library.txt`, and so on
 lattice --duplicates --root ~/Music --root /mnt/usb/Albums --output duplicates.txt
 ```
 
-Every mode aggregates across the roots: combined statistics, one merged library tree, genre wings that span both, and so on. A path passed twice is de-duped. The exception is the write modes: `--clean`, `--apestrip`, `--lyrics`, `--replayGain`, `--genreTidy-*`, and `--genreMap` operate on exactly one tree and refuse a multi-root list, and `--retag` is dir-scoped entirely (one album-directory positional, `--root` refused). The payoff for `--duplicates` is cross-library detection: an album that lives in both libraries is grouped as a single exact duplicate, and each entry is prefixed by its root's basename (`Music/…` vs `Albums/…`) so you can tell the copies apart.
+Every mode aggregates across the roots: combined statistics, one merged library tree, genre wings that span both, and so on. A path passed twice is de-duped. The exception is the write modes: `--clean`, `--apestrip`, `--lyrics`, `--replayGain`, `--genreTidy-*`, `--genreMap`, and `--ingest` operate on exactly one tree and refuse a multi-root list, and `--retag` is dir-scoped entirely (one album-directory positional, `--root` refused). The payoff for `--duplicates` is cross-library detection: an album that lives in both libraries is grouped as a single exact duplicate, and each entry is prefixed by its root's basename (`Music/…` vs `Albums/…`) so you can tell the copies apart.
 
 To make several roots permanent, add a `library_roots` array to `~/.config/lattice/config.json`:
 
@@ -362,7 +363,7 @@ digest as a document.
 
 ## Machine output (`--json`, `--output -`, `--fail-on-findings`)
 
-Reports are `.txt` by default. `--json` swaps in a machine-readable document instead: `--stats` and the tag-reading audits (`--auditTags`, `--auditAlbums`, `--auditBitrate`, `--auditReplayGain`, `--healthScore`, `--duplicates`) emit the uniform envelope `{"mode", "root", "findings", "payload"}` with counts and per-item verdicts, and the write modes end with a JSON run summary (counts plus `dry_run: true/false`, so a pipeline can tell a preview from a commit). `--output -` pipes any report to stdout, and `--fail-on-findings` makes the audits exit 1 when they have findings (the default stays 0), so a cron job or CI step can gate on a clean library:
+Reports are `.txt` by default. `--json` swaps in a machine-readable document instead: `--stats` and the tag-reading audits (`--auditTags`, `--auditAlbums`, `--auditBitrate`, `--auditReplayGain`, `--healthScore`, `--duplicates`) emit the uniform envelope `{"mode", "root", "findings", "payload"}` with counts and per-item verdicts, and the write modes except `--lyrics` end with a JSON run summary (counts plus `dry_run: true/false`, so a pipeline can tell a preview from a commit). `--output -` pipes any report to stdout, and `--fail-on-findings` makes the audits exit 1 when they have findings (the default stays 0), so a cron job or CI step can gate on a clean library:
 
 ```bash
 # Machine-readable stats, piped
@@ -532,7 +533,6 @@ Every mode above has a full help page:
 exit codes: 0 clean; 1 findings or failure (audits only with --fail-on-findings; integrity scans on any CORRUPT file; write modes on run failure); 2 usage or missing dependency; 130 interrupted
 ```
 
-</details>
 </details>
 
 ## Companion scripts

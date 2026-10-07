@@ -96,8 +96,9 @@ from mutagen.id3 import (
     ParseID3v1,
 )
 from mutagen.mp3 import MP3
-from lattice.utils import json_summary
 from vir_tui import core as ui
+
+from lattice.utils import json_summary
 
 # APE key (lowercased) -> simple ID3 text frame class. Genre/Rating/Comment/cover/
 # lyrics are handled out of band; every other *text* item is preserved via a

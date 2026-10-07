@@ -14,6 +14,7 @@ from lattice.utils import (
     format_rating,
     is_audio,
     iter_audio_dirs,
+    open_report,
     parse_layout,
     relpath_under,
     resolve_output,
@@ -213,7 +214,7 @@ def write_music_library_tree(
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     try:
-        with open(out_path, "w", encoding="utf-8") as f:
+        with open_report(out_path) as f:
             f.write(buf.getvalue())
     except KeyboardInterrupt:
         if not quiet:
@@ -255,7 +256,7 @@ def write_ai_library(
 
     out_path = resolve_output(output_file, output_file)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-    with open(out_path, "w", encoding="utf-8") as f:
+    with open_report(out_path) as f:
         f.write("Artist | Album | Genre | Rating | Tracks\n")
         f.write("-" * 50 + "\n")
         f.writelines(
@@ -511,7 +512,7 @@ def write_snapshot(
 
     out_path = resolve_output(output_file, output_file)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-    with open(out_path, "w", encoding="utf-8") as f:
+    with open_report(out_path) as f:
         f.write("# lattice snapshot v1\n")
         f.write("\t".join(_SNAPSHOT_COLUMNS) + "\n")
         f.writelines(_format_row(rows[path]) + "\n" for path in sorted(rows))
@@ -655,7 +656,7 @@ def diff_snapshot(
 
     out_path = resolve_output(output_file, output_file)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
-    with open(out_path, "w", encoding="utf-8") as f:
+    with open_report(out_path) as f:
         f.write("SNAPSHOT DIFF REPORT\n")
         f.write(f"Snapshot: {snapshot_file}\n")
         f.write(f"Root: {', '.join(roots)}\n")

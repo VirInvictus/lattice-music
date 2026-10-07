@@ -1150,14 +1150,13 @@ def resolve_topic(token: str) -> str | None:
 
 
 EXIT_CODES = {
-    "0": "clean",
+    "0": "clean (an export with no matches is still 0)",
     "1": "findings or failure: audits only with --fail-on-findings; the "
     "integrity scans exit 1 on any CORRUPT file without a flag; write "
-    "modes on run failure; exports when nothing matched; an invalid "
-    "--where/--playlist rule",
+    "modes on run failure",
     "2": "usage error or missing dependency (including --where/--json/"
-    "--fail-on-findings on a mode that refuses them, and --replayGain "
-    "--apply without rsgain)",
+    "--fail-on-findings on a mode that refuses them, --replayGain --apply "
+    "without rsgain, and an invalid --where/--playlist rule)",
     "130": "interrupted",
 }
 
@@ -1339,11 +1338,7 @@ def render_index(color: bool | None = None) -> str:
         "  " + st.tokens("lattice help --json") + "    the whole surface as JSON"
     )
     lines.append("")
-    lines.append(
-        "exit codes: 0 clean; 1 findings or failure (audits only with "
-        "--fail-on-findings; integrity scans on any CORRUPT file; write "
-        "modes on run failure); 2 usage or missing dependency; 130 interrupted"
-    )
+    lines.append("exit codes: " + "; ".join(f"{k} {v}" for k, v in EXIT_CODES.items()))
     return "\n".join(lines)
 
 

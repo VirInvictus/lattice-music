@@ -57,8 +57,8 @@ from vir_tui import core as ui
 from lattice.modes.artwork import _get_image_size
 from lattice.norm import (
     _base_artist,
-    canonical_render,
     canon_track_artist,
+    canonical_render,
     is_legal_name,
     normalize_name,
     tag_dedupe,

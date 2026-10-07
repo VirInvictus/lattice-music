@@ -26,11 +26,11 @@ from collections import Counter, namedtuple
 from datetime import datetime
 from pathlib import Path
 
-from lattice.modes.library import _scan_album_dirs
-from lattice.utils import _make_pbar, as_roots, count_audio_files
-from lattice.utils import json_summary
-from lattice.vfs import VirtualFS
 from vir_tui import core as ui
+
+from lattice.modes.library import _scan_album_dirs
+from lattice.utils import _make_pbar, as_roots, count_audio_files, json_summary
+from lattice.vfs import VirtualFS
 
 __version__ = "1.4.1"
 
