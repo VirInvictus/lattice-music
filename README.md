@@ -249,7 +249,7 @@ Nine surfaces write to your library (eight are dry-run by default; `--genreTidy-
 
 - **`lattice --clean`** consolidates fragmented album folders (the same job as [`cleaner.py`](#cleanerpy)), then applies the opt-in passes you name: `--normalize-names` (rename folders at any depth), `--normalize-filenames` (rename track files), `--normalize-tags` (library-wide typographic tag normalization; on MP3s it writes ID3v2.3 plus a refreshed ID3v1), or `--all` for all three. On a genre-first library, pass `--layout '{genre}/{artist}/{album}'` so the tag pass reads the artist level correctly. The preview predicts the real run exactly; the log defaults to `<root>/cleanup.log`.
 - **`lattice --apestrip`** strips stray APEv2 tags from MP3s (the same job as [`apestrip.py`](#apestrippy)). `--keep-metadata` migrates sole-source APE fields into ID3 first (genre is never migrated; ratings are reported, never written), and `--repair-malformed` also repairs malformed APE tags via verified atomic byte surgery. A real run prints the worklist and asks for confirmation (auto-skipped when stdin is not a TTY); the log defaults to `<root>/apestrip.log`.
-- **`lattice --stripRatings`** deletes the sharer's rating tags from rips before they seed a star display anywhere (a library manager that imports ratings from tags, a player that reads POPM/RATING). Every source the library reader decodes goes, wherever it carries a nonzero value: POPM frames and rating TXXX frames plus the APEv2 `Rating` key on MP3s, Vorbis rating/score/stars keys on FLAC/OGG/Opus, rate/rating atoms on M4A, rating attributes on WMA. Zero-valued shells stay (a rating-0 POPM still carries the ripper's play count and shows no stars), the Explicit/Clean `rtng` advisory is not a rating and stays, and genre, comments, covers, and every non-rating tag are never touched. Because the strip set is the reader's own decode, a stripped file reads back rating-less. A real run prints the worklist and asks for confirmation (auto-skipped when stdin is not a TTY); the log defaults to `<root>/stripratings.log`. Point it at intake trees (a downloads folder, the `Unfiltered/` staging inbox); a hand-rated library's own rating tags are data, not noise, and the ritual only ever strips the staging inbox for exactly that reason.
+- **`lattice --stripRatings`** deletes the sharer's rating tags from rips before they seed a star display anywhere (a library manager that imports ratings from tags, a player that reads POPM/RATING). Every source the library reader decodes goes, wherever it carries a nonzero value: POPM frames and rating TXXX frames plus the APEv2 `Rating` key on MP3s, Vorbis rating/score/stars keys on FLAC/OGG/Opus, rate/rating atoms on M4A, rating attributes on WMA. Zero-valued shells stay (a rating-0 POPM still carries the ripper's play count and shows no stars), the Explicit/Clean `rtng` advisory is not a rating and stays, and genre, comments, covers, and every non-rating tag are never touched. Because the strip set is the reader's own decode, a stripped file reads back rating-less. A real run prints the worklist and asks for confirmation (auto-skipped when stdin is not a TTY); the log defaults to `<root>/stripratings.log`. Point it at intake trees (a downloads folder, the `Unfiltered/` staging inbox); a hand-rated library's own rating tags are data, not noise, and the ritual only ever strips the staging inbox for exactly that reason; and a `rating_protected_roots` list in the config makes `--apply` refuse a protected tree outright (the inbox inside one stays strippable).
 - **`lattice --lyrics`** fetches synced lyrics from the open [LRCLIB](https://lrclib.net) API and writes them as same-basename `.lrc` sidecars beside your audio files — players and servers that read sidecar lyrics (Jellyfin 10.9+ among them) then carry the lyrics with the files, so a library that syncs to several machines takes its lyrics along. Matching is artist + title (+ album and duration) with a duration-windowed search fallback; instrumental and plain-only matches are reported, never written; tracks with a sidecar are skipped unless `--lyrics-force`. The preview runs the real lookups (read-only) so its hit/miss counts are honest; requests are paced with `--lyrics-sleep`; the log defaults to `<root>/lyrics.log`.
 - **`lattice --replayGain`** writes ReplayGain 2.0 tags (the same job as [`replaygain.py`](#replaygainpy)): one album gain plus album peak per album folder and a per-track gain plus peak, computed and written by [`rsgain`](https://github.com/complexlogic/rsgain) at the 89 dB / -18 LUFS reference. Album = one folder, rescanned as a whole so album gain is correct; `--skip-tagged` skips a fully-tagged album *as a unit* (half-skipping would compute album gain over a subset and corrupt it); `--target-lufs N` switches to a custom target (e.g. -14 for the streaming-loud range); `--threads N` parallelizes each scan. The preview lists every album and its current coverage without invoking rsgain; a real run requires rsgain on PATH and exits 2 without it. The log (with the values read back after each album) defaults to `<root>/replaygain.log`.
 - **`lattice --retag DIR GENRE [GENRE...]`** overwrites the genre tag(s) on one album directory (the same job as [`retag.py`](#retagpy); quote multi-word genres). The package's one genre-write path: MP3 writes clear every spot a genre can hide (a stray APEv2 tag is deleted, a bare `TXXX:GENRE` frame removed, the ID3v1 genre byte refreshed) before one clean TCON is written, saved as ID3v2.3 plus a refreshed ID3v1; FLAC/Opus/OGG, M4A, and WMA get their native containers. `--strip-junk` strips junk ID3 frames instead (obsolete v2.3-era frames converted-or-dropped, empty text frames deleted) through the same classifier `--auditJunkFrames` reports with. The log defaults to `<dir>/retag.log`.
@@ -457,7 +457,7 @@ The filesystem is the source of truth: lattice-music walks the tree on every inv
 <summary>The mode index (<code>lattice --help</code>)</summary>
 
 ```
-lattice 6.4.0 - filesystem-first music library toolkit
+lattice 6.4.1 - filesystem-first music library toolkit
 
 usage: lattice MODE [ROOT] [options]
        lattice help MODE    full help for one mode
@@ -538,54 +538,7 @@ Every mode above has a full help page:
   lattice help MODE    (try: lattice help clean)
   lattice help --json    the whole surface as JSON
 
-exit codes: 0 clean (an export with no matches is still 0); 1 findings or failure: audits only with --fail-on-findings; the integrity scans exit 1 on any CORRUPT file without a flag; write modes on run failure; 2 usage error or missing dependency (including --where/--json/--fail-on-findings on a mode that refuses them, --replayGain --apply without rsgain, and an invalid --where/--playlist rule); 130 interrupted```
-
-</details>
-
-## Companion scripts
-
-The `scripts/` directory holds nine standalone maintenance tools. Six of them, [`cleaner.py`](#cleanerpy), [`apestrip.py`](#apestrippy), [`replaygain.py`](#replaygainpy), [`retag.py`](#retagpy), [`genre_tidy.py`](#genre_tidypy), and [`genre_foldermap.py`](#genre_foldermappy), are thin launchers over the packaged [write modes](#write-modes) (same flags, same logs, and the historical defaults where they differ). The rest are **not** part of the `lattice` package and sit **outside its contract** on purpose: unlike the package's read-only modes, they **modify your files in place**, rewriting tags, rewriting rating bytes, or moving and renaming folders. Run them directly with `python3`.
-
-**Use them with caution.** Have a backup or snapshot first, always preview with `--dry-run`, and read the log before applying. Each writes an append-only timestamped log and is idempotent, so a second run on an already-clean library is a no-op.
-
-| Script | What it changes | Scope |
-|--------|-----------------|-------|
-| [`retag.py`](#retagpy) | Launcher for `lattice --retag`: genre tags on one album directory | manual, per-album |
-| [`genre_tidy.py`](#genre_tidypy) | Launcher for `lattice --genreTidy-*`: genre tags library-wide (through the package's retag writer) | policy map, then apply |
-| [`rerate.py`](#reratepy) | MP3 POPM rating bytes | reconcile DeaDBeeF / foobar |
-| [`cleaner.py`](#cleanerpy) | Launcher for `lattice --clean`: folder names and layout (moves, merges, renames); file names with `--normalize-filenames`; title/album/artist tags (all formats) with `--normalize-tags` | filesystem (opt-in names + tags) |
-| [`genre_foldermap.py`](#genre_foldermappy) | Launcher for `lattice --genreMap`: restructures the tree into Genre/Artist/Album | filesystem |
-| [`replaygain.py`](#replaygainpy) | Launcher for `lattice --replayGain`: writes ReplayGain 2.0 gain/peak tags (via `rsgain`) | album-by-album |
-| [`apestrip.py`](#apestrippy) | Launcher for `lattice --apestrip`: removes stray APEv2 tags from MP3s (`--keep-metadata` to migrate first) | recursive, MP3-only |
-| [`slipcover.py`](#slipcoverpy) | Embeds folder cover images into audio files lacking embedded art (`--fetch` queries iTunes for missing covers) | recursive |
-| [`flac2opus.py`](#flac2opuspy) | Converts FLAC to Opus 128k and deletes the FLAC after verifying duration | recursive, FLAC-only |
-
-### Importing New Music (The Circuit)
-
-When you download or import a swath of new albums (e.g. to a staging folder like `/mnt/SharedData/Music/Unfiltered`), you should run this standard "circuit" of tools to ensure the files are transcoded, cleaned, embedded with art, and volume-normalized before moving them to your main library. Most of the circuit is now the packaged write modes (dry-run unless `--apply`); the two remaining hand-run scripts are flagged.
-
-```bash
-# 1. Strip the sharer's rating tags (POPM/FMPS/Vorbis ratings ride in rips; a
-#    library manager that imports ratings from tags would import them pre-rated)
-lattice --stripRatings /mnt/SharedData/Music/Unfiltered --apply
-
-# 2. Transcode FLACs to Opus 128kbps (saves space, copies tags securely, deletes original FLAC)
-./scripts/flac2opus.py /mnt/SharedData/Music/Unfiltered -y
-
-# 3. Strip stray APEv2 tags (removes hidden APEv2 tags on MP3s that confuse players)
-lattice --apestrip /mnt/SharedData/Music/Unfiltered --apply
-
-# 4. Clean and Normalize
-# Note: --all turns on the --normalize-names, --normalize-tags, and --normalize-filenames passes.
-# Without it, --clean will only consolidate fragmented album directories, leaving messy
-# filenames and inconsistent tags untouched.
-lattice --clean /mnt/SharedData/Music/Unfiltered --all --apply
-
-# 5. Fetch and Embed Cover Art (queries iTunes for covers missing art, and embeds folder images)
-./scripts/slipcover.py /mnt/SharedData/Music/Unfiltered --fetch -y
-
-# 6. Apply ReplayGain 2.0 (calculates volume peaks and tags the files; requires rsgain)
-lattice --replayGain /mnt/SharedData/Music/Unfiltered --apply
+exit codes: 0 clean (an export with no matches is still 0); 1 findings or failure: audits only with --fail-on-findings; the integrity scans exit 1 on any CORRUPT file without a flag; write modes on run failure; 2 usage error or missing dependency (including --where/--json/--fail-on-findings on a mode that refuses them, --replayGain --apply without rsgain, and an invalid --where/--playlist rule); 130 interrupted
 ```
 
 Or run the whole circuit as one command: `lattice --ingest /mnt/SharedData/Music/Unfiltered --apply` sequences the stripRatings, genreMap, apestrip, and clean stages with per-stage logs and one summary; see [Write modes](#write-modes).

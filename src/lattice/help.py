@@ -943,7 +943,10 @@ MODES = MODES + (
         "counts and zero shells show nothing. Same sources get_all_tags "
         "decodes, so a stripped file reads back rating-less. Genre, comments, "
         "covers, and every non-rating tag survive. Stage one of --ingest, "
-        "which runs it over the staging inbox only. "
+        "which runs it over the staging inbox only. --apply refuses any tree "
+        "under a config rating_protected_roots entry (a hand-rated library "
+        "is exactly what the flag exists to protect); the staging inbox "
+        "inside a protected tree stays strippable. "
         "Write mode: dry-run by default, logged to <root>/stripratings.log.",
         usage="lattice --stripRatings ROOT [--apply]",
         example="lattice --stripRatings ~/Downloads/Nicotine/Completed --apply",

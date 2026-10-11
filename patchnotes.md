@@ -1,6 +1,36 @@
 # lattice-music Patch Notes
 
-## v6.4.0 (2026-10-11)
+## v6.4.1 (2026-10-11)
+
+### The rating-protection guard: --apply refuses a protected tree
+
+Born the hard way. Hours after v6.4.0 shipped, a first-generation
+rating-strip pass over the owner's live library (run before this mode
+existed, under a wrong "the stamps are foreign" read) deleted his hand
+ratings from 10,946 files. The journal brought every one back the same day
+(a Hetzner backup cross-check confirmed 30/30 identical), and this release
+makes the tool refuse to be the instrument next time.
+
+- **New config key `rating_protected_roots`**: a list of trees whose rating
+  tags `--stripRatings --apply` will never touch. A protected target refuses
+  with exit 2 and a message naming the protection; dry-run previews are
+  never blocked (seeing what a strip WOULD do is always safe), and the
+  staging inbox (the `Unfiltered/` component) inside a protected tree stays
+  strippable, matching the ingest ritual's staging-scoped contract. No CLI
+  override flag on purpose: changing the protection is a deliberate
+  config-file edit.
+- `--ingest` inherits the guard through its staging-scoped strip stage: a
+  ritual over a protected root strips only the inbox, which is exactly the
+  carve-out.
+- spec §3/§5 carry the amended `--stripRatings` contract; README's
+  stripRatings bullet names the config key; the mode's help page explains
+  the refusal.
+
+6 new tests (796 total): refusal at and under a protected root, dry-run
+still previewing, the staging-inbox carve-out, and unprotected roots
+stripping normally.
+
+## v6.4.0 (2026-10-11) (2026-10-11)
 
 ### --stripRatings: the rating-tag stripper, and a fourth ingest stage
 

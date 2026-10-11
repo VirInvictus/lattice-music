@@ -317,5 +317,76 @@ class StripRatingsDispatchTests(unittest.TestCase):
         return rc, buf.getvalue()
 
 
+class RatingProtectionTests(unittest.TestCase):
+    """The v6.4.1 guard: a real run refuses any root at or under a
+    rating-protected root, except through a staging inbox. Born the hard way:
+    a 10,946-file --apply once stripped a hand-rated library."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.protected = Path(self._tmp.name) / "Music"
+        self.track = self.protected / "Art" / "Album" / "01.mp3"
+        self.track.parent.mkdir(parents=True)
+        shutil.copy(MP3_SRC, self.track)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def test_apply_under_protected_root_refuses(self):
+        rc, out = self._run(
+            str(self.protected), dry_run=False, protected_roots=[str(self.protected)]
+        )
+        self.assertEqual(rc, 2)
+        self.assertIn("rating-protected", out)
+        self.assertIsNotNone(get_all_tags(str(self.track)).rating)
+
+    def test_apply_in_a_subdirectory_is_refused_too(self):
+        rc, _out = self._run(
+            str(self.track.parent),
+            dry_run=False,
+            protected_roots=[str(self.protected)],
+        )
+        self.assertEqual(rc, 2)
+        self.assertIsNotNone(get_all_tags(str(self.track)).rating)
+
+    def test_dry_run_under_protected_root_still_previews(self):
+        rc, out = self._run(
+            str(self.protected), dry_run=True, protected_roots=[str(self.protected)]
+        )
+        self.assertEqual(rc, 0)
+        self.assertIn("Rating tags found", out)
+        self.assertIsNotNone(get_all_tags(str(self.track)).rating)
+
+    def test_staging_inbox_inside_a_protected_root_stays_strippable(self):
+        inbox = self.protected / "Unfiltered" / "New"
+        inbox.mkdir(parents=True)
+        inbox_track = inbox / "02.mp3"
+        shutil.copy(MP3_SRC, inbox_track)
+        rc, _out = self._run(
+            str(inbox), dry_run=False, protected_roots=[str(self.protected)]
+        )
+        self.assertEqual(rc, 0)
+        self.assertIsNone(get_all_tags(str(inbox_track)).rating)
+        # The filed library beside it is untouched.
+        self.assertIsNotNone(get_all_tags(str(self.track)).rating)
+
+    def test_unprotected_roots_strip_normally(self):
+        rc, _out = self._run(
+            str(self.protected), dry_run=False, protected_roots=["/mnt/Elsewhere"]
+        )
+        self.assertEqual(rc, 0)
+        self.assertIsNone(get_all_tags(str(self.track)).rating)
+
+    def _run(self, root, *, dry_run, protected_roots):
+        import sys
+
+        buf, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err):
+            rc = run_stripratings(
+                root, dry_run=dry_run, assume_yes=True, protected_roots=protected_roots
+            )
+        return rc, buf.getvalue() + err.getvalue()
+
+
 if __name__ == "__main__":
     unittest.main()

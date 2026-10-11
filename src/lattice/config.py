@@ -2,7 +2,7 @@ import json
 import os
 import re
 
-VERSION = "6.4.0"
+VERSION = "6.4.1"
 
 DEFAULT_LIBRARY_OUTPUT = "music_library.txt"
 DEFAULT_FLAC_OUTPUT = "flac_errors.txt"
@@ -147,3 +147,17 @@ def set_library_root(root: str) -> None:
     config = load_config()
     config["library_root"] = os.path.abspath(os.path.expanduser(root))
     save_config(config)
+
+
+def get_rating_protected_roots() -> list[str]:
+    """Trees whose rating tags must never be stripped: the optional
+    `rating_protected_roots` array in the config, else empty. A real library
+    can carry the owner's own hand ratings in its tags, and one wrong --apply
+    is unrecoverable without a journal; listing a root here makes
+    `--stripRatings --apply` refuse it outright (dry-run previews still work,
+    and the staging inbox inside a protected tree stays strippable, matching
+    the ingest ritual's staging-scoped contract)."""
+    roots = load_config().get("rating_protected_roots")
+    if isinstance(roots, list):
+        return [os.path.abspath(os.path.expanduser(r)) for r in roots if r]
+    return []

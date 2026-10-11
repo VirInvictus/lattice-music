@@ -1,6 +1,6 @@
 # lattice-music Application Specification
 
-**Version:** 6.4.0  
+**Version:** 6.4.1  
 **Language:** Python 3.14+  
 **Dependencies:** `mutagen`, `tqdm`, `vir-tui`  
 **License:** MIT
@@ -146,7 +146,7 @@ test suite. Mode dispatch itself is unchanged.
 | Snapshot diff | `--diff SNAPSHOT` | Replay a snapshot against the current tree: MOVED (size+mtime preserved at a new path), RETAGGED (per-field old -> new), RESIZED, ADDED, REMOVED |
 | Clean | `--clean` | Consolidate fragmented album folders (quote/dash/case variants) with opt-in name (`--normalize-names`, `--normalize-filenames`) and tag (`--normalize-tags`) normalization passes; write mode, dry-run by default |
 | APEv2 strip | `--apestrip` | Remove stray APEv2 tags from MP3s (`--keep-metadata` to migrate sole-source fields first, `--repair-malformed` for tags mutagen cannot parse); write mode, dry-run by default |
-| Rating strip | `--stripRatings` | Delete rating tags wherever they carry a nonzero value: MP3 POPM frames and rating TXXX frames plus the APEv2 `Rating` key, Vorbis rating/score/stars keys, MP4 rate/rating atoms, ASF rating attributes: the same sources `get_all_tags` decodes, through shared helpers so reader and stripper cannot drift; zero-valued shells and play-count-only POPM frames survive, nothing else is touched; write mode, dry-run by default, log `<root>/stripratings.log` |
+| Rating strip | `--stripRatings` | Delete rating tags wherever they carry a nonzero value: MP3 POPM frames and rating TXXX frames plus the APEv2 `Rating` key, Vorbis rating/score/stars keys, MP4 rate/rating atoms, ASF rating attributes: the same sources `get_all_tags` decodes, through shared helpers so reader and stripper cannot drift; zero-valued shells and play-count-only POPM frames survive, nothing else is touched; write mode, dry-run by default, log `<root>/stripratings.log`; --apply refuses any root at or under a config `rating_protected_roots` entry except through a staging inbox |
 | Lyrics fetch | `--lyrics` | Match each track against the LRCLIB API and write its synced lyrics as a same-basename `.lrc` sidecar beside the audio (`--lyrics-force` to overwrite, `--lyrics-sleep` for request pacing); instrumental and plain-only matches are reported, never written; write mode, dry-run by default |
 | ReplayGain write | `--replayGain` | Scan and write ReplayGain 2.0 gain/peak tags album-by-album via `rsgain` (album = one folder, rescanned whole; `--skip-tagged` skips fully-tagged albums as a unit, `--target-lufs` for a custom target, `--threads` for the scan); requires `rsgain` (exit 2 without it on a real run); write mode, dry-run by default |
 | Genre rewrite | `--retag DIR GENRE [GENRE...]` | Hard-overwrite the genre tag(s) on one album directory (the package's one genre-write path; MP3 writes clear APEv2/TXXX:GENRE/ID3v1 as they save ID3v2.3 + refreshed v1), or strip junk ID3 frames with `--strip-junk` (detection shared with `--auditJunkFrames`); dir-scoped (single positional, no root walk); write mode, dry-run by default |
@@ -205,9 +205,10 @@ remainder, still producing the full report. A completed scan deletes the state.
   real run; `--retag` is dir-scoped to a single album directory;
   `--stripRatings` deletes rating tags only: the sources `get_all_tags`
   decodes, nonzero values only, so zero-valued shells and play-count-only POPM
-  frames survive — and its per-format source lists come from the same helpers
+  frames survive, and its per-format source lists come from the same helpers
   the reader uses, so a tag the stripper would remove is always a tag the
-  reader would decode). It reorganizes the tree
+  reader would decode; --apply refuses rating-protected roots except
+  through a staging inbox). It reorganizes the tree
   only via the explicit `--genreMap` mode, which moves album folders under
   their dominant genre with `mv`-only semantics on one filesystem (a move is a
   rename, so tags and audio bytes are never read or rewritten by it), dry-run

@@ -1,5 +1,9 @@
 # lattice-music Roadmap
 
+## Phase 17: Rating protection (2026-10-11)
+- [x] `rating_protected_roots` config key: `--stripRatings --apply` refuses any tree at or under a protected root (exit 2), dry-run previews never blocked, the staging inbox inside a protected tree stays strippable, no CLI override (config edit is the deliberate door). SHIPPED in v6.4.1, born from the 2026-10-10 hand-ratings incident (10,946 files stripped under a wrong foreign-stamp read; restored same-day from the removal journal, Hetzner cross-check 30/30).
+- Tests: 6 in test_strip_ratings.py (796 total).
+
 ## Phase 16: Rating strip (2026-10-11)
 - [x] `--stripRatings`: delete rating tags carrying a nonzero rating (MP3 POPM/rating-TXXX/APEv2 Rating, Vorbis rating/score/stars keys, MP4 rate/rating atoms, ASF rating attributes), zero shells and play-count-only POPM frames kept. SHIPPED in v6.4.0: brain at `modes/stripratings.py`, verdicts through tags.py's extracted rating-source helpers (`is_id3_rating_desc`/`is_vorbis_rating_key`/`is_mp4_rating_key`/`is_asf_rating_key` + `_popm_stars`/`_tag_rating`), so reader and stripper cannot drift; apestrip-shaped run (dry-run default, worklist confirm, append-only log, json_summary); MP3 saves on the retag convention (v2.3 + refreshed v1).
 - [x] `--ingest` gains the stripRatings stage, staging-scoped by contract (over root/<staging> only; the ritual never rating-strips the filed library, whose rating tags may be the owner's own hand ratings; absent inbox or --staging "" skips the stage). SHIPPED in v6.4.0; sequencing only, no new write verb beyond the mode's own §5 amendment.

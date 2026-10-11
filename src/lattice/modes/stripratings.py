@@ -238,6 +238,7 @@ def run_stripratings(
     assume_yes: bool = False,
     quiet: bool = False,
     json_mode: bool = False,
+    protected_roots: list[str] | None = None,
     _title: str = "lattice stripRatings - Rating Tag Stripper",
 ) -> int:
     """Run the rating strip over one directory tree.
@@ -249,11 +250,43 @@ def run_stripratings(
     stdin is not a TTY) a confirmation prompt guards the write pass — a
     non-interactive run proceeds, so cron and pipelines keep working. Every
     removal is recorded to an append-only timestamped log (default
-    <root>/stripratings.log). Returns a process exit code: 1 when the root is
-    unusable, the log is unopenable, or any file errored (read or write),
-    else 0.
+    <root>/stripratings.log). Returns a process exit code: 2 when the root is
+    rating-protected, 1 when the root is unusable, the log is unopenable, or
+    any file errored (read or write), else 0.
+
+    Rating protection (the v6.4.1 guard, Brandon's standing rule after the
+    2026-10-10 hand-ratings incident): a real run refuses any root at or
+    under a config `rating_protected_roots` entry, except through a staging
+    inbox (a path component naming the staging dir, default Unfiltered) —
+    that is where the ritual strips by design. Dry-run previews are never
+    blocked: seeing what a strip WOULD do is always safe.
     """
     root = str(root)
+    if not dry_run:
+        from lattice.config import get_rating_protected_roots
+        from lattice.modes.foldermap import STAGING_DIR
+
+        if protected_roots is None:
+            protected_roots = get_rating_protected_roots()
+        root_abs = os.path.abspath(root)
+        for protected in protected_roots:
+            if root_abs == protected or root_abs.startswith(protected + os.sep):
+                rel_parts = os.path.relpath(root_abs, protected).split(os.sep)
+                if STAGING_DIR not in rel_parts:
+                    print(
+                        f"error: refusing --apply: {root_abs} is under the "
+                        f"rating-protected root {protected} "
+                        "(config rating_protected_roots); a library this "
+                        "guarded may carry its owner's own hand ratings in "
+                        "its tags. Dry-run previews still work; the staging "
+                        f"inbox ({STAGING_DIR}/) inside a protected tree "
+                        "stays strippable; edit rating_protected_roots in "
+                        "~/.config/lattice/config.json to change it.",
+                        file=sys.stderr,
+                    )
+                    return 2
+                break
+
     if not os.path.isdir(root):
         print(f"[!] Directory not found: {root}", file=sys.stderr)
         return 1
