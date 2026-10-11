@@ -378,8 +378,6 @@ class RatingProtectionTests(unittest.TestCase):
         self.assertIsNone(get_all_tags(str(self.track)).rating)
 
     def _run(self, root, *, dry_run, protected_roots):
-        import sys
-
         buf, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err):
             rc = run_stripratings(
