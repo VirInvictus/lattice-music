@@ -567,7 +567,8 @@ class TuiWriteModeTests(unittest.TestCase):
                 "Build genre authority map (genreTidy build)",
                 "Apply genre authority map (genreTidy apply)",
                 "Reorganize into Genre/Artist/Album (genreMap)",
-                "Import ritual: genreMap + apestrip + clean (ingest)",
+                "Strip rating tags (stripRatings)",
+                "Import ritual: stripRatings + genreMap + apestrip + clean (ingest)",
             ],
         )
 
@@ -583,7 +584,9 @@ class TuiWriteModeTests(unittest.TestCase):
         self.assertEqual(tui._MAIN_ALIASES["tidyapply"], (4, 6))
         self.assertEqual(tui._MAIN_ALIASES["foldermap"], (4, 7))
         self.assertEqual(tui._MAIN_ALIASES["genremap"], (4, 7))
-        self.assertEqual(tui._MAIN_ALIASES["ingest"], (4, 8))
+        self.assertEqual(tui._MAIN_ALIASES["strip"], (4, 8))
+        self.assertEqual(tui._MAIN_ALIASES["stripratings"], (4, 8))
+        self.assertEqual(tui._MAIN_ALIASES["ingest"], (4, 9))
         self.assertEqual(tui._SEL_CHANGE_ROOT, (5, 0))
         self.assertEqual(tui._SEL_QUIT, (6, 0))
 

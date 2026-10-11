@@ -66,6 +66,7 @@ from lattice.modes.playlists import generate_playlist, run_check_playlists
 from lattice.modes.replaygain import run_replaygain
 from lattice.modes.retag import run_retag
 from lattice.modes.stats import run_stats
+from lattice.modes.stripratings import run_stripratings
 
 # TUI default output names, deliberately prefixed lattice_ so an interactive
 # run never silently overwrites the file a CLI default (config.py's
@@ -151,7 +152,8 @@ _MAIN_SECTIONS = [
             "Build genre authority map (genreTidy build)",
             "Apply genre authority map (genreTidy apply)",
             "Reorganize into Genre/Artist/Album (genreMap)",
-            "Import ritual: genreMap + apestrip + clean (ingest)",
+            "Strip rating tags (stripRatings)",
+            "Import ritual: stripRatings + genreMap + apestrip + clean (ingest)",
         ],
     ),
     (
@@ -234,7 +236,9 @@ _MAIN_ALIASES: dict[str, tuple | None] = {
     "tidyapply": (4, 6),
     "foldermap": (4, 7),
     "genremap": (4, 7),
-    "ingest": (4, 8),
+    "strip": (4, 8),
+    "stripratings": (4, 8),
+    "ingest": (4, 9),
     "settings": (5, 0),
     "config": (5, 0),
     "c": (5, 0),
@@ -979,6 +983,28 @@ def _menu_session() -> int:
                 )
 
             elif result == (4, 8):
+                # Write mode: same gate pattern as apestrip — the ask_yn
+                # confirm decides dry-run vs apply, and the mode runs with
+                # assume_yes so its own prompt stays out of the capture.
+                if len(roots) != 1:
+                    notify(
+                        "The stripRatings mode needs exactly one library root; "
+                        f"{len(roots)} are configured (library_roots)."
+                    )
+                    continue
+                apply = ask_yn(
+                    "APPLY the rating strip now? No = dry-run preview only (y/N)"
+                )
+                run_with_capture(
+                    "Strip rating tags (stripRatings)",
+                    run_stripratings,
+                    roots[0],
+                    dry_run=not apply,
+                    assume_yes=True,
+                    quiet=False,
+                )
+
+            elif result == (4, 9):
                 # The ritual: dry-run by default; the ask_yn confirm decides
                 # apply, and each stage keeps its own log. The stages' own
                 # TTY prompts are suppressed inside the capture (the mode
@@ -998,7 +1024,7 @@ def _menu_session() -> int:
                     "APPLY the full ritual now? No = dry-run preview only (y/N)"
                 )
                 run_with_capture(
-                    "Import ritual: genreMap + apestrip + clean (ingest)",
+                    "Import ritual: stripRatings + genreMap + apestrip + clean (ingest)",
                     run_ingest,
                     roots[0],
                     apply=apply,

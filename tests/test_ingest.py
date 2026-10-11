@@ -1,9 +1,9 @@
 """Tests for `--ingest`, the ritual packaged (B4): one command sequences the
-genreMap -> apestrip -> clean --all stages plus the post-state digest. Ingest
-sequences; it never re-implements, so these tests pin the sequencing contract:
-dry-run default, per-stage logs left in the stage modes' hands, the single
-top-level summary pointing into them, and the exit code carrying any stage
-failure."""
+stripRatings -> genreMap -> apestrip -> clean --all stages plus the post-state
+digest. Ingest sequences; it never re-implements, so these tests pin the
+sequencing contract: dry-run default, per-stage logs left in the stage modes'
+hands, the single top-level summary pointing into them, and the exit code
+carrying any stage failure."""
 
 import contextlib
 import io
@@ -54,6 +54,7 @@ class IngestDryRunTests(_Tree):
         # The summary points into the stage logs.
         summary = (self.root / "ingest_summary.txt").read_text(encoding="utf-8")
         self.assertIn("Mode: DRY RUN", summary)
+        self.assertIn("stripRatings: ok", summary)
         self.assertIn("genreMap: ok", summary)
         self.assertIn("health digest: skipped (dry run", summary)
         self.assertIn("Per-stage records", summary)
@@ -61,9 +62,57 @@ class IngestDryRunTests(_Tree):
     def test_summary_is_the_top_level_record(self):
         rc, _out = _main(["--ingest", str(self.root)])
         summary = (self.root / "ingest_summary.txt").read_text(encoding="utf-8")
+        self.assertIn("stripratings.log", summary)
         self.assertIn("genre_foldermap.manifest.tsv", summary)
         self.assertIn("apestrip.log", summary)
         self.assertIn("cleanup.log", summary)
+
+
+class IngestStripStageTests(unittest.TestCase):
+    """The rating strip is staging-scoped by contract: a ritual run strips
+    the staging inbox and never the filed library, whose rating tags may be
+    the owner's own hand ratings."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name) / "Music"
+        filed = self.root / "Art" / "Album"
+        filed.mkdir(parents=True)
+        shutil.copy(FLAC_SRC, filed / "01.flac")
+        inbox = self.root / "Unfiltered" / "New" / "Album"
+        inbox.mkdir(parents=True)
+        shutil.copy(FLAC_SRC, inbox / "01.flac")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _rating_states(self):
+        from lattice.tags import get_all_tags
+
+        rated, clean = [], []
+        for p in sorted(self.root.rglob("*.flac")):
+            target = rated if get_all_tags(str(p)).rating is not None else clean
+            target.append(p)
+        return rated, clean
+
+    def test_stage_strips_the_inbox_and_never_the_filed_library(self):
+        rc, _out = _main(["--ingest", str(self.root), "--apply"])
+        self.assertEqual(rc, 0)
+        # genreMap moved both albums during the ritual; the rating states
+        # travel with the files: the inbox copy stripped, the filed copy
+        # untouched.
+        rated, clean = self._rating_states()
+        self.assertEqual(len(rated), 1, [str(p) for p in rated])
+        self.assertEqual(len(clean), 1, [str(p) for p in clean])
+        self.assertTrue((self.root / "Unfiltered" / "stripratings.log").exists())
+
+    def test_staging_disabled_skips_the_strip_stage(self):
+        rc, _out = _main(["--ingest", str(self.root), "--apply", "--staging", ""])
+        self.assertEqual(rc, 0)
+        rated, clean = self._rating_states()
+        self.assertEqual(len(rated), 2, [str(p) for p in rated])
+        self.assertEqual(clean, [])
+        self.assertFalse((self.root / "Unfiltered" / "stripratings.log").exists())
 
 
 class IngestApplyTests(_Tree):
@@ -104,6 +153,7 @@ class IngestApplyTests(_Tree):
         doc = json.loads(out[out.index("{") :])
         self.assertEqual(doc["mode"], "ingest")
         self.assertTrue(doc["dry_run"])
+        self.assertIn("stripRatings", doc["counts"]["stages"])
         self.assertIn("genreMap", doc["counts"]["stages"])
 
 
@@ -112,9 +162,9 @@ class IngestWiringTests(unittest.TestCase):
         sections = {name: items for name, items in tui._MAIN_SECTIONS if name}
         self.assertEqual(
             sections["MAINTENANCE"][-1],
-            "Import ritual: genreMap + apestrip + clean (ingest)",
+            "Import ritual: stripRatings + genreMap + apestrip + clean (ingest)",
         )
-        self.assertEqual(tui._MAIN_ALIASES["ingest"], (4, 8))
+        self.assertEqual(tui._MAIN_ALIASES["ingest"], (4, 9))
 
     def test_declined_stage_is_recorded_not_fatal(self):
         # _confirm is only consulted on a TTY; force it to decline and pin

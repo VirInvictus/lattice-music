@@ -81,6 +81,47 @@ def _best_rating(candidates) -> float | None:
     return None
 
 
+# --- Rating-source predicates ---
+# One classifier per container family, shared by the reader (get_all_tags) and
+# the rating stripper (--stripRatings): a tag the stripper would delete is by
+# construction a tag the reader would decode, so the two cannot drift.
+#
+# Advisory keys ("content rating", "WM/ParentalRating") are Explicit/Clean
+# metadata, not stars; the substring match would otherwise read a content
+# rating of "1" as one star (four files in the live library carried exactly
+# that), so they are excluded before the substring tests.
+
+
+def _is_advisory(kl: str) -> bool:
+    return "content" in kl or "parental" in kl
+
+
+def is_id3_rating_desc(desc) -> bool:
+    """Whether a TXXX desc marks a rating frame."""
+    d = (desc or "").lower()
+    if _is_advisory(d):
+        return False
+    return "rating" in d or d in ("rate", "score", "stars")
+
+
+def is_vorbis_rating_key(kl: str) -> bool:
+    if _is_advisory(kl):
+        return False
+    return "rating" in kl or "score" in kl or "stars" in kl
+
+
+def is_mp4_rating_key(kl: str) -> bool:
+    if _is_advisory(kl):
+        return False
+    return "rate" in kl or "rating" in kl
+
+
+def is_asf_rating_key(kl: str) -> bool:
+    if _is_advisory(kl):
+        return False
+    return "rating" in kl
+
+
 def _unwrap(val):
     """First element of a mutagen multi-value list, or the value itself."""
     return val[0] if isinstance(val, list) and val else val
@@ -399,8 +440,8 @@ def get_all_tags(file_path: str) -> TagBundle:
                 if rating is None:
                     txxx_candidates = []
                     for txxx in tags.getall("TXXX"):
-                        desc = (txxx.desc or "").lower()
-                        if "rating" in desc or desc in ("rate", "score", "stars"):
+                        if is_id3_rating_desc(txxx.desc):
+                            desc = (txxx.desc or "").lower()
                             txxx_candidates.append(
                                 (desc, txxx.text[0] if txxx.text else None)
                             )
@@ -419,7 +460,7 @@ def get_all_tags(file_path: str) -> TagBundle:
             mp4_candidates = []
             for k, v in tags.items():
                 kl = k.lower() if isinstance(k, str) else str(k).lower()
-                if "rate" in kl or "rating" in kl:
+                if is_mp4_rating_key(kl):
                     mp4_candidates.append((kl, _unwrap(v)))
             rating = _best_rating(mp4_candidates)
 
@@ -440,7 +481,7 @@ def get_all_tags(file_path: str) -> TagBundle:
             vorbis_candidates = []
             for key, val in tags.items():
                 kl = key.lower()
-                if "rating" in kl or "score" in kl or "stars" in kl:
+                if is_vorbis_rating_key(kl):
                     vorbis_candidates.append((kl, _unwrap(val)))
             rating = _best_rating(vorbis_candidates)
 
@@ -461,7 +502,7 @@ def get_all_tags(file_path: str) -> TagBundle:
             asf_candidates = []
             for key, val in tags.items():
                 kl = key.lower()
-                if "rating" in kl:
+                if is_asf_rating_key(kl):
                     asf_candidates.append((kl, _unwrap(val)))
             rating = _best_rating(asf_candidates)
 

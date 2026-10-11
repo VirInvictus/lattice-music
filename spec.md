@@ -1,6 +1,6 @@
 # lattice-music Application Specification
 
-**Version:** 6.3.1  
+**Version:** 6.4.0  
 **Language:** Python 3.14+  
 **Dependencies:** `mutagen`, `tqdm`, `vir-tui`  
 **License:** MIT
@@ -146,12 +146,13 @@ test suite. Mode dispatch itself is unchanged.
 | Snapshot diff | `--diff SNAPSHOT` | Replay a snapshot against the current tree: MOVED (size+mtime preserved at a new path), RETAGGED (per-field old -> new), RESIZED, ADDED, REMOVED |
 | Clean | `--clean` | Consolidate fragmented album folders (quote/dash/case variants) with opt-in name (`--normalize-names`, `--normalize-filenames`) and tag (`--normalize-tags`) normalization passes; write mode, dry-run by default |
 | APEv2 strip | `--apestrip` | Remove stray APEv2 tags from MP3s (`--keep-metadata` to migrate sole-source fields first, `--repair-malformed` for tags mutagen cannot parse); write mode, dry-run by default |
+| Rating strip | `--stripRatings` | Delete rating tags wherever they carry a nonzero value: MP3 POPM frames and rating TXXX frames plus the APEv2 `Rating` key, Vorbis rating/score/stars keys, MP4 rate/rating atoms, ASF rating attributes: the same sources `get_all_tags` decodes, through shared helpers so reader and stripper cannot drift; zero-valued shells and play-count-only POPM frames survive, nothing else is touched; write mode, dry-run by default, log `<root>/stripratings.log` |
 | Lyrics fetch | `--lyrics` | Match each track against the LRCLIB API and write its synced lyrics as a same-basename `.lrc` sidecar beside the audio (`--lyrics-force` to overwrite, `--lyrics-sleep` for request pacing); instrumental and plain-only matches are reported, never written; write mode, dry-run by default |
 | ReplayGain write | `--replayGain` | Scan and write ReplayGain 2.0 gain/peak tags album-by-album via `rsgain` (album = one folder, rescanned whole; `--skip-tagged` skips fully-tagged albums as a unit, `--target-lufs` for a custom target, `--threads` for the scan); requires `rsgain` (exit 2 without it on a real run); write mode, dry-run by default |
 | Genre rewrite | `--retag DIR GENRE [GENRE...]` | Hard-overwrite the genre tag(s) on one album directory (the package's one genre-write path; MP3 writes clear APEv2/TXXX:GENRE/ID3v1 as they save ID3v2.3 + refreshed v1), or strip junk ID3 frames with `--strip-junk` (detection shared with `--auditJunkFrames`); dir-scoped (single positional, no root walk); write mode, dry-run by default |
 | Genre authority build | `--genreTidy-build` | Scan (read-only through the shared scanner) and write the editable artist-to-genre authority TSV map (`--map`; default `<root>/genre_map.tsv`); re-runs preserve edits and append only new artists; compilations are flagged EXCLUDED, never enforced |
 | Genre authority apply | `--genreTidy-apply` | Retag every album whose genre is not on its artist's map line to the line's first (canonical) genre, through the package's one genre-write path; write mode, dry-run by default, log `<root>/genre_tidy.log` |
-| Import ritual | `--ingest` | Sequence the import stages over one root: genreMap, then apestrip, then clean --all, then the post-state health digest (a `--baseline` snapshot TSV adds a diff report). Dry-run by default, `--apply` runs the stages behind per-stage confirmations; each stage keeps its own dry-run/apply contract and log, and the one summary file (`<root>/ingest_summary.txt`) points into them; sequencing only, no new write verb |
+| Import ritual | `--ingest` | Sequence the import stages over one root: stripRatings (over the staging inbox only; the ritual never rating-strips the filed library), then genreMap, then apestrip, then clean --all, then the post-state health digest (a `--baseline` snapshot TSV adds a diff report). Dry-run by default, `--apply` runs the stages behind per-stage confirmations; each stage keeps its own dry-run/apply contract and log, and the one summary file (`<root>/ingest_summary.txt`) points into them; sequencing only, no new write verb |
 | Genre folder map | `--genreMap` | Restructure a flat Artist/Album library into Genre/Artist/Album, moving each album folder under its dominant genre tag (depth-aware classify, live genre-vocabulary gate, `Unfiltered/` staging-inbox semantics, `--only-genre` staged rollout, `--refile-mismatched`, `--allow-new-genre`); mv-only on one filesystem, destinations never overwritten, emptied sources pruned; the package's one folder-moving mode: dry-run by default, `--apply` performs, every move appended to a manifest TSV that `--revert` replays in reverse |
 
 ---
@@ -198,10 +199,15 @@ remainder, still producing the full report. A completed scan deletes the state.
 
 - **Not a player.** It reads tags; it does not play audio.
 - **Not a tagger.** It reads metadata; it writes metadata only via the explicit
-  write modes `--clean`, `--apestrip`, `--replayGain`, `--retag`, and
-  `--genreTidy-apply` (opt-in via `--apply`, logged, dry-run by default;
-  `--replayGain` shells out to `rsgain` and requires it on PATH for a real run;
-  `--retag` is dir-scoped to a single album directory). It reorganizes the tree
+  write modes `--clean`, `--apestrip`, `--stripRatings`, `--replayGain`,
+  `--retag`, and `--genreTidy-apply` (opt-in via `--apply`, logged, dry-run by
+  default; `--replayGain` shells out to `rsgain` and requires it on PATH for a
+  real run; `--retag` is dir-scoped to a single album directory;
+  `--stripRatings` deletes rating tags only: the sources `get_all_tags`
+  decodes, nonzero values only, so zero-valued shells and play-count-only POPM
+  frames survive — and its per-format source lists come from the same helpers
+  the reader uses, so a tag the stripper would remove is always a tag the
+  reader would decode). It reorganizes the tree
   only via the explicit `--genreMap` mode, which moves album folders under
   their dominant genre with `mv`-only semantics on one filesystem (a move is a
   rename, so tags and audio bytes are never read or rewritten by it), dry-run

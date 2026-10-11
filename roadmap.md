@@ -1,5 +1,11 @@
 # lattice-music Roadmap
 
+## Phase 16: Rating strip (2026-10-11)
+- [x] `--stripRatings`: delete rating tags carrying a nonzero rating (MP3 POPM/rating-TXXX/APEv2 Rating, Vorbis rating/score/stars keys, MP4 rate/rating atoms, ASF rating attributes), zero shells and play-count-only POPM frames kept. SHIPPED in v6.4.0: brain at `modes/stripratings.py`, verdicts through tags.py's extracted rating-source helpers (`is_id3_rating_desc`/`is_vorbis_rating_key`/`is_mp4_rating_key`/`is_asf_rating_key` + `_popm_stars`/`_tag_rating`), so reader and stripper cannot drift; apestrip-shaped run (dry-run default, worklist confirm, append-only log, json_summary); MP3 saves on the retag convention (v2.3 + refreshed v1).
+- [x] `--ingest` gains the stripRatings stage, staging-scoped by contract (over root/<staging> only; the ritual never rating-strips the filed library, whose rating tags may be the owner's own hand ratings; absent inbox or --staging "" skips the stage). SHIPPED in v6.4.0; sequencing only, no new write verb beyond the mode's own §5 amendment.
+- [x] spec.md §5 amendment (the house rule: new write surface, contract first), README census/tables/embedded help block, CLAUDE.md currency. SHIPPED in v6.4.0.
+- Tests: 19 in test_strip_ratings.py + updated wiring/ingest pins (788 total).
+
 ## Phase 15: Extraction (2026-08-23)
 - [x] Extract `vir-tui` core into a standalone repository and replace local primitives with the shared dependency.
 - [x] Adopt vir-tui 2.2.0's Phase-3 primitives — `progress_box()`, `interactive_session()`, `out_note()` — deleting the hand-mirrored `_TUIPbar`/shared-screen plumbing (v4.17.0).
@@ -652,7 +658,9 @@ versions below; the per-phase version targets are historical.
 - **rerate.py**: foldable in an afternoon (219 LOC, pure mutagen, 16
   tests) but not worth a permanent mode: hyper-personal closed two-entry
   POPM map, MP3-only, near-saturated (idempotent after one library
-  pass). Stays.
+  pass). Stays. (Unaffected by the v6.4.0 `--stripRatings` mode, the
+  opposite job: rerate reconciles byte scales on kept ratings, the
+  strip deletes ratings outright.)
 - **slipcover.py**: stays. Its `--fetch` (iTunes Search API) would
   violate the one-network-touchpoint clause if folded; it has zero
   tests; owner ruling 2026-10-05 is leave-as-is. If it ever wakes: tests

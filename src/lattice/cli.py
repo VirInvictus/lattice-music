@@ -83,6 +83,7 @@ from lattice.modes.playlists import (
 from lattice.modes.replaygain import run_replaygain
 from lattice.modes.retag import run_retag
 from lattice.modes.stats import run_stats
+from lattice.modes.stripratings import run_stripratings
 from lattice.tui import interactive_menu
 
 # Mode-flag dests that accept --where: the scanner-driven exports, the
@@ -124,6 +125,7 @@ _JSON_MODES = frozenset(
         "duplicates",
         "clean",
         "apestrip",
+        "stripratings",
         "replaygain",
         "retag",
         "genre_tidy_apply",
@@ -202,6 +204,7 @@ def build_parser() -> argparse.ArgumentParser:
     group.add_argument("--diff", dest="diff_snapshot", metavar="SNAPSHOT", default=None)
     group.add_argument("--clean", action="store_true")
     group.add_argument("--apestrip", action="store_true")
+    group.add_argument("--stripRatings", dest="stripratings", action="store_true")
     group.add_argument("--lyrics", action="store_true")
     group.add_argument("--replayGain", dest="replaygain", action="store_true")
     group.add_argument("--retag", action="store_true")
@@ -729,6 +732,7 @@ def main(argv: list[str] | None = None) -> int:
         if (
             args.clean
             or args.apestrip
+            or args.stripratings
             or args.lyrics
             or args.replaygain
             or args.genre_tidy_build
@@ -761,6 +765,13 @@ def main(argv: list[str] | None = None) -> int:
                     dry_run=dry_run,
                     keep_metadata=args.keep_metadata,
                     repair_malformed=args.repair_malformed,
+                    quiet=args.quiet,
+                    json_mode=args.json,
+                )
+            if args.stripratings:
+                return run_stripratings(
+                    root[0],
+                    dry_run=dry_run,
                     quiet=args.quiet,
                     json_mode=args.json,
                 )

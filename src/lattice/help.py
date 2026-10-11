@@ -931,6 +931,26 @@ MODES = MODES + (
         ),
     ),
     Mode(
+        dest="stripratings",
+        flag="--stripRatings",
+        category="write",
+        summary="Delete rating tags carrying a nonzero rating",
+        detail="Remove the sharer's player ratings from rips before they seed "
+        "a star display anywhere: POPM frames and rating TXXX frames plus the "
+        "APEv2 Rating key on MP3s, Vorbis rating/score/stars keys on "
+        "FLAC/OGG/Opus, rate/rating atoms on MP4/M4A, rating attributes on "
+        "WMA. Only nonzero values go: rating-0 POPM frames keep their play "
+        "counts and zero shells show nothing. Same sources get_all_tags "
+        "decodes, so a stripped file reads back rating-less. Genre, comments, "
+        "covers, and every non-rating tag survive. Stage one of --ingest, "
+        "which runs it over the staging inbox only. "
+        "Write mode: dry-run by default, logged to <root>/stripratings.log.",
+        usage="lattice --stripRatings ROOT [--apply]",
+        example="lattice --stripRatings ~/Downloads/Nicotine/Completed --apply",
+        shared=("root_one", "json", "apply", "dry_run", "quiet"),
+        own=(),
+    ),
+    Mode(
         dest="lyrics",
         flag="--lyrics",
         category="write",
@@ -1082,8 +1102,10 @@ MODES = MODES + (
         dest="ingest",
         flag="--ingest",
         category="write",
-        summary="Import ritual: genreMap, apestrip, clean, health",
-        detail="Sequence the import stages over one root: genreMap, then "
+        summary="Import ritual: stripRatings, genreMap, apestrip, clean, health",
+        detail="Sequence the import stages over one root: stripRatings over "
+        "the staging inbox (root/<staging>, default Unfiltered; the ritual "
+        "never rating-strips the filed library), then genreMap, then "
         "apestrip, then clean --all, then the post-state health digest. "
         "Each stage keeps its own dry-run/apply contract and log, confirmed "
         "per stage; a declined stage is recorded and skipped, never fatal (stages confirm on a TTY and auto-proceed when stdin is not one). "

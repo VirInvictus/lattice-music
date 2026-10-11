@@ -1,13 +1,20 @@
 """The import ritual, packaged (the ingest mode).
 
 One command sequences what the shell history shows being typed by hand after
-every import: the genreMap reorganization, the APEv2 strip, then the clean
-mode with every normalization pass (--clean --all), plus a post-state health
-digest. Ingest sequences; it never re-implements: each stage is the package
-mode function with its own dry-run/apply contract and its own log
-(<root>/genre_foldermap.manifest.tsv, <root>/apestrip.log, <root>/cleanup.log),
-and the write modes' single-root refusal is respected by sequencing one root
-across the stages, never aggregating.
+every import: the rating strip over the staging inbox, the genreMap
+reorganization, the APEv2 strip, then the clean mode with every
+normalization pass (--clean --all), plus a post-state health digest. Ingest
+sequences; it never re-implements: each stage is the package mode function
+with its own dry-run/apply contract and its own log
+(<staging>/stripratings.log, <root>/genre_foldermap.manifest.tsv,
+<root>/apestrip.log, <root>/cleanup.log), and the write modes' single-root
+refusal is respected by sequencing one root across the stages, never
+aggregating.
+
+The rating strip is staging-scoped by contract: it runs over
+root/<staging> (default Unfiltered), never over the filed library — a
+library whose owner hand-rated the tracks must never lose those tags to a
+ritual run. An absent inbox (or --staging "") skips the stage.
 
 Dry-run is the default: without --apply every stage only previews (its own
 plan, its own [DRY] log lines). --apply runs the stages in order, each behind
@@ -36,6 +43,7 @@ from lattice.modes.audit import run_health
 from lattice.modes.clean import run_clean
 from lattice.modes.foldermap import STAGING_DIR, run_genremap
 from lattice.modes.library import diff_snapshot
+from lattice.modes.stripratings import run_stripratings
 from lattice.utils import json_summary
 
 
@@ -86,7 +94,23 @@ def run_ingest(
         ui.print_header(f"{_title}{' [DRY RUN]' if not apply else ''}")
         print(f"Target: {directory}")
         print(f"Summary: {summary_path}")
-        print("Stages: genreMap -> apestrip -> clean --all -> health digest\n")
+        print(
+            "Stages: stripRatings -> genreMap -> apestrip -> clean --all"
+            " -> health digest\n"
+        )
+
+    def stage_stripratings() -> int:
+        # Staging-scoped by contract: the ritual's rating strip runs over the
+        # staging inbox (root/<staging>, default Unfiltered), never over the
+        # filed library — a library whose owner hand-rated the tracks must
+        # never lose those tags to a ritual run. No inbox (or staging
+        # disabled) means nothing to strip and the stage is a no-op.
+        inbox = directory / staging if staging else None
+        if inbox is None or not inbox.is_dir():
+            return 0
+        return run_stripratings(
+            str(inbox), dry_run=not apply, assume_yes=True, quiet=stage_quiet
+        )
 
     def stage_genremap() -> int:
         return run_genremap(
@@ -115,6 +139,10 @@ def run_ingest(
         )
 
     stages = [
+        (
+            "stripRatings (strip rating tags in the staging inbox)",
+            stage_stripratings,
+        ),
         ("genreMap (reorganize into Genre/Artist/Album)", stage_genremap),
         ("apestrip (strip stray APEv2 tags from MP3s)", stage_apestrip),
         ("clean --all (merge + normalize names/files/tags)", stage_clean),
@@ -171,6 +199,10 @@ def run_ingest(
     lines.append(f"  snapshot diff: {diff_note}")
     lines.append("")
     lines.append("Per-stage records live in the stage logs:")
+    if staging:
+        lines.append(f"  stripRatings log:  {directory / staging / 'stripratings.log'}")
+    else:
+        lines.append("  stripRatings log:  (staging disabled; stage skipped)")
     lines.append(f"  genreMap manifest: {directory / 'genre_foldermap.manifest.tsv'}")
     lines.append(f"  apestrip log:      {directory / 'apestrip.log'}")
     lines.append(f"  clean log:         {directory / 'cleanup.log'}")
