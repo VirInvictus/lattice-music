@@ -290,8 +290,14 @@ class LyricsDispatchTests(unittest.TestCase):
         self._tmp.cleanup()
 
     def _main(self, argv):
+        # The dispatch surface resolves the fetcher at call time, so patch it
+        # here: without this, every dispatch test is a live LRCLIB request and
+        # a 503 on their side fails the suite (the 2026-10-12 CI lesson).
         buf = io.StringIO()
-        with contextlib.redirect_stdout(buf):
+        with (
+            contextlib.redirect_stdout(buf),
+            mock.patch("lattice.modes.lyrics._fetch_json", _fake_fetch(_exact())),
+        ):
             return cli.main(argv)
 
     def test_dry_run_is_the_default(self):
