@@ -30,7 +30,7 @@ makes the tool refuse to be the instrument next time.
 still previewing, the staging-inbox carve-out, and unprotected roots
 stripping normally.
 
-## v6.4.0 (2026-10-11) (2026-10-11)
+## v6.4.0 (2026-10-11)
 
 ### --stripRatings: the rating-tag stripper, and a fourth ingest stage
 
