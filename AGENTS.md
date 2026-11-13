@@ -8,6 +8,8 @@ lattice-music is a CLI/TUI toolkit for music libraries that treats the filesyste
 
 The global rules file at `~/.zcode/AGENTS.md` covers the cross-project rules (git habits including the release/tag procedure, code style, prose style, tooling). This file overrides it for work scoped to lattice-music.
 
+**CLI surface contract:** lattice is a reference implementation of the workspace CLI machine-surface contract (`~/.gitrepos/CLAUDE.md`, Throughlines): machine help carries exit codes, integrity tiers, and per-mode examples (`help --json`), errors are one clean line on stderr (never a traceback), and surfaces are additive-only. Open follow-up from the 2026-11-13 live audit: issue #5 (a missing library root must take the exit-2 usage class on stderr instead of reading as an empty report on stdout).
+
 ## Common commands
 
 ```bash
