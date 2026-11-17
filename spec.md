@@ -1,6 +1,6 @@
 # lattice-music Application Specification
 
-**Version:** 6.4.3  
+**Version:** 6.5.0  
 **Language:** Python 3.14+  
 **Dependencies:** `mutagen`, `tqdm`, `vir-tui`  
 **License:** MIT
@@ -159,12 +159,16 @@ test suite. Mode dispatch itself is unchanged.
 
 ## 4. Output
 
-All output modes write `.txt` reports by default. Results are grouped by
-severity or category with headers and relative paths; designed for human
-reading. `--json` swaps the report for a machine-readable JSON document
-(the uniform envelope `{mode, root, findings, payload}` for stats and the
-tag-reading audits; a run summary with counts and the `dry_run`/committed
-flag for the write modes), and `--output -` pipes any report to stdout.
+Report modes print to stdout by default: omitting `--output` (or passing
+`-` explicitly) streams the report to the terminal, and `--output PATH` is
+the only way a report becomes a file, so a read run litters no default
+`.txt` into the caller's working directory. The multi-file exports
+(`--all-wings`, `--ai-wings`) keep their output directories. Results are
+grouped by severity or category with headers and relative paths; designed
+for human reading. `--json` swaps the report for a machine-readable JSON
+document (the uniform envelope `{mode, root, findings, payload}` for stats
+and the tag-reading audits; a run summary with counts and the
+`dry_run`/committed flag for the write modes).
 `--fail-on-findings` makes an audit exit 1 when it has findings (the default
 stays 0) so a cron/CI job can gate on a clean report; refusals stay exit 2
 and an interrupt stays 130.
@@ -191,7 +195,9 @@ The FLAC and MP3 integrity scans support `--resume`: each run persists its
 verdicts to a transient `<output>.progress.json` beside the report, an
 interrupted run leaves that state behind, and a resumed run reuses recorded
 verdicts (only when the verification tool is unchanged) and scans only the
-remainder, still producing the full report. A completed scan deletes the state.
+remainder, still producing the full report. A completed scan deletes the state. A stdout report (the default)
+anchors no state file, so a stdout run persists nothing and `--resume`
+without `--output` refuses with exit 2.
 
 ---
 
