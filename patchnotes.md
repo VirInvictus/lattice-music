@@ -38,7 +38,7 @@ machine-shape lies: flags that promised behavior the code did not deliver.
   "Report written to: -".
 - **`--ingest --output -` streams the summary (#12)**: the ritual wrote a
   literal `-` file and anchored the health-digest and snapshot-diff sidecars
-  to `Path("-").parent` — the caller's working directory. The summary now
+  to `Path("-").parent`, the caller's working directory. The summary now
   streams to stdout (still suppressed under `--json`, whose machine summary
   gains a `logs` map carrying the per-stage log paths), and the sidecars
   always land beside the root the ritual ran over.
