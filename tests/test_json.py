@@ -13,7 +13,9 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
+import lattice.modes.integrity as integrity_mod
 from lattice import tui
 from lattice.config import DEFAULT_HEALTH_OUTPUT
 
@@ -247,18 +249,53 @@ class StdoutByDefaultTests(unittest.TestCase):
         self._assert_no_litter()
 
     def test_mp3_scan_prints_and_keeps_no_progress_state(self):
-        rc, out = self._run_in_scratch(["--testMP3", str(self.root)])
+        # The decoder is stubbed (the suite never invokes ffmpeg; a CI box
+        # without it must reach the same code path).
+        def run():
+            with (
+                mock.patch.object(
+                    integrity_mod, "_find_ffmpeg", return_value="/fake/ffmpeg"
+                ),
+                mock.patch.object(
+                    integrity_mod, "_ffmpeg_decode_check", return_value=(0, "")
+                ),
+            ):
+                return cli.main(["--testMP3", str(self.root)])
+
+        old = os.getcwd()
+        os.chdir(self.scratch)
+        try:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = run()
+            out = buf.getvalue()
+        finally:
+            os.chdir(old)
         self.assertEqual(rc, 0)
         self.assertIn("MP3 INTEGRITY REPORT", out)
         self._assert_no_litter()
 
     def test_resume_without_an_output_file_refuses(self):
+        # The decoder stub comes first on purpose: the missing-decoder
+        # refusal (exit 2) fires before the resume check, and a CI box
+        # without ffmpeg must still pin the resume rule, not just that one.
+        def run():
+            with (
+                mock.patch.object(
+                    integrity_mod, "_find_ffmpeg", return_value="/fake/ffmpeg"
+                ),
+                mock.patch.object(
+                    integrity_mod, "_ffmpeg_decode_check", return_value=(0, "")
+                ),
+            ):
+                return cli.main(["--testMP3", "--resume", str(self.root)])
+
         out, err = io.StringIO(), io.StringIO()
         with (
             contextlib.redirect_stdout(out),
             contextlib.redirect_stderr(err),
         ):
-            rc = cli.main(["--testMP3", "--resume", str(self.root)])
+            rc = run()
         self.assertEqual(rc, 2)
         self.assertIn("--resume state lives beside the report file", err.getvalue())
 
