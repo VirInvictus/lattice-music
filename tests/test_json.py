@@ -112,6 +112,59 @@ class JsonReportTests(unittest.TestCase):
         self.assertEqual(rc, 2)
 
 
+class MissingRootExitClassTests(unittest.TestCase):
+    """A library root that does not exist is a usage error (exit 2, one clean
+    line on stderr), never a confident-looking empty report on stdout with
+    exit 0: that made a typo'd root indistinguishable from an empty library
+    and handed --fail-on-findings a false green. An existing root with zero
+    audio keeps the true empty report (exit 0)."""
+
+    def _main_both(self, argv):
+        out, err = io.StringIO(), io.StringIO()
+        with (
+            contextlib.redirect_stdout(out),
+            contextlib.redirect_stderr(err),
+        ):
+            rc = cli.main(argv)
+        return rc, out.getvalue(), err.getvalue()
+
+    def test_missing_root_is_exit_2_on_stderr(self):
+        missing = "/tmp/lattice-no-such-root-xyz"
+        rc, out, err = self._main_both(["--stats", missing])
+        self.assertEqual(rc, 2)
+        self.assertEqual(out, "")
+        self.assertIn(missing, err)
+        self.assertIn("does not exist", err)
+
+    def test_missing_root_refuses_a_write_mode_too(self):
+        rc, _out, err = self._main_both(
+            ["--stripRatings", "/tmp/lattice-no-such-root-xyz", "--apply"]
+        )
+        self.assertEqual(rc, 2)
+        self.assertIn("does not exist", err)
+
+    def test_repeated_roots_name_every_missing_path(self):
+        rc, _out, err = self._main_both(
+            [
+                "--stats",
+                "--root",
+                "/tmp/lattice-no-such-a",
+                "--root",
+                "/tmp/lattice-no-such-b",
+            ]
+        )
+        self.assertEqual(rc, 2)
+        self.assertIn("/tmp/lattice-no-such-a", err)
+        self.assertIn("/tmp/lattice-no-such-b", err)
+
+    def test_existing_root_with_zero_audio_stays_exit_0(self):
+        with tempfile.TemporaryDirectory() as td:
+            rc, out, err = self._main_both(["--stats", td])
+            self.assertEqual(rc, 0)
+            self.assertIn("No audio", out)
+            self.assertEqual(err, "")
+
+
 class WriteSummaryTests(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.TemporaryDirectory()

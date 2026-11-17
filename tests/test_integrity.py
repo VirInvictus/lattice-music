@@ -390,6 +390,110 @@ class ProgressPersistenceTests(unittest.TestCase):
             self.assertIn("decode failed (test fixture)", report)  # cached row
             self.assertFalse(pfile.exists())
 
+    def test_flac_resume_interrupt_keeps_the_cached_verdicts(self):
+        # The resumed run owns the whole state file: every flush and the
+        # interrupt save rewrite it wholesale, so the reused verdicts must
+        # ride inside `state`. They used to sit in a separate dict, and a
+        # second interrupt (or the periodic flush) erased run 1's work.
+        with tempfile.TemporaryDirectory() as td:
+            files = self._tree(td, ".flac")
+            out = Path(td) / "flac_errors.txt"
+            pfile = Path(str(out) + ".progress.json")
+            # run 1 raises for B; the resumed run 2 raises for C.
+            armed = [True, True]
+
+            def verdict(path, *, use_flac, ffmpeg_path):
+                parent = Path(path).parent.name
+                if parent == "B" and armed[0]:
+                    raise KeyboardInterrupt
+                if parent == "C" and armed[1]:
+                    raise KeyboardInterrupt
+                return ("flac", TIER_OK, "clean")
+
+            with (
+                mock.patch.object(integrity_mod, "has_tool", return_value=True),
+                mock.patch.object(integrity_mod, "_flac_verdict", verdict),
+            ):
+                run_flac_mode([td], str(out), 1, "flac", quiet=True)
+            self.assertTrue(pfile.exists())
+            run1 = set(json.loads(pfile.read_text(encoding="utf-8"))["results"])
+
+            armed[0] = False
+            with (
+                mock.patch.object(integrity_mod, "has_tool", return_value=True),
+                mock.patch.object(integrity_mod, "_flac_verdict", verdict),
+            ):
+                rc2 = run_flac_mode([td], str(out), 1, "flac", resume=True, quiet=True)
+            self.assertEqual(rc2, 130)
+            self.assertTrue(pfile.exists())
+            run2 = set(json.loads(pfile.read_text(encoding="utf-8"))["results"])
+            # Run 1's verdict (A) survived the second interrupt, and the
+            # state now also holds everything run 2 recorded before it (B).
+            self.assertIn(str(files[0]), run2)
+            self.assertIn(str(files[1]), run2)
+            self.assertNotIn(str(files[2]), run2)
+            self.assertLessEqual(run1, run2)
+
+    def test_mp3_resume_interrupt_keeps_the_cached_verdicts(self):
+        # Same wipe for the decode scan: the resumed run's flushes used to
+        # overwrite the state with the new session's results alone.
+        with tempfile.TemporaryDirectory() as td:
+            files = self._tree(td, ".mp3")
+            out = Path(td) / "mp3_results.txt"
+            pfile = _progress_file(str(out))
+            armed = [True, True]
+
+            def scan(path, ffmpeg_path, *, enrich=False):
+                parent = Path(path).parent.name
+                if parent == "B" and armed[0]:
+                    raise KeyboardInterrupt
+                if parent == "C" and armed[1]:
+                    raise KeyboardInterrupt
+                return {"path": str(path), "tier": TIER_OK, "reason": "decode ok"}
+
+            with (
+                mock.patch.object(
+                    integrity_mod, "_find_ffmpeg", return_value="/fake/ffmpeg"
+                ),
+                mock.patch.object(
+                    integrity_mod, "_ffmpeg_decode_check", return_value=(0, "")
+                ),
+                mock.patch.object(integrity_mod, "_scan_one_file", scan),
+            ):
+                run_mp3_mode(
+                    [td], str(out), 1, None, only_errors=True, verbose=False, quiet=True
+                )
+            self.assertTrue(pfile.exists())
+            run1 = set(json.loads(pfile.read_text(encoding="utf-8"))["results"])
+
+            armed[0] = False
+            with (
+                mock.patch.object(
+                    integrity_mod, "_find_ffmpeg", return_value="/fake/ffmpeg"
+                ),
+                mock.patch.object(
+                    integrity_mod, "_ffmpeg_decode_check", return_value=(0, "")
+                ),
+                mock.patch.object(integrity_mod, "_scan_one_file", scan),
+            ):
+                rc2 = run_mp3_mode(
+                    [td],
+                    str(out),
+                    1,
+                    None,
+                    only_errors=True,
+                    verbose=False,
+                    quiet=True,
+                    resume=True,
+                )
+            self.assertEqual(rc2, 130)
+            self.assertTrue(pfile.exists())
+            run2 = set(json.loads(pfile.read_text(encoding="utf-8"))["results"])
+            self.assertIn(str(files[0]), run2)
+            self.assertIn(str(files[1]), run2)
+            self.assertNotIn(str(files[2]), run2)
+            self.assertLessEqual(run1, run2)
+
     def test_progress_load_rejects_foreign_or_corrupt_state(self):
         with tempfile.TemporaryDirectory() as td:
             pfile = Path(td) / "r.txt.progress.json"
@@ -666,6 +770,107 @@ class WavWmaModeTests(unittest.TestCase):
             # exit code is what a gate keys on.
             self.assertEqual(rc, 0)
             self.assertIn("Corrupt: 0", out.read_text())
+
+
+class StdoutReportTests(unittest.TestCase):
+    """--output - pipes the report to stdout (the resolve_output contract).
+    The decode scans used to Path().resolve() the dash into a literal file
+    named '-' in the caller's cwd, so the whole report landed on disk while
+    stdout got nothing."""
+
+    def _tree(self, td: str, ext: str) -> Path:
+        p = Path(td) / "Album" / f"01{ext}"
+        p.parent.mkdir(parents=True)
+        p.write_bytes(b"")
+        return p
+
+    def _run_in_cwd(self, run, td: str):
+        """Run `run()` with the cwd pinned to a scratch dir, returning its
+        return code and captured stdout (the old bug littered '-' into cwd)."""
+        scratch = Path(td) / "cwd"
+        scratch.mkdir()
+        old = os.getcwd()
+        os.chdir(scratch)
+        try:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = run()
+            return rc, buf.getvalue(), scratch
+        finally:
+            os.chdir(old)
+
+    def test_mp3_output_dash_streams_to_stdout(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._tree(td, ".mp3")
+
+            def run():
+                with (
+                    mock.patch.object(
+                        integrity_mod, "_find_ffmpeg", return_value="/fake/ffmpeg"
+                    ),
+                    mock.patch.object(
+                        integrity_mod, "_ffmpeg_decode_check", return_value=(0, "")
+                    ),
+                ):
+                    return run_mp3_mode(
+                        [td],
+                        "-",
+                        1,
+                        None,
+                        only_errors=True,
+                        verbose=False,
+                        quiet=True,
+                    )
+
+            rc, out, scratch = self._run_in_cwd(run, td)
+            self.assertEqual(rc, 0)
+            self.assertIn("MP3 INTEGRITY REPORT", out)
+            self.assertIn("Scanned: 1", out)
+            self.assertFalse((scratch / "-").exists(), "littered a '-' file in cwd")
+
+    def test_opus_output_dash_streams_to_stdout(self):
+        with tempfile.TemporaryDirectory() as td:
+            self._tree(td, ".opus")
+
+            def run():
+                with (
+                    mock.patch.object(
+                        integrity_mod, "_find_ffmpeg", return_value="/fake/ffmpeg"
+                    ),
+                    mock.patch.object(
+                        integrity_mod, "_ffmpeg_decode_check", return_value=(0, "")
+                    ),
+                ):
+                    return integrity_mod.run_opus_mode(
+                        [td], "-", 1, None, only_errors=True, verbose=False, quiet=True
+                    )
+
+            rc, out, scratch = self._run_in_cwd(run, td)
+            self.assertEqual(rc, 0)
+            self.assertIn("OPUS INTEGRITY REPORT", out)
+            self.assertFalse((scratch / "-").exists(), "littered a '-' file in cwd")
+
+    def test_flac_output_dash_still_streams_to_stdout(self):
+        # The FLAC mode was already correct; pinned so the fix stays honest
+        # about which sibling had the gap.
+        with tempfile.TemporaryDirectory() as td:
+            self._tree(td, ".flac")
+
+            def run():
+                with (
+                    mock.patch.object(integrity_mod, "has_tool", return_value=True),
+                    mock.patch.object(
+                        integrity_mod,
+                        "_flac_verdict",
+                        return_value=("flac", TIER_OK, "clean"),
+                    ),
+                ):
+                    return run_flac_mode([td], "-", 1, "flac", quiet=True)
+
+            rc, out, scratch = self._run_in_cwd(run, td)
+            self.assertEqual(rc, 0)
+            self.assertIn("FLAC INTEGRITY REPORT", out)
+            self.assertFalse((scratch / "-").exists(), "littered a '-' file in cwd")
 
 
 if __name__ == "__main__":

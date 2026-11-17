@@ -1141,7 +1141,8 @@ MODES = MODES + (
             Opt(
                 "output",
                 "--output PATH",
-                "Summary-file path (default: <root>/ingest_summary.txt).",
+                "Summary-file path (default: <root>/ingest_summary.txt); "
+                "'-' streams the summary to stdout.",
             ),
         ),
     ),

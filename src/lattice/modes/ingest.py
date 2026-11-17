@@ -27,7 +27,9 @@ The summary is one top-level file (default <root>/ingest_summary.txt)
 recording each stage's exit and pointing into the per-stage logs, plus the
 post-state digest (lattice --health, in process) when applied. With a
 --snapshot baseline the summary also points at a diff report, so the whole
-import is a before/after record.
+import is a before/after record. `--output -` streams the summary to stdout
+instead of writing the file (the digest and diff sidecars still land beside
+the root).
 """
 
 import contextlib
@@ -44,7 +46,7 @@ from lattice.modes.clean import run_clean
 from lattice.modes.foldermap import STAGING_DIR, run_genremap
 from lattice.modes.library import diff_snapshot
 from lattice.modes.stripratings import run_stripratings
-from lattice.utils import json_summary
+from lattice.utils import STDOUT_REPORT, json_summary
 
 
 def _confirm(stage: str) -> bool:
@@ -85,7 +87,18 @@ def run_ingest(
         return 1
 
     staging = staging or None
-    summary_path = Path(log_path) if log_path else directory / "ingest_summary.txt"
+    # --output - streams the summary to stdout (the open_report convention).
+    # A bare Path("-") here wrote a literal "-" file into the caller's cwd
+    # and, worse, anchored the digest/diff sidecars to Path("-").parent —
+    # the current directory.
+    stdout_summary = log_path == STDOUT_REPORT
+    summary_path: Path | None = (
+        None
+        if stdout_summary
+        else Path(log_path)
+        if log_path
+        else directory / "ingest_summary.txt"
+    )
 
     # Under --json the whole run stays machine-clean: stages run quiet and
     # only the JSON summary reaches stdout (each stage's log file is full).
@@ -93,7 +106,7 @@ def run_ingest(
     if not quiet and not json_mode:
         ui.print_header(f"{_title}{' [DRY RUN]' if not apply else ''}")
         print(f"Target: {directory}")
-        print(f"Summary: {summary_path}")
+        print(f"Summary: {'stdout' if stdout_summary else summary_path}")
         print(
             "Stages: stripRatings -> genreMap -> apestrip -> clean --all"
             " -> health digest\n"
@@ -168,7 +181,9 @@ def run_ingest(
 
     digest_note = "skipped (dry run: the post-state would be hypothetical)"
     if apply:
-        digest_path = summary_path.parent / "ingest_health.txt"
+        # The sidecars live beside the root the ritual ran over, never
+        # beside the summary (which may be stdout).
+        digest_path = directory / "ingest_health.txt"
         rc = run_health(
             directory,
             str(digest_path),
@@ -179,7 +194,7 @@ def run_ingest(
 
     diff_note = "no --snapshot baseline passed"
     if snapshot is not None:
-        diff_path = summary_path.parent / "ingest_diff.txt"
+        diff_path = directory / "ingest_diff.txt"
         rc = diff_snapshot([str(directory)], str(snapshot), str(diff_path), quiet=True)
         diff_note = f"exit {rc}; report: {diff_path}"
 
@@ -208,7 +223,12 @@ def run_ingest(
     lines.append(f"  clean log:         {directory / 'cleanup.log'}")
     summary = "\n".join(lines) + "\n"
 
-    summary_path.write_text(summary, encoding="utf-8")
+    # The summary is the run's one file; --output - streams it to stdout
+    # instead. Under --json stdout stays machine-clean, so a streamed summary
+    # is suppressed there and the JSON carries the stage results plus the
+    # per-stage log pointers the file would have listed.
+    if summary_path is not None:
+        summary_path.write_text(summary, encoding="utf-8")
 
     if json_mode:
         print(
@@ -221,7 +241,22 @@ def run_ingest(
                         name.split(" (")[0]: {"exit": rc, "note": note}
                         for name, rc, note in results
                     },
-                    "summary": str(summary_path),
+                    "summary": str(summary_path) if summary_path else "-",
+                    "logs": {
+                        "stripratings": (
+                            str(directory / staging / "stripratings.log")
+                            if staging
+                            else None
+                        ),
+                        "genre_map_manifest": str(
+                            directory / "genre_foldermap.manifest.tsv"
+                        ),
+                        "apestrip": str(directory / "apestrip.log"),
+                        "clean": str(directory / "cleanup.log"),
+                        "health_digest": (
+                            str(directory / "ingest_health.txt") if apply else None
+                        ),
+                    },
                 },
             ),
             end="",
@@ -229,6 +264,7 @@ def run_ingest(
     elif not quiet:
         print()
         print(summary)
-        print(f"Summary written to: {summary_path}")
+        if summary_path is not None:
+            print(f"Summary written to: {summary_path}")
 
     return exit_code

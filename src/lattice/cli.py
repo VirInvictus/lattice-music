@@ -435,6 +435,18 @@ def main(argv: list[str] | None = None) -> int:
                 if ar not in seen:
                     seen.add(ar)
                     root.append(ar)
+            # A root that does not exist is a usage error, not an empty
+            # library: exit 0 with "No audio files found" made a typo'd root
+            # read as a confident empty report, and --fail-on-findings gave
+            # it a false green. (Configured roots keep the lenient isdir
+            # filter below: a stale entry there is skipped, never fatal.)
+            missing = [r for r in root if not os.path.isdir(r)]
+            if missing:
+                print(
+                    "error: library root does not exist: " + ", ".join(missing),
+                    file=sys.stderr,
+                )
+                return 2
         else:
             from lattice.config import get_library_roots, set_library_root
 

@@ -8,6 +8,7 @@ carrying any stage failure."""
 import contextlib
 import io
 import json
+import os
 import shutil
 import tempfile
 import unittest
@@ -155,6 +156,63 @@ class IngestApplyTests(_Tree):
         self.assertTrue(doc["dry_run"])
         self.assertIn("stripRatings", doc["counts"]["stages"])
         self.assertIn("genreMap", doc["counts"]["stages"])
+
+    def test_json_summary_carries_the_log_pointers(self):
+        rc, out = _main(["--ingest", str(self.root), "--json"])
+        self.assertEqual(rc, 0)
+        doc = json.loads(out[out.index("{") :])
+        logs = doc["counts"]["logs"]
+        self.assertIn("cleanup.log", logs["clean"])
+        self.assertIn("apestrip.log", logs["apestrip"])
+
+
+class IngestStdoutSummaryTests(_Tree):
+    """--output - streams the summary to stdout. A bare Path("-") summary
+    used to write a literal '-' file into the caller's cwd and anchor the
+    health/diff sidecars to Path("-").parent — the current directory."""
+
+    def _run_in_cwd(self, argv):
+        old = os.getcwd()
+        scratch = Path(self._tmp.name) / "cwd"
+        scratch.mkdir()
+        os.chdir(scratch)
+        try:
+            return _main(argv), scratch
+        finally:
+            os.chdir(old)
+
+    def test_output_dash_streams_the_summary_and_litters_nothing(self):
+        (rc, out), scratch = self._run_in_cwd(
+            ["--ingest", str(self.root), "--output", "-"]
+        )
+        self.assertEqual(rc, 0)
+        self.assertIn("INGEST SUMMARY", out)
+        self.assertIn("Per-stage records", out)
+        self.assertFalse((scratch / "-").exists(), "littered a '-' file in cwd")
+        self.assertFalse((self.root / "ingest_summary.txt").exists())
+
+    def test_output_dash_json_keeps_stdout_machine_clean(self):
+        (rc, out), scratch = self._run_in_cwd(
+            ["--ingest", str(self.root), "--output", "-", "--json"]
+        )
+        self.assertEqual(rc, 0)
+        doc = json.loads(out[out.index("{") :])
+        self.assertEqual(doc["mode"], "ingest")
+        self.assertEqual(doc["counts"]["summary"], "-")
+        self.assertNotIn("INGEST SUMMARY", out)
+        self.assertFalse((scratch / "-").exists(), "littered a '-' file in cwd")
+
+    def test_apply_anchors_sidecars_to_the_root_not_the_summary(self):
+        summary = Path(self._tmp.name) / "summary.txt"
+        rc, _out = _main(
+            ["--ingest", str(self.root), "--apply", "--output", str(summary)]
+        )
+        self.assertEqual(rc, 0)
+        self.assertTrue(summary.exists())
+        # The digest lives beside the root the ritual ran over, never beside
+        # the summary file (the old code used summary_path.parent).
+        digest = self.root / "ingest_health.txt"
+        self.assertTrue(digest.exists())
 
 
 class IngestWiringTests(unittest.TestCase):

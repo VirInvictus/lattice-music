@@ -17,6 +17,7 @@ from lattice.config import (
 )
 from lattice.tags import HAVE_MUTAGEN_MP3, MUTAGEN_MP3
 from lattice.utils import (
+    STDOUT_REPORT,
     _make_pbar,
     as_roots,
     green,
@@ -273,6 +274,10 @@ def run_flac_mode(
     cached: dict[str, dict] = {}
     if resume:
         cached = _load_progress(pfile, scan_id) or {}
+        # The resumed run owns the whole state file: every flush (and the
+        # interrupt save) rewrites it with `state`, so the reused verdicts
+        # ride inside it or the first flush erases them.
+        state = dict(cached)
         if cached and not quiet:
             print(
                 f"Resuming: {len(cached)} previously verified file(s) reused "
@@ -578,6 +583,10 @@ def _run_decode_scan(
     cached: dict[str, dict] = {}
     if resume:
         cached = _load_progress(pfile, scan_id) or {}
+        # The resumed run owns the whole state file: every flush (and the
+        # interrupt save) rewrites it with `state`, so the reused verdicts
+        # ride inside it or the first flush erases them.
+        state = dict(cached)
         if cached and not quiet:
             print(
                 f"Resuming: {len(cached)} previously scanned file(s) reused "
@@ -636,8 +645,13 @@ def _run_decode_scan(
         pbar.close()
 
     elapsed = time.time() - started
-    out_path = Path(output or default_output).expanduser().resolve()
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    # resolve_output keeps "-" as "-": a direct Path().resolve() here turned
+    # --output - into a literal file named '-' in the caller's cwd, the one
+    # report writer that missed the v6.3.0 conversion (run_flac_mode's
+    # resolve_output call is the sibling this now matches).
+    out_path = resolve_output(output, default_output)
+    if out_path != STDOUT_REPORT:
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     def _section(
         handle, tier: str, rows: list[dict[str, Any]], *, compact: bool = False
@@ -694,7 +708,8 @@ def _run_decode_scan(
             f"{green('ok: ' + str(counts[TIER_OK]))}  "
             f"metadata: {counts[TIER_METADATA]}  {suspect_s}  {corrupt_s}"
         )
-        print(f"Report written to: {out_path}")
+        if out_path != STDOUT_REPORT:
+            print(f"Report written to: {out_path}")
     _clear_progress(pfile)
     return 1 if counts[TIER_CORRUPT] > 0 else 0
 

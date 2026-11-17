@@ -8,6 +8,7 @@ and the TUI entries exist with the confirms in front of any apply."""
 
 import contextlib
 import io
+import json
 import shutil
 import tempfile
 import unittest
@@ -18,6 +19,7 @@ from mutagen.apev2 import TEXT, APENoHeaderError, APEv2, APEValue
 
 from lattice import cli, tui
 from lattice.modes import replaygain as rg_mode
+from lattice.tags import get_all_tags
 
 FIXTURES = Path(__file__).parent / "fixtures" / "library"
 MP3_SRC = FIXTURES / "Cursive" / "Domestica" / "01 - The Casualty.mp3"
@@ -32,6 +34,10 @@ def _fragmented_tree(root: Path) -> None:
     variant.mkdir()
     (canon / "01.flac").write_bytes(b"x")
     (variant / "02.flac").write_bytes(b"y")
+
+
+def album_path(root: Path, name: str) -> Path:
+    return root / "Art" / "Album" / name
 
 
 def _mp3_with_ape(path: Path) -> None:
@@ -597,6 +603,60 @@ class TuiWriteModeTests(unittest.TestCase):
             si, ii = sel
             self.assertLess(si, len(tui._MAIN_SECTIONS), f"{key}: bad section")
             self.assertLess(ii, len(tui._MAIN_SECTIONS[si][1]), f"{key}: bad item")
+
+
+class ApplyJsonCommitTests(unittest.TestCase):
+    """--apply --json must reach the write loop and report dry_run=False with
+    the committed counts. The planning summaries in stripratings and apestrip
+    used to sit ahead of the dry-run guard, so the flag pair wrote nothing
+    while the JSON claimed dry_run and exit 0."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name) / "Music"
+        album = self.root / "Art" / "Album"
+        album.mkdir(parents=True)
+        shutil.copy(MP3_SRC, album / "01.mp3")
+        shutil.copy(FLAC_SRC, album / "02.flac")
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _main(self, argv):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            return cli.main(argv), buf.getvalue()
+
+    def test_stripratings_apply_json_writes_and_reports_dry_run_false(self):
+        rc, out = self._main(["--stripRatings", str(self.root), "--apply", "--json"])
+        self.assertEqual(rc, 0)
+        doc = json.loads(out[out.index("{") :])
+        self.assertEqual(doc["mode"], "stripratings")
+        self.assertFalse(doc["dry_run"])
+        self.assertEqual(doc["counts"]["removed"], 2)
+        # The writes actually happened: the reader decodes no rating anymore.
+        self.assertIsNone(get_all_tags(str(album_path(self.root, "01.mp3"))).rating)
+        self.assertIsNone(get_all_tags(str(album_path(self.root, "02.flac"))).rating)
+
+    def test_apestrip_apply_json_writes_and_reports_dry_run_false(self):
+        ape = APEv2()
+        ape["Year"] = APEValue("1986", TEXT)
+        ape.save(str(self.root / "Art" / "Album" / "01.mp3"))
+        rc, out = self._main(["--apestrip", str(self.root), "--apply", "--json"])
+        self.assertEqual(rc, 0)
+        doc = json.loads(out[out.index("{") :])
+        self.assertEqual(doc["mode"], "apestrip")
+        self.assertFalse(doc["dry_run"])
+        self.assertEqual(doc["counts"]["stripped"], 1)
+        with self.assertRaises(APENoHeaderError):
+            APEv2(str(self.root / "Art" / "Album" / "01.mp3"))
+
+    def test_dry_run_json_still_reports_dry_run_true(self):
+        rc, out = self._main(["--stripRatings", str(self.root), "--json"])
+        self.assertEqual(rc, 0)
+        doc = json.loads(out[out.index("{") :])
+        self.assertTrue(doc["dry_run"])
+        self.assertIsNotNone(get_all_tags(str(album_path(self.root, "01.mp3"))).rating)
 
 
 if __name__ == "__main__":

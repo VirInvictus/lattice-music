@@ -358,29 +358,35 @@ def run_stripratings(
                 for removal in r.removals:
                     print(f"      remove {removal}")
 
-        if json_mode:
-            print(
-                json_summary(
-                    "stripratings",
-                    root,
-                    True,
-                    {
-                        "files_with_ratings": len(rated),
-                        "removed": total_removals,
-                        "errors": errors,
-                    },
-                ),
-                end="",
-            )
-            return 0
-
+        # The planning summary ends a dry run only: an --apply --json run must
+        # reach the write loop below and report the committed counts with
+        # dry_run=False (the replaygain convention; these two blocks used to
+        # sit ahead of it and turned every --apply --json run into a silent
+        # no-op claiming dry_run).
         if dry_run:
+            if json_mode:
+                print(
+                    json_summary(
+                        "stripratings",
+                        root,
+                        True,
+                        {
+                            "files_with_ratings": len(rated),
+                            "removed": total_removals,
+                            "errors": errors,
+                        },
+                    ),
+                    end="",
+                )
+                return 0
             print("\nDry run: no files modified.")
             return 0
 
         # Confirmation, apestrip style. assume_yes stands in for the TUI's
-        # ask_yn confirm; a non-TTY run proceeds so pipelines keep working.
-        if not assume_yes and sys.stdin.isatty():
+        # ask_yn confirm; a non-TTY run proceeds so pipelines keep working,
+        # and a --json run is a machine shape that proceeds the same way (a
+        # prompt on stdout would corrupt the summary).
+        if not assume_yes and not json_mode and sys.stdin.isatty():
             try:
                 ans = input("\nStrip these rating tags? [y/N] ").strip().lower()
             except EOFError:

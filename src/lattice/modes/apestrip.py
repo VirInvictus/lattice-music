@@ -771,29 +771,35 @@ def run_apestrip(
                 f"{rating_files} rating(s) reported, {warn_files} genre warning(s)."
             )
 
-        if json_mode:
-            print(
-                json_summary(
-                    "apestrip",
-                    root,
-                    True,
-                    {
-                        "files_with_ape": len(worklist),
-                        "migrations": total_migrations,
-                        "skipped_fields": total_skipped,
-                    },
-                ),
-                end="",
-            )
-            return 0
-
+        # The planning summary ends a dry run only: an --apply --json run must
+        # reach the write loop below and report the committed counts with
+        # dry_run=False (the replaygain convention; this block used to sit
+        # ahead of it and turned every --apply --json run into a silent no-op
+        # claiming dry_run).
         if dry_run:
+            if json_mode:
+                print(
+                    json_summary(
+                        "apestrip",
+                        root,
+                        True,
+                        {
+                            "files_with_ape": len(worklist),
+                            "migrations": total_migrations,
+                            "skipped_fields": total_skipped,
+                        },
+                    ),
+                    end="",
+                )
+                return 0
             print("\nDry run: no files modified.")
             return 0
 
         # Confirmation, replaygain.py style. assume_yes stands in for the
-        # script's --yes (the TUI passes it after its own ask_yn confirm).
-        if not assume_yes and sys.stdin.isatty():
+        # script's --yes (the TUI passes it after its own ask_yn confirm),
+        # and a --json run is a machine shape that proceeds like non-TTY (a
+        # prompt on stdout would corrupt the summary).
+        if not assume_yes and not json_mode and sys.stdin.isatty():
             try:
                 ans = input("\nStrip these APEv2 tags? [y/N] ").strip().lower()
             except EOFError:

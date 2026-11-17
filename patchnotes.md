@@ -1,5 +1,54 @@
 # lattice-music Patch Notes
 
+## v6.4.2 (2026-11-16)
+
+### Five machine-surface contract violations, closed
+
+The 2026-11-13/16 audits filed ten issues; this release ships the five
+machine-shape lies: flags that promised behavior the code did not deliver.
+
+- **A missing library root is a usage error (#5)**: `lattice --stats
+  /typo/path` used to print "No audio files found" to stdout with exit 0,
+  indistinguishable from a genuinely empty library, and `--fail-on-findings`
+  gave the typo a false green. An explicitly passed root (positional or
+  `--root`) that does not exist now refuses with exit 2 and one stderr line
+  naming the path, in every mode. An existing root with zero audio keeps the
+  true empty report (exit 0), and configured roots keep the lenient skip
+  they always had.
+- **`--apply --json` actually applies (#8)**: the planning JSON summaries in
+  `--stripRatings` and `--apestrip` sat ahead of the dry-run guard, so the
+  flag pair printed a document claiming `"dry_run": true` and exited 0
+  having written nothing. Both now follow the replaygain convention: the
+  planning summary ends a dry run only, an apply run reaches the write loop
+  and reports the committed counts with `dry_run: false`, and a `--json` run
+  proceeds past the confirmation prompt like a non-TTY run (a prompt would
+  corrupt the stdout the JSON contract owns).
+- **`--resume` no longer wipes prior verdicts (#9)**: a resumed FLAC/MP3
+  scan loaded the cached verdicts into a side dict but seeded its state
+  empty, so the first periodic flush (or a second Ctrl-C) rewrote
+  `<output>.progress.json` with the new session's results alone. Resuming a
+  9,000-of-10,000-track scan and pausing again used to erase 9,000 verdicts;
+  the resumed state now carries everything forward.
+- **`--output -` streams the decode scans (#10)**: `--testMP3`, `--testOpus`,
+  `--testWAV`, and `--testWMA` were the one report family still resolving
+  the dash through `Path().resolve()`, writing the full report to a literal
+  file named `-` in the caller's working directory while stdout got nothing.
+  They go through `resolve_output` like every other report writer (run 1 of
+  the v6.3.0 conversion missed them), and a stdout report no longer prints
+  "Report written to: -".
+- **`--ingest --output -` streams the summary (#12)**: the ritual wrote a
+  literal `-` file and anchored the health-digest and snapshot-diff sidecars
+  to `Path("-").parent` — the caller's working directory. The summary now
+  streams to stdout (still suppressed under `--json`, whose machine summary
+  gains a `logs` map carrying the per-stage log paths), and the sidecars
+  always land beside the root the ritual ran over.
+
+16 new tests (812 total): the missing-root exit class (stats and a write
+mode, repeated roots naming every path, empty-root exit 0 unchanged), both
+apply+json pairs writing for real and reporting `dry_run: false`, resumed
+FLAC and MP3 scans surviving a second interrupt, decode scans and ingest
+streaming `-` without littering the cwd, and the ingest JSON log pointers.
+
 ## v6.4.1 (2026-10-11)
 
 ### The rating-protection guard: --apply refuses a protected tree
