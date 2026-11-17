@@ -369,7 +369,7 @@ digest as a document.
 
 ## Machine output (`--json`, `--output -`, `--fail-on-findings`)
 
-Reports are `.txt` by default. `--json` swaps in a machine-readable document instead: `--stats` and the tag-reading audits (`--auditTags`, `--auditAlbums`, `--auditBitrate`, `--auditReplayGain`, `--healthScore`, `--duplicates`) emit the uniform envelope `{"mode", "root", "findings", "payload"}` with counts and per-item verdicts, and the write modes except `--lyrics` end with a JSON run summary (counts plus `dry_run: true/false`, so a pipeline can tell a preview from a commit). `--output -` pipes any report to stdout, and `--fail-on-findings` makes the audits exit 1 when they have findings (the default stays 0), so a cron job or CI step can gate on a clean library:
+Report modes print to stdout by default (`--output PATH` writes the report as a file; the multi-file wing exports keep their output directories). `--json` swaps in a machine-readable document instead: `--stats` and the tag-reading audits (`--auditTags`, `--auditAlbums`, `--auditBitrate`, `--auditReplayGain`, `--healthScore`, `--duplicates`) emit the uniform envelope `{"mode", "root", "findings", "payload"}` with counts and per-item verdicts, and the write modes except `--lyrics` end with a JSON run summary (counts plus `dry_run: true/false`, so a pipeline can tell a preview from a commit). `--output -` pipes any report to stdout, and `--fail-on-findings` makes the audits exit 1 when they have findings (the default stays 0), so a cron job or CI step can gate on a clean library:
 
 ```bash
 # Machine-readable stats, piped
@@ -418,7 +418,7 @@ The integrity modes (`--testFLAC`, `--testMP3`, `--testOpus`, `--testWAV`, `--te
 
 CORRUPT and SUSPECT are always listed in the report; METADATA and OK are summarized and listed only with `--verbose`. The exit code is `1` only when something is CORRUPT, so a clean-but-chatty library still exits `0`; a scan with no decoder available (ffmpeg missing, or neither flac nor ffmpeg for FLAC) refuses with exit `2` rather than report unverified files as OK. FFmpeg is invoked with the demuxer forced from the file extension (so a large ID3v2 tag is never mis-read as a corrupt container) and with embedded cover art skipped.
 
-The FLAC and MP3 scans support `--resume` for large libraries: every run writes each verdict through to a transient `<output>.progress.json` beside the report as it goes, and a run interrupted with Ctrl-C leaves that state behind. Re-running with `--resume` reuses the recorded verdicts and decodes only the remaining files, producing the same full report either way; a scan that runs to completion deletes the state file. A state recorded by a different verification tool (libFLAC vs ffmpeg) is discarded rather than trusted.
+The FLAC and MP3 scans support `--resume` for large libraries: every run writes each verdict through to a transient `<output>.progress.json` beside the report as it goes, and a run interrupted with Ctrl-C leaves that state behind. Re-running with `--resume` reuses the recorded verdicts and decodes only the remaining files, producing the same full report either way; a scan that runs to completion deletes the state file. A stdout report (the default) anchors no state file, so a stdout run persists nothing and `--resume` without `--output` refuses with exit 2. A state recorded by a different verification tool (libFLAC vs ffmpeg) is discarded rather than trusted.
 
 ## Library statistics
 

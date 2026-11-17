@@ -9,12 +9,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
-from lattice.config import (
-    DEFAULT_MP3_OUTPUT,
-    DEFAULT_OPUS_OUTPUT,
-    DEFAULT_WAV_OUTPUT,
-    DEFAULT_WMA_OUTPUT,
-)
 from lattice.tags import HAVE_MUTAGEN_MP3, MUTAGEN_MP3
 from lattice.utils import (
     STDOUT_REPORT,
@@ -267,8 +261,18 @@ def run_flac_mode(
 
     # Persistence is always write-through; --resume only controls whether a
     # previous run's verdicts are reused. A verdict is reused only when the
-    # verification tool is the same one.
-    pfile = _progress_file(output)
+    # verification tool is the same one. A stdout report has no file to hang
+    # the state beside, so a stdout run keeps none and a --resume without a
+    # report file is a usage error, not a silent no-op cache.
+    out_path = resolve_output(output)
+    if resume and out_path == STDOUT_REPORT:
+        print(
+            "error: --resume state lives beside the report file; "
+            "pass --output PATH to resume a scan",
+            file=sys.stderr,
+        )
+        return 2
+    pfile = None if out_path == STDOUT_REPORT else _progress_file(out_path)
     scan_id = {"kind": "flac", "use_flac": use_flac}
     state: dict[str, dict] = {}
     cached: dict[str, dict] = {}
@@ -327,7 +331,7 @@ def run_flac_mode(
             if tier in (TIER_CORRUPT, TIER_SUSPECT):
                 flagged.append((path, tool, tier, reason))
             pbar.update(1)
-            if len(state) % _FLUSH_EVERY == 0:
+            if pfile is not None and len(state) % _FLUSH_EVERY == 0:
                 _save_progress(pfile, scan_id, state)
     except KeyboardInterrupt:
         if not quiet:
@@ -336,15 +340,16 @@ def run_flac_mode(
             for f in futures:
                 f.cancel()
             ex.shutdown(cancel_futures=True)
-        _save_progress(pfile, scan_id, state)
+        if pfile is not None:
+            _save_progress(pfile, scan_id, state)
         return 130
     finally:
         if ex is not None:
             ex.shutdown(wait=True)
         pbar.close()
 
-    out_path = resolve_output(output, output)
-    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    if out_path != STDOUT_REPORT:
+        os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open_report(out_path) as f:
         f.write("FLAC INTEGRITY REPORT\n")
         f.write(f"Root: {', '.join(roots)}\n")
@@ -374,10 +379,12 @@ def run_flac_mode(
                 corrupt_s = red(corrupt_s)
             if counts[TIER_SUSPECT]:
                 suspect_s = yellow(suspect_s)
-            print(f"Scanned {total}. {corrupt_s}  {suspect_s}. Details: {out_path}")
+            tail = f" Details: {out_path}" if out_path != STDOUT_REPORT else ""
+            print(f"Scanned {total}. {corrupt_s}  {suspect_s}.{tail}")
         else:
             print(green("✅ All FLAC files passed integrity checks."))
-    _clear_progress(pfile)
+    if pfile is not None:
+        _clear_progress(pfile)
     return 1 if counts[TIER_CORRUPT] > 0 else 0
 
 
@@ -531,7 +538,6 @@ def _run_decode_scan(
     *,
     ext: str,
     report_title: str,
-    default_output: str,
     enrich: bool,
     only_errors: bool,
     verbose: bool,
@@ -577,7 +583,18 @@ def _run_decode_scan(
     # Same contract as the FLAC mode: write-through always, --resume only
     # decides whether previous verdicts are reused, and the state is deleted
     # when a scan completes.
-    pfile = _progress_file(output)
+    # Same stdout rule as the FLAC mode: a stdout report anchors no state
+    # file, so a stdout run keeps none and --resume without --output is a
+    # usage error.
+    out_path = resolve_output(output)
+    if resume and out_path == STDOUT_REPORT:
+        print(
+            "error: --resume state lives beside the report file; "
+            "pass --output PATH to resume a scan",
+            file=sys.stderr,
+        )
+        return 2
+    pfile = None if out_path == STDOUT_REPORT else _progress_file(out_path)
     scan_id = {"kind": ext, "ffmpeg": ffmpeg_path}
     state: dict[str, dict] = {}
     cached: dict[str, dict] = {}
@@ -627,7 +644,7 @@ def _run_decode_scan(
             if tier in (TIER_CORRUPT, TIER_SUSPECT) or list_benign:
                 results.append(row)
             pbar.update(1)
-            if len(state) % _FLUSH_EVERY == 0:
+            if pfile is not None and len(state) % _FLUSH_EVERY == 0:
                 _save_progress(pfile, scan_id, state)
 
     except KeyboardInterrupt:
@@ -637,7 +654,8 @@ def _run_decode_scan(
             for f in futures:
                 f.cancel()
             ex.shutdown(cancel_futures=True)
-        _save_progress(pfile, scan_id, state)
+        if pfile is not None:
+            _save_progress(pfile, scan_id, state)
         return 130
     finally:
         if ex is not None:
@@ -645,11 +663,6 @@ def _run_decode_scan(
         pbar.close()
 
     elapsed = time.time() - started
-    # resolve_output keeps "-" as "-": a direct Path().resolve() here turned
-    # --output - into a literal file named '-' in the caller's cwd, the one
-    # report writer that missed the v6.3.0 conversion (run_flac_mode's
-    # resolve_output call is the sibling this now matches).
-    out_path = resolve_output(output, default_output)
     if out_path != STDOUT_REPORT:
         os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
@@ -710,7 +723,8 @@ def _run_decode_scan(
         )
         if out_path != STDOUT_REPORT:
             print(f"Report written to: {out_path}")
-    _clear_progress(pfile)
+    if pfile is not None:
+        _clear_progress(pfile)
     return 1 if counts[TIER_CORRUPT] > 0 else 0
 
 
@@ -732,7 +746,6 @@ def run_mp3_mode(
         ffmpeg,
         ext=".mp3",
         report_title="MP3 INTEGRITY REPORT",
-        default_output=DEFAULT_MP3_OUTPUT,
         enrich=True,
         only_errors=only_errors,
         verbose=verbose,
@@ -758,7 +771,6 @@ def run_opus_mode(
         ffmpeg,
         ext=".opus",
         report_title="OPUS INTEGRITY REPORT",
-        default_output=DEFAULT_OPUS_OUTPUT,
         enrich=False,
         only_errors=only_errors,
         verbose=verbose,
@@ -783,7 +795,6 @@ def run_wav_mode(
         ffmpeg,
         ext=".wav",
         report_title="WAV INTEGRITY REPORT",
-        default_output=DEFAULT_WAV_OUTPUT,
         enrich=False,
         only_errors=only_errors,
         verbose=verbose,
@@ -808,7 +819,6 @@ def run_wma_mode(
         ffmpeg,
         ext=".wma",
         report_title="WMA INTEGRITY REPORT",
-        default_output=DEFAULT_WMA_OUTPUT,
         enrich=False,
         only_errors=only_errors,
         verbose=verbose,

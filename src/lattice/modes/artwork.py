@@ -6,9 +6,6 @@ from collections import defaultdict
 
 from lattice.config import (
     ART_FORMAT_PRIORITY,
-    DEFAULT_ART_MISMATCH_OUTPUT,
-    DEFAULT_ART_QUALITY_OUTPUT,
-    DEFAULT_MISSING_ART_OUTPUT,
 )
 from lattice.tags import (
     FLAC,
@@ -20,6 +17,7 @@ from lattice.tags import (
     Picture,
 )
 from lattice.utils import (
+    STDOUT_REPORT,
     _find_cover_file,
     _has_cover_file,
     _make_pbar,
@@ -263,7 +261,7 @@ def run_missing_art(root: str | list[str], output: str, *, quiet: bool = False) 
                 }
             )
 
-    out_path = resolve_output(output, DEFAULT_MISSING_ART_OUTPUT)
+    out_path = resolve_output(output)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     no_art_at_all = [m for m in missing if m["has_embedded_art"] == "no"]
@@ -294,7 +292,8 @@ def run_missing_art(root: str | list[str], output: str, *, quiet: bool = False) 
             f.write("\n")
 
     if not quiet:
-        print(f"\nResults written to: {out_path}")
+        if out_path != STDOUT_REPORT:
+            print(f"nResults written to: {out_path}")
         print(f"  No art at all: {len(no_art_at_all)}")
         print(f"  Embedded only (no folder art): {len(embedded_only)}")
     return 0
@@ -399,7 +398,7 @@ def run_art_quality_audit(
 
     pbar.close()
 
-    out_path = resolve_output(output, DEFAULT_ART_QUALITY_OUTPUT)
+    out_path = resolve_output(output)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     with open_report(out_path) as f:
@@ -420,7 +419,8 @@ def run_art_quality_audit(
         print(
             f"\nAudited {len(dirs_with_audio)} directories. Found {len(issues)} below {min_res}x{min_res}."
         )
-        print(f"Results written to: {out_path}")
+        if out_path != STDOUT_REPORT:
+            print(f"Results written to: {out_path}")
 
     return 0
 
@@ -504,7 +504,7 @@ def run_art_mismatch_audit(
 
     pbar.close()
 
-    out_path = resolve_output(output, DEFAULT_ART_MISMATCH_OUTPUT)
+    out_path = resolve_output(output)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open_report(out_path) as f:
         f.write("ART MISMATCH AUDIT REPORT\n")
@@ -540,7 +540,8 @@ def run_art_mismatch_audit(
         print(f"  Same pixels:     {len(buckets['SAME PIXELS'])}")
         print(f"  Unreadable:      {len(buckets['UNREADABLE'])}")
         print(f"  Matched:         {len(buckets['MATCH'])}")
-        print(f"Results written to: {out_path}")
+        if out_path != STDOUT_REPORT:
+            print(f"Results written to: {out_path}")
 
     return 0
 

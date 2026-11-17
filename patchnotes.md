@@ -1,5 +1,52 @@
 # lattice-music Patch Notes
 
+## v6.5.0 (2026-11-16)
+
+### The report discipline: every report mode prints to stdout by default
+
+The last of the ten audit issues (#6), and the only one that changes
+behavior you can see from the couch: report modes no longer write files
+into the caller's working directory unless asked.
+
+- **Omitting `--output` prints the report to the terminal.** Every report
+  mode obeys the sentence its own help page has always carried ("omit it to
+  print to the terminal"): `--library`, `--health` and the whole digest and
+  audit family, the integrity scans, `--snapshot`, `--diff`, `--playlist`,
+  `--checkPlaylists`, `--missingArt` and the art audits. `--output PATH`
+  writes the file, exactly as before, and `--output -` remains the explicit
+  stdout form. A read run now litters nothing into the cwd: no
+  `health_digest.txt` appearing beside whatever directory a cron job
+  happened to run from. The multi-file exports (`--all-wings`,
+  `--ai-wings`) keep their output directories, and `--stats` (which already
+  printed by default) is unchanged. This is the flip the audit asked for;
+  scripts that consumed a default report file must add `--output`.
+- **`utils.resolve_output(output)` lost its default argument.** The old
+  signature resolved an omitted `--output` to the mode's `DEFAULT_*`
+  constant; the default is now stdout, uniform across every report writer.
+  The `DEFAULT_*` names survive as the TUI's prompt prefills.
+- **The TUI's `lattice_`-prefixed report names retired.** They existed so
+  an interactive run could not clobber the file a CLI default wrote in the
+  same cwd; with no CLI default files left, the hazard is gone and the TUI
+  prefills config.py's own names (`health_digest.txt`, not
+  `lattice_health_digest.txt`).
+- **A stdout integrity scan keeps no resume state, and `--resume` without
+  `--output` refuses with exit 2.** The transient
+  `<output>.progress.json` lives beside the report file; with no file there
+  is nowhere honest to hang it, so a stdout run persists nothing (it also
+  used to park a `-.progress.json` in the cwd until the scan finished) and
+  a `--resume` aimed at stdout is a usage error, not a silently stateless
+  cache.
+- **`help --json` keeps its `output_default` key at null** (the machine
+  help surface is additive-only) and gains `output_note` for the per-mode
+  exceptions (the wings' directory outputs). The help pages' `--output`
+  line now reads "Path for the report file; omit it (or pass '-') to print
+  to the terminal."
+
+9 new tests (826 total): health/library/tag-audit/snapshot/diff/MP3 scans
+printing to stdout with an empty cwd afterward, `--output` still writing
+the file, the `--resume` refusal, and the TUI constants carrying no
+`lattice_` prefix.
+
 ## v6.4.3 (2026-11-16)
 
 ### Four analysis-correctness fixes

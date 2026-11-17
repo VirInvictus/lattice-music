@@ -4,35 +4,7 @@ import sys
 from pathlib import Path
 
 from lattice import help as lattice_help
-from lattice.config import (
-    DEFAULT_AI_LIBRARY_OUTPUT,
-    DEFAULT_ALBUM_CONSISTENCY_OUTPUT,
-    DEFAULT_ART_MISMATCH_OUTPUT,
-    DEFAULT_ART_QUALITY_OUTPUT,
-    DEFAULT_AUDIO_DUPES_OUTPUT,
-    DEFAULT_BITRATE_AUDIT_OUTPUT,
-    DEFAULT_DUPLICATES_OUTPUT,
-    DEFAULT_FLAC_OUTPUT,
-    DEFAULT_HEALTH_OUTPUT,
-    DEFAULT_HEALTH_SCORE_OUTPUT,
-    DEFAULT_JUNK_FRAME_OUTPUT,
-    DEFAULT_LIBRARY_OUTPUT,
-    DEFAULT_MISSING_ART_OUTPUT,
-    DEFAULT_MP3_OUTPUT,
-    DEFAULT_OPUS_OUTPUT,
-    DEFAULT_PLAYLIST_CHECK_OUTPUT,
-    DEFAULT_PLAYLIST_OUTPUT,
-    DEFAULT_REPLAYGAIN_AUDIT_OUTPUT,
-    DEFAULT_REPLAYGAIN_VERIFY_OUTPUT,
-    DEFAULT_SNAPSHOT_DIFF_OUTPUT,
-    DEFAULT_SNAPSHOT_OUTPUT,
-    DEFAULT_STRAY_AUDIT_OUTPUT,
-    DEFAULT_TAG_AUDIT_OUTPUT,
-    DEFAULT_WAV_OUTPUT,
-    DEFAULT_WMA_OUTPUT,
-    VERSION,
-    get_layout,
-)
+from lattice.config import VERSION, get_layout
 from lattice.modes.apestrip import run_apestrip
 from lattice.modes.artwork import (
     run_art_mismatch_audit,
@@ -471,7 +443,7 @@ def main(argv: list[str] | None = None) -> int:
                 root = [os.path.abspath(".")]
 
         if args.library:
-            output = args.output or DEFAULT_LIBRARY_OUTPUT
+            output = args.output
             write_music_library_tree(
                 root,
                 output,
@@ -483,7 +455,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.ai_library:
-            output = args.output or DEFAULT_AI_LIBRARY_OUTPUT
+            output = args.output
             write_ai_library(
                 root, output, layout=args.layout, quiet=args.quiet, where=where
             )
@@ -508,7 +480,7 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         if args.testFLAC:
-            output = args.output or DEFAULT_FLAC_OUTPUT
+            output = args.output
             return run_flac_mode(
                 root,
                 output,
@@ -520,7 +492,7 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         if args.testMP3:
-            output = args.output or DEFAULT_MP3_OUTPUT
+            output = args.output
             return run_mp3_mode(
                 root,
                 output,
@@ -533,7 +505,7 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         if args.testOpus:
-            output = args.output or DEFAULT_OPUS_OUTPUT
+            output = args.output
             return run_opus_mode(
                 root,
                 output,
@@ -545,7 +517,7 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         if args.testWAV:
-            output = args.output or DEFAULT_WAV_OUTPUT
+            output = args.output
             return run_wav_mode(
                 root,
                 output,
@@ -557,7 +529,7 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         if args.testWMA:
-            output = args.output or DEFAULT_WMA_OUTPUT
+            output = args.output
             return run_wma_mode(
                 root,
                 output,
@@ -572,23 +544,23 @@ def main(argv: list[str] | None = None) -> int:
             return run_extract_art(root, quiet=args.quiet, dry_run=args.dry_run)
 
         if args.missingArt:
-            output = args.output or DEFAULT_MISSING_ART_OUTPUT
+            output = args.output
             return run_missing_art(root, output, quiet=args.quiet)
 
         if args.auditArtQuality:
-            output = args.output or DEFAULT_ART_QUALITY_OUTPUT
+            output = args.output
             return run_art_quality_audit(
                 root, output, args.min_art_res, quiet=args.quiet
             )
 
         if args.audit_art_mismatch:
-            output = args.output or DEFAULT_ART_MISMATCH_OUTPUT
+            output = args.output
             return run_art_mismatch_audit(
                 root, output, verbose=args.verbose, quiet=args.quiet
             )
 
         if args.duplicates:
-            output = args.output or DEFAULT_DUPLICATES_OUTPUT
+            output = args.output
             return run_duplicates(
                 root,
                 output,
@@ -599,11 +571,11 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         if args.audit_audio_dupes:
-            output = args.output or DEFAULT_AUDIO_DUPES_OUTPUT
+            output = args.output
             return run_audio_dupes(root, output, quiet=args.quiet)
 
         if args.auditTags:
-            output = args.output or DEFAULT_TAG_AUDIT_OUTPUT
+            output = args.output
             return run_tag_audit(
                 root,
                 output,
@@ -614,7 +586,7 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         if args.audit_albums:
-            output = args.output or DEFAULT_ALBUM_CONSISTENCY_OUTPUT
+            output = args.output
             return run_album_consistency(
                 root,
                 output,
@@ -626,13 +598,13 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         if args.audit_junk_frames:
-            output = args.output or DEFAULT_JUNK_FRAME_OUTPUT
+            output = args.output
             return run_junk_frame_audit(
                 root, output, verbose=args.verbose, quiet=args.quiet
             )
 
         if args.auditBitrate:
-            output = args.output or DEFAULT_BITRATE_AUDIT_OUTPUT
+            output = args.output
             return run_bitrate_audit(
                 root,
                 output,
@@ -644,7 +616,7 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         if args.auditReplayGain:
-            output = args.output or DEFAULT_REPLAYGAIN_AUDIT_OUTPUT
+            output = args.output
             return run_replaygain_audit(
                 root,
                 output,
@@ -656,7 +628,7 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         if args.verify_replaygain:
-            output = args.output or DEFAULT_REPLAYGAIN_VERIFY_OUTPUT
+            output = args.output
             return run_verify_replaygain(
                 root,
                 output,
@@ -668,11 +640,11 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         if args.audit_strays:
-            output = args.output or DEFAULT_STRAY_AUDIT_OUTPUT
+            output = args.output
             return run_stray_audit(root, output, layout=args.layout, quiet=args.quiet)
 
         if args.health:
-            output = args.output or DEFAULT_HEALTH_OUTPUT
+            output = args.output
             return run_health(
                 root,
                 output,
@@ -685,7 +657,7 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         if args.health_score:
-            output = args.output or DEFAULT_HEALTH_SCORE_OUTPUT
+            output = args.output
             return run_health_score(
                 root,
                 output,
@@ -699,13 +671,13 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         if args.playlist:
-            output = args.output or DEFAULT_PLAYLIST_OUTPUT
+            output = args.output
             return generate_playlist(
                 root, output, args.rule, layout=args.layout, quiet=args.quiet
             )
 
         if args.check_playlists:
-            output = args.output or DEFAULT_PLAYLIST_CHECK_OUTPUT
+            output = args.output
             return run_check_playlists(
                 root, output, verbose=args.verbose, quiet=args.quiet
             )
@@ -722,11 +694,11 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         if args.snapshot:
-            output = args.output or DEFAULT_SNAPSHOT_OUTPUT
+            output = args.output
             return write_snapshot(root, output, quiet=args.quiet)
 
         if args.diff_snapshot:
-            output = args.output or DEFAULT_SNAPSHOT_DIFF_OUTPUT
+            output = args.output
             return diff_snapshot(root, args.diff_snapshot, output, quiet=args.quiet)
 
         # The write modes operate on exactly one tree (like the companion

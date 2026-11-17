@@ -7,6 +7,7 @@ from typing import NamedTuple, TextIO
 
 from lattice.tags import TagBundle, get_all_tags, read_replaygain
 from lattice.utils import (
+    STDOUT_REPORT,
     _make_pbar,
     as_roots,
     clean_song_name,
@@ -210,7 +211,7 @@ def write_music_library_tree(
             print(buf.getvalue())
         return
 
-    out_path = resolve_output(output_file, output_file)
+    out_path = resolve_output(output_file)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     try:
@@ -254,7 +255,7 @@ def write_ai_library(
 
     albums.sort(key=lambda x: (x[0].lower(), x[1].lower()))
 
-    out_path = resolve_output(output_file, output_file)
+    out_path = resolve_output(output_file)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open_report(out_path) as f:
         f.write("Artist | Album | Genre | Rating | Tracks\n")
@@ -510,7 +511,7 @@ def write_snapshot(
     rows = _snapshot_rows(roots, pbar)
     pbar.close()
 
-    out_path = resolve_output(output_file, output_file)
+    out_path = resolve_output(output_file)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open_report(out_path) as f:
         f.write("# lattice snapshot v1\n")
@@ -657,7 +658,7 @@ def diff_snapshot(
         elif old_row["size"] != new_row["size"]:
             resized.append((path, str(old_row["size"]), str(new_row["size"])))
 
-    out_path = resolve_output(output_file, output_file)
+    out_path = resolve_output(output_file)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open_report(out_path) as f:
         f.write("SNAPSHOT DIFF REPORT\n")
@@ -711,7 +712,8 @@ def diff_snapshot(
         print(
             f"\nMoved: {len(moved)}  Retagged: {len(retagged)}  Resized: {len(resized)}  Added: {len(added)}  Removed: {len(removed)}"
         )
-        print(f"Results written to: {out_path}")
+        if out_path != STDOUT_REPORT:
+            print(f"Results written to: {out_path}")
 
     return 0
 

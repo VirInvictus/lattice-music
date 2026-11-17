@@ -16,7 +16,29 @@ from vir_tui import (
 
 from lattice.config import (
     DEFAULT_AI_LIBRARY_OUTPUT,
+    DEFAULT_ALBUM_CONSISTENCY_OUTPUT,
+    DEFAULT_ART_MISMATCH_OUTPUT,
+    DEFAULT_ART_QUALITY_OUTPUT,
+    DEFAULT_AUDIO_DUPES_OUTPUT,
+    DEFAULT_BITRATE_AUDIT_OUTPUT,
+    DEFAULT_DUPLICATES_OUTPUT,
+    DEFAULT_FLAC_OUTPUT,
+    DEFAULT_HEALTH_OUTPUT,
+    DEFAULT_HEALTH_SCORE_OUTPUT,
+    DEFAULT_JUNK_FRAME_OUTPUT,
+    DEFAULT_MISSING_ART_OUTPUT,
+    DEFAULT_MP3_OUTPUT,
+    DEFAULT_OPUS_OUTPUT,
+    DEFAULT_PLAYLIST_CHECK_OUTPUT,
     DEFAULT_PLAYLIST_OUTPUT,
+    DEFAULT_REPLAYGAIN_AUDIT_OUTPUT,
+    DEFAULT_REPLAYGAIN_VERIFY_OUTPUT,
+    DEFAULT_SNAPSHOT_DIFF_OUTPUT,
+    DEFAULT_SNAPSHOT_OUTPUT,
+    DEFAULT_STRAY_AUDIT_OUTPUT,
+    DEFAULT_TAG_AUDIT_OUTPUT,
+    DEFAULT_WAV_OUTPUT,
+    DEFAULT_WMA_OUTPUT,
     get_layout,
     get_library_root,
     get_library_roots,
@@ -68,33 +90,10 @@ from lattice.modes.retag import run_retag
 from lattice.modes.stats import run_stats
 from lattice.modes.stripratings import run_stripratings
 
-# TUI default output names, deliberately prefixed lattice_ so an interactive
-# run never silently overwrites the file a CLI default (config.py's
-# unprefixed list) wrote in the same cwd. Defaults that match config.py
-# exactly are imported from there; the wings directories match the CLI's
-# own inline defaults.
-DEFAULT_FLAC_OUTPUT = "lattice_flac_errors.txt"
-DEFAULT_MP3_OUTPUT = "lattice_mp3_errors.txt"
-DEFAULT_OPUS_OUTPUT = "lattice_opus_errors.txt"
-DEFAULT_WAV_OUTPUT = "lattice_wav_errors.txt"
-DEFAULT_WMA_OUTPUT = "lattice_wma_errors.txt"
-DEFAULT_MISSING_ART_OUTPUT = "lattice_missing_art.txt"
-DEFAULT_ART_QUALITY_OUTPUT = "lattice_art_quality.txt"
-DEFAULT_ART_MISMATCH_OUTPUT = "lattice_art_mismatch.txt"
-DEFAULT_DUPLICATES_OUTPUT = "lattice_duplicates.txt"
-DEFAULT_AUDIO_DUPES_OUTPUT = "lattice_audio_dupes.txt"
-DEFAULT_HEALTH_SCORE_OUTPUT = "lattice_health_score.txt"
-DEFAULT_HEALTH_DIGEST_OUTPUT = "lattice_health_digest.txt"
-DEFAULT_TAG_AUDIT_OUTPUT = "lattice_tag_audit.txt"
-DEFAULT_JUNK_FRAME_OUTPUT = "lattice_junk_frames.txt"
-DEFAULT_BITRATE_AUDIT_OUTPUT = "lattice_bitrate_audit.txt"
-DEFAULT_REPLAYGAIN_AUDIT_OUTPUT = "lattice_replaygain_audit.txt"
-DEFAULT_REPLAYGAIN_VERIFY_OUTPUT = "lattice_replaygain_verify.txt"
-DEFAULT_PLAYLIST_CHECK_OUTPUT = "lattice_playlist_check.txt"
-DEFAULT_ALBUM_CONSISTENCY_OUTPUT = "lattice_album_consistency.txt"
-DEFAULT_STRAY_AUDIT_OUTPUT = "lattice_stray_audit.txt"
-DEFAULT_SNAPSHOT_OUTPUT = "lattice_library_snapshot.tsv"
-DEFAULT_SNAPSHOT_DIFF_OUTPUT = "lattice_snapshot_diff.txt"
+# Interactive report defaults are config.py's own names (the v6.5.0 report
+# discipline made the CLI print to stdout unless --output names a file, so
+# the old lattice_-prefixed anti-clobber names retired with the hazard they
+# guarded against: no CLI default file exists to clobber anymore).
 
 
 _MAIN_SECTIONS = [
@@ -744,7 +743,7 @@ def _menu_session() -> int:
                 )
 
             elif result == (3, 11):
-                output = prompt_out("Output file", DEFAULT_HEALTH_DIGEST_OUTPUT)
+                output = prompt_out("Output file", DEFAULT_HEALTH_OUTPUT)
                 min_kbps = prompt_int("Minimum bitrate floor (kbps)", 192)
                 min_res = prompt_int("Minimum cover resolution (px)", 500)
                 run_with_capture(

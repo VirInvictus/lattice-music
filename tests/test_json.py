@@ -8,10 +8,14 @@ default 0)."""
 import contextlib
 import io
 import json
+import os
 import shutil
 import tempfile
 import unittest
 from pathlib import Path
+
+from lattice import tui
+from lattice.config import DEFAULT_HEALTH_OUTPUT
 
 from lattice import cli
 
@@ -163,6 +167,122 @@ class MissingRootExitClassTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertIn("No audio", out)
             self.assertEqual(err, "")
+
+
+class StdoutByDefaultTests(unittest.TestCase):
+    """The v6.5.0 report discipline (issue 6): a report mode run without
+    --output prints to the terminal and writes no file at all, anywhere --
+    not the old cwd-relative default, and not a stray progress state. The
+    help's own sentence ("omit it to print to the terminal") is the rule
+    every report mode now honors; --output PATH remains the only way a
+    report becomes a file."""
+
+    FIXTURES = Path(__file__).parent / "fixtures" / "library"
+    FLAC_SRC = FIXTURES / "Aphex Twin" / "Selected Ambient Works" / "01 - Xtal.flac"
+    MP3_SRC = FIXTURES / "Cursive" / "Domestica" / "01 - The Casualty.mp3"
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self._tmp.name) / "Music"
+        album = self.root / "Art" / "Album"
+        album.mkdir(parents=True)
+        shutil.copy(self.FLAC_SRC, album / "01.flac")
+        shutil.copy(self.MP3_SRC, album / "02.mp3")
+        self.scratch = Path(self._tmp.name) / "cwd"
+        self.scratch.mkdir()
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _run_in_scratch(self, argv):
+        old = os.getcwd()
+        os.chdir(self.scratch)
+        try:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = cli.main(argv)
+            return rc, buf.getvalue()
+        finally:
+            os.chdir(old)
+
+    def _assert_no_litter(self):
+        left = sorted(p.name for p in self.scratch.iterdir())
+        self.assertEqual(left, [], f"stdout run littered cwd: {left}")
+
+    def test_health_prints_and_litters_nothing(self):
+        rc, out = self._run_in_scratch(["--health", str(self.root)])
+        self.assertEqual(rc, 0)
+        self.assertIn("LIBRARY HEALTH DIGEST", out)
+        self._assert_no_litter()
+
+    def test_library_tree_prints_and_litters_nothing(self):
+        rc, out = self._run_in_scratch(["--library", str(self.root)])
+        self.assertEqual(rc, 0)
+        self.assertIn("Aphex Twin", out)
+        self.assertIn("Xtal", out)
+        self._assert_no_litter()
+
+    def test_tag_audit_prints_and_litters_nothing(self):
+        rc, out = self._run_in_scratch(["--auditTags", str(self.root)])
+        self.assertEqual(rc, 0)
+        self.assertIn("TAG AUDIT", out)
+        self._assert_no_litter()
+
+    def test_snapshot_prints_the_tsv_and_litters_nothing(self):
+        rc, out = self._run_in_scratch(["--snapshot", str(self.root)])
+        self.assertEqual(rc, 0)
+        self.assertIn("# lattice snapshot v1", out)
+        self.assertIn("01.flac", out)
+        self._assert_no_litter()
+
+    def test_diff_prints_and_litters_nothing(self):
+        snap = Path(self._tmp.name) / "snap.tsv"
+        rc, _ = self._run_in_scratch(
+            ["--snapshot", "--output", str(snap), str(self.root)]
+        )
+        self.assertEqual(rc, 0)
+        rc, out = self._run_in_scratch(["--diff", str(snap), str(self.root)])
+        self.assertEqual(rc, 0)
+        self.assertIn("SNAPSHOT DIFF REPORT", out)
+        self._assert_no_litter()
+
+    def test_mp3_scan_prints_and_keeps_no_progress_state(self):
+        rc, out = self._run_in_scratch(["--testMP3", str(self.root)])
+        self.assertEqual(rc, 0)
+        self.assertIn("MP3 INTEGRITY REPORT", out)
+        self._assert_no_litter()
+
+    def test_resume_without_an_output_file_refuses(self):
+        out, err = io.StringIO(), io.StringIO()
+        with (
+            contextlib.redirect_stdout(out),
+            contextlib.redirect_stderr(err),
+        ):
+            rc = cli.main(["--testMP3", "--resume", str(self.root)])
+        self.assertEqual(rc, 2)
+        self.assertIn("--resume state lives beside the report file", err.getvalue())
+
+    def test_output_still_writes_the_file(self):
+        target = Path(self._tmp.name) / "digest.txt"
+        rc, _ = self._run_in_scratch(
+            ["--health", "--output", str(target), str(self.root)]
+        )
+        self.assertEqual(rc, 0)
+        self.assertTrue(target.exists())
+        self.assertIn("LIBRARY HEALTH DIGEST", target.read_text(encoding="utf-8"))
+
+    def test_tui_defaults_are_the_config_names(self):
+        # The lattice_-prefixed interactive names retired with the hazard
+        # they guarded against (a CLI default file to clobber); the TUI's
+        # prompt prefills are config.py's own constants now.
+        self.assertEqual(tui.DEFAULT_HEALTH_OUTPUT, DEFAULT_HEALTH_OUTPUT)
+        self.assertEqual(tui.DEFAULT_HEALTH_OUTPUT, "health_digest.txt")
+        for name in dir(tui):
+            if name.startswith("DEFAULT_"):
+                self.assertFalse(
+                    tui.__dict__[name].startswith("lattice_"),
+                    f"{name} still carries the retired prefix",
+                )
 
 
 class WriteSummaryTests(unittest.TestCase):

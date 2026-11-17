@@ -147,15 +147,18 @@ def as_roots(root) -> list[str]:
 STDOUT_REPORT = "-"
 
 
-def resolve_output(output: str | None, default: str) -> str:
-    """The output path for a report: "-" stays "-" so open_report pipes to
-    stdout (`--output -`, as the --json help documents); anything else
-    resolves to an absolute path over `default` when unset. Every report
-    writer goes through this instead of abspath-ing the dash into a
-    literal file named '-'."""
-    if output == "-":
+def resolve_output(output: str | None) -> str:
+    """The output path for a report: no --output (or an explicit '-') streams
+    the report to stdout through open_report. That is the v6.5.0 report
+    discipline, the help's own sentence made universal ("omit it to print to
+    the terminal"): a read run defaults to no file at all, so nothing lands
+    in the caller's cwd uninvited, and `--output PATH` is the only way a
+    report becomes a file (the TUI prompts still prefill one). A path
+    resolves to an absolute path, never abspath-ing the dash into a literal
+    file named '-'."""
+    if not output or output == "-":
         return "-"
-    return os.path.abspath(output or default)
+    return os.path.abspath(output)
 
 
 @contextmanager

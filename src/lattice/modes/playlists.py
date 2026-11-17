@@ -7,9 +7,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from lattice.config import DEFAULT_PLAYLIST_CHECK_OUTPUT
 from lattice.tags import get_all_tags
 from lattice.utils import (
+    STDOUT_REPORT,
     _make_pbar,
     as_roots,
     count_audio_files,
@@ -239,7 +239,7 @@ def generate_playlist(
             print(f"No tracks matched the rule: {rule}")
         return 0
 
-    out_path = resolve_output(output_file, output_file)
+    out_path = resolve_output(output_file)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     try:
@@ -341,7 +341,7 @@ def run_check_playlists(
     n_noheader = sum(1 for r in results if not r[1] and r[2] + r[3] > 0)
     dirty = [r for r in results if r[3] or (not r[1] and r[2] + r[3] > 0)]
 
-    out_path = resolve_output(output, DEFAULT_PLAYLIST_CHECK_OUTPUT)
+    out_path = resolve_output(output)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     with open_report(out_path) as f:
@@ -377,6 +377,7 @@ def run_check_playlists(
         print(f"\nChecked {len(playlists)} playlist(s), {n_entries} entries.")
         print(f"  Missing targets: {n_missing}")
         print(f"  Without #EXTM3U: {n_noheader}")
-        print(f"Results written to: {out_path}")
+        if out_path != STDOUT_REPORT:
+            print(f"Results written to: {out_path}")
 
     return 0

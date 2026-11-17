@@ -15,17 +15,6 @@ from vir_tui import core as ui
 
 from lattice.config import (
     AUDIO_EXTENSIONS,
-    DEFAULT_ALBUM_CONSISTENCY_OUTPUT,
-    DEFAULT_AUDIO_DUPES_OUTPUT,
-    DEFAULT_BITRATE_AUDIT_OUTPUT,
-    DEFAULT_DUPLICATES_OUTPUT,
-    DEFAULT_HEALTH_OUTPUT,
-    DEFAULT_HEALTH_SCORE_OUTPUT,
-    DEFAULT_JUNK_FRAME_OUTPUT,
-    DEFAULT_REPLAYGAIN_AUDIT_OUTPUT,
-    DEFAULT_REPLAYGAIN_VERIFY_OUTPUT,
-    DEFAULT_STRAY_AUDIT_OUTPUT,
-    DEFAULT_TAG_AUDIT_OUTPUT,
     get_layout,
 )
 from lattice.modes.artwork import _get_image_size, _has_embedded_art
@@ -42,6 +31,7 @@ from lattice.tags import (
     read_replaygain_values_with_convention,
 )
 from lattice.utils import (
+    STDOUT_REPORT,
     _find_cover_file,
     _make_pbar,
     as_roots,
@@ -442,7 +432,7 @@ def run_duplicates(
 
     pbar.close()
 
-    out_path = resolve_output(output, DEFAULT_DUPLICATES_OUTPUT)
+    out_path = resolve_output(output)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     if json_mode:
@@ -474,7 +464,8 @@ def run_duplicates(
                 )
             )
         if not quiet and out_path != "-":
-            print(f"Report written to: {out_path}")
+            if out_path != STDOUT_REPORT:
+                print(f"Report written to: {out_path}")
         return 1 if (fail_on_findings and dup_findings) else 0
 
     with open_report(out_path) as f:
@@ -489,7 +480,8 @@ def run_duplicates(
         trk_count = _section_track_dupes(dirs, roots, f)
 
     if not quiet:
-        print(f"\nReport written to: {out_path}")
+        if out_path != STDOUT_REPORT:
+            print(f"nReport written to: {out_path}")
         print(f"  Exact album duplicates:       {exact_count}")
         print(f"  Within-folder multi-format:   {mf_count}")
         print(f"  Similar-name candidates:      {sim_count}")
@@ -767,7 +759,7 @@ def run_audio_dupes(root: str | list[str], output: str, *, quiet: bool = False) 
     streams = [g for g in by_stream.values() if len(g) > 1]
     samples = [g for g in by_sample.values() if len(g) > 1]
 
-    out_path = resolve_output(output, DEFAULT_AUDIO_DUPES_OUTPUT)
+    out_path = resolve_output(output)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     with open_report(out_path) as f:
@@ -794,7 +786,8 @@ def run_audio_dupes(root: str | list[str], output: str, *, quiet: bool = False) 
         print(f"  Exact duplicates:      {len(exact)} group(s)")
         print(f"  Audio-stream matches:  {len(streams)} group(s)")
         print(f"  Sampled matches:       {len(samples)} group(s)")
-        print(f"Results written to: {out_path}")
+        if out_path != STDOUT_REPORT:
+            print(f"Results written to: {out_path}")
     return 0
 
 
@@ -961,7 +954,7 @@ def run_health_score(
     flagged = [a for a in ranked if a[2] < 100]
     full = [a for a in ranked if a[2] == 100]
 
-    out_path = resolve_output(output, DEFAULT_HEALTH_SCORE_OUTPUT)
+    out_path = resolve_output(output)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     if json_mode:
@@ -990,7 +983,8 @@ def run_health_score(
                 )
             )
         if not quiet and out_path != "-":
-            print(f"Report written to: {out_path}")
+            if out_path != STDOUT_REPORT:
+                print(f"Report written to: {out_path}")
         return 1 if (fail_on_findings and flagged) else 0
 
     with open_report(out_path) as f:
@@ -1029,7 +1023,8 @@ def run_health_score(
             f"C {grades['C']}  D {grades['D']}   Mean: {mean}"
         )
         print(f"  Deductions: {len(flagged)} album(s) below full score")
-        print(f"Results written to: {out_path}")
+        if out_path != STDOUT_REPORT:
+            print(f"Results written to: {out_path}")
     return 1 if (fail_on_findings and flagged) else 0
 
 
@@ -1103,7 +1098,7 @@ def run_tag_audit(
                 }
             )
 
-    out_path = resolve_output(output, DEFAULT_TAG_AUDIT_OUTPUT)
+    out_path = resolve_output(output)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     # Build breakdown counts
@@ -1139,7 +1134,8 @@ def run_tag_audit(
                 )
             )
         if not quiet and out_path != "-":
-            print(f"Report written to: {out_path}")
+            if out_path != STDOUT_REPORT:
+                print(f"Report written to: {out_path}")
         return 1 if (fail_on_findings and issues) else 0
 
     with open_report(out_path) as out_file:
@@ -1165,7 +1161,8 @@ def run_tag_audit(
 
     if not quiet:
         print(f"\nAudited {total} files. Found {len(issues)} with incomplete tags.")
-        print(f"Results written to: {out_path}")
+        if out_path != STDOUT_REPORT:
+            print(f"Results written to: {out_path}")
         if field_counts:
             print("  Breakdown:")
             for field, count in field_counts.most_common():
@@ -1229,7 +1226,7 @@ def run_bitrate_audit(
                 }
             )
 
-    out_path = resolve_output(output, DEFAULT_BITRATE_AUDIT_OUTPUT)
+    out_path = resolve_output(output)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     by_dir: dict[str, list[dict[str, str]]] = defaultdict(list)
@@ -1259,7 +1256,8 @@ def run_bitrate_audit(
                 )
             )
         if not quiet and out_path != "-":
-            print(f"Report written to: {out_path}")
+            if out_path != STDOUT_REPORT:
+                print(f"Report written to: {out_path}")
         return 1 if (fail_on_findings and issues) else 0
 
     with open_report(out_path) as out_file:
@@ -1281,7 +1279,8 @@ def run_bitrate_audit(
 
     if not quiet:
         print(f"\nAudited {total} files. Found {len(issues)} below {min_kbps} kbps.")
-        print(f"Results written to: {out_path}")
+        if out_path != STDOUT_REPORT:
+            print(f"Results written to: {out_path}")
 
     return 1 if (fail_on_findings and issues) else 0
 
@@ -1383,7 +1382,7 @@ def run_replaygain_audit(
     n_partial = len(by_bucket["PARTIAL"])
     n_missing = len(by_bucket["MISSING"])
 
-    out_path = resolve_output(output, DEFAULT_REPLAYGAIN_AUDIT_OUTPUT)
+    out_path = resolve_output(output)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     rg_findings = n_noalbum + n_partial + n_missing
@@ -1410,7 +1409,8 @@ def run_replaygain_audit(
                 )
             )
         if not quiet and out_path != "-":
-            print(f"Report written to: {out_path}")
+            if out_path != STDOUT_REPORT:
+                print(f"Report written to: {out_path}")
         return 1 if (fail_on_findings and rg_findings) else 0
 
     with open_report(out_path) as f:
@@ -1435,7 +1435,8 @@ def run_replaygain_audit(
         print(f"  No album gain:  {n_noalbum}")
         print(f"  Partial:        {n_partial}")
         print(f"  Missing:        {n_missing}")
-        print(f"Results written to: {out_path}")
+        if out_path != STDOUT_REPORT:
+            print(f"Results written to: {out_path}")
 
     return 1 if (fail_on_findings and rg_findings) else 0
 
@@ -1680,7 +1681,7 @@ def run_verify_replaygain(
 
     pbar.close()
 
-    out_path = resolve_output(output, DEFAULT_REPLAYGAIN_VERIFY_OUTPUT)
+    out_path = resolve_output(output)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     with open_report(out_path) as f:
@@ -1736,7 +1737,8 @@ def run_verify_replaygain(
         print(f"  Clip-adjusted:  {len({a for a, _ in clip_rows})}")
         if failed_albums:
             print(f"  Scan failed:    {len(failed_albums)}")
-        print(f"Results written to: {out_path}")
+        if out_path != STDOUT_REPORT:
+            print(f"Results written to: {out_path}")
 
     return 0
 
@@ -1859,7 +1861,7 @@ def run_album_consistency(
 
     pbar.close()
 
-    out_path = resolve_output(output, DEFAULT_ALBUM_CONSISTENCY_OUTPUT)
+    out_path = resolve_output(output)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     ac_findings = len(mixed) + len(track_issues) + len(year_issues)
@@ -1889,7 +1891,8 @@ def run_album_consistency(
                 )
             )
         if not quiet and out_path != "-":
-            print(f"Report written to: {out_path}")
+            if out_path != STDOUT_REPORT:
+                print(f"Report written to: {out_path}")
         return 1 if (fail_on_findings and ac_findings) else 0
 
     with open_report(out_path) as f:
@@ -1927,7 +1930,8 @@ def run_album_consistency(
         print(f"  Mixed codecs:       {len(mixed)}")
         print(f"  Track-number issues: {len(track_issues)}")
         print(f"  Year issues:        {len(year_issues)}")
-        print(f"Results written to: {out_path}")
+        if out_path != STDOUT_REPORT:
+            print(f"Results written to: {out_path}")
 
     return 1 if (fail_on_findings and ac_findings) else 0
 
@@ -2111,12 +2115,13 @@ def run_health(
     }
 
     if json_mode:
-        out_path = resolve_output(output, DEFAULT_HEALTH_OUTPUT)
+        out_path = resolve_output(output)
         os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
         with open_report(out_path) as f:
             f.write(json_report("health", roots, total_findings, payload))
         if not quiet and out_path != "-":
-            print(f"Report written to: {out_path}")
+            if out_path != STDOUT_REPORT:
+                print(f"Report written to: {out_path}")
         return 0
 
     lines: list[str] = []
@@ -2173,13 +2178,14 @@ def run_health(
     lines.append("Exit 0 by design: the digest informs, the audits gate.")
     report = "\n".join(lines) + "\n"
 
-    out_path = resolve_output(output, DEFAULT_HEALTH_OUTPUT)
+    out_path = resolve_output(output)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open_report(out_path) as f:
         f.write(report)
     if not quiet and out_path != "-":
         print(report)
-        print(f"Digest written to: {out_path}")
+        if out_path != STDOUT_REPORT:
+            print(f"Digest written to: {out_path}")
     return 0
 
 
@@ -2323,7 +2329,7 @@ def run_junk_frame_audit(
         "garbage": "EMPTY TEXT FRAMES",
         "nonstandard": "NONSTANDARD (iTunes-era, functional)",
     }
-    out_path = resolve_output(output, DEFAULT_JUNK_FRAME_OUTPUT)
+    out_path = resolve_output(output)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open_report(out_path) as f:
         f.write("JUNK ID3 FRAME AUDIT\n")
@@ -2354,7 +2360,8 @@ def run_junk_frame_audit(
         )
         for kind in ("obsolete", "garbage", "nonstandard"):
             print(f"  {titles[kind].split(' (')[0]}: {len(buckets[kind])}")
-        print(f"Results written to: {out_path}")
+        if out_path != STDOUT_REPORT:
+            print(f"Results written to: {out_path}")
 
     return 0
 
@@ -2492,7 +2499,7 @@ def run_stray_audit(
                     )
 
     total_strays = sum(len(v) for v in strays.values())
-    out_path = resolve_output(output, DEFAULT_STRAY_AUDIT_OUTPUT)
+    out_path = resolve_output(output)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
 
     with open_report(out_path) as out_file:
@@ -2544,6 +2551,7 @@ def run_stray_audit(
             f"Hidden: {len(strays['hidden'])}  "
             f"Unrecognized: {len(junk)}"
         )
-        print(f"Results written to: {out_path}")
+        if out_path != STDOUT_REPORT:
+            print(f"Results written to: {out_path}")
 
     return 0

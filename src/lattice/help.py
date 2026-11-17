@@ -20,31 +20,6 @@ import textwrap
 from dataclasses import dataclass
 
 from lattice.config import (
-    DEFAULT_AI_LIBRARY_OUTPUT,
-    DEFAULT_ALBUM_CONSISTENCY_OUTPUT,
-    DEFAULT_ART_MISMATCH_OUTPUT,
-    DEFAULT_ART_QUALITY_OUTPUT,
-    DEFAULT_AUDIO_DUPES_OUTPUT,
-    DEFAULT_BITRATE_AUDIT_OUTPUT,
-    DEFAULT_DUPLICATES_OUTPUT,
-    DEFAULT_FLAC_OUTPUT,
-    DEFAULT_HEALTH_OUTPUT,
-    DEFAULT_HEALTH_SCORE_OUTPUT,
-    DEFAULT_JUNK_FRAME_OUTPUT,
-    DEFAULT_LIBRARY_OUTPUT,
-    DEFAULT_MISSING_ART_OUTPUT,
-    DEFAULT_MP3_OUTPUT,
-    DEFAULT_OPUS_OUTPUT,
-    DEFAULT_PLAYLIST_CHECK_OUTPUT,
-    DEFAULT_PLAYLIST_OUTPUT,
-    DEFAULT_REPLAYGAIN_AUDIT_OUTPUT,
-    DEFAULT_REPLAYGAIN_VERIFY_OUTPUT,
-    DEFAULT_SNAPSHOT_DIFF_OUTPUT,
-    DEFAULT_SNAPSHOT_OUTPUT,
-    DEFAULT_STRAY_AUDIT_OUTPUT,
-    DEFAULT_TAG_AUDIT_OUTPUT,
-    DEFAULT_WAV_OUTPUT,
-    DEFAULT_WMA_OUTPUT,
     VERSION,
 )
 
@@ -141,7 +116,6 @@ class Mode:
     own: tuple[Opt, ...] = ()
     shared: tuple[str, ...] = ()
     display: str = ""
-    output_default: str = ""
     output_note: str = ""
 
 
@@ -172,7 +146,11 @@ SHARED: dict[str, Opt] = {
         "library_root, library_roots, layout); with no config and a "
         "non-interactive stdin, the current directory is used.",
     ),
-    "output": Opt("output", "--output PATH", "Where the report is written."),
+    "output": Opt(
+        "output",
+        "--output PATH",
+        "Path for the report file; omit it (or pass '-') to print to the terminal.",
+    ),
     "layout": Opt(
         "layout",
         "--layout PATTERN",
@@ -243,7 +221,6 @@ MODES: tuple[Mode, ...] = (
         usage="lattice --library [ROOT] [--output PATH] [--genres] [--where EXPR]",
         example="lattice --library ~/Music --genres --output library.txt",
         shared=("root", "output", "layout", "where", "quiet"),
-        output_default=DEFAULT_LIBRARY_OUTPUT,
         own=(Opt("genres", "--genres", "Include each album's genre in the tree."),),
     ),
     Mode(
@@ -257,7 +234,6 @@ MODES: tuple[Mode, ...] = (
         usage="lattice --ai-library [ROOT] [--output PATH] [--where EXPR]",
         example="lattice --ai-library ~/Music",
         shared=("root", "output", "layout", "where", "quiet"),
-        output_default=DEFAULT_AI_LIBRARY_OUTPUT,
     ),
     Mode(
         dest="all_wings",
@@ -317,7 +293,6 @@ MODES: tuple[Mode, ...] = (
         usage="lattice --snapshot [ROOT] [--output PATH]",
         example="lattice --snapshot ~/Music --output before-reorg.tsv",
         shared=("root", "output", "quiet"),
-        output_default=DEFAULT_SNAPSHOT_OUTPUT,
     ),
     Mode(
         dest="diff_snapshot",
@@ -331,7 +306,6 @@ MODES: tuple[Mode, ...] = (
         usage="lattice --diff SNAPSHOT [ROOT] [--output PATH]",
         example="lattice --diff before-reorg.tsv ~/Music",
         shared=("root", "output", "quiet"),
-        output_default=DEFAULT_SNAPSHOT_DIFF_OUTPUT,
     ),
     Mode(
         dest="playlist",
@@ -348,7 +322,6 @@ MODES: tuple[Mode, ...] = (
         usage="lattice --playlist [ROOT] [--rule EXPR] [--output PATH]",
         example="lattice --playlist ~/Music --rule \"rating >= 4 and genre == 'Jazz'\"",
         shared=("root", "output", "layout", "quiet"),
-        output_default=DEFAULT_PLAYLIST_OUTPUT,
         own=(
             Opt(
                 "rule",
@@ -368,7 +341,6 @@ MODES: tuple[Mode, ...] = (
         usage="lattice --checkPlaylists [ROOT] [--output PATH]",
         example="lattice --checkPlaylists ~/Music",
         shared=("root", "output", "verbose", "quiet"),
-        output_default=DEFAULT_PLAYLIST_CHECK_OUTPUT,
     ),
     # -- integrity ----------------------------------------------------------
     Mode(
@@ -387,7 +359,6 @@ MODES: tuple[Mode, ...] = (
         usage="lattice --testFLAC [ROOT] [--workers N] [--resume]",
         example="lattice --testFLAC ~/Music --workers 4 --resume",
         shared=("root", "output", "quiet"),
-        output_default=DEFAULT_FLAC_OUTPUT,
         own=(
             Opt(
                 "prefer",
@@ -419,7 +390,6 @@ MODES: tuple[Mode, ...] = (
         usage="lattice --testMP3 [ROOT] [--workers N] [--resume]",
         example="lattice --testMP3 ~/Music --workers 8",
         shared=("root", "output", "quiet"),
-        output_default=DEFAULT_MP3_OUTPUT,
         own=(
             Opt("workers", "--workers N", "Parallel decode workers (default 4)."),
             Opt("ffmpeg", "--ffmpeg PATH", "Path to the ffmpeg binary."),
@@ -450,7 +420,6 @@ MODES: tuple[Mode, ...] = (
         usage="lattice --testOpus [ROOT] [--workers N]",
         example="lattice --testOpus ~/Music",
         shared=("root", "output", "quiet"),
-        output_default=DEFAULT_OPUS_OUTPUT,
         own=(
             Opt("workers", "--workers N", "Parallel decode workers (default 4)."),
             Opt("ffmpeg", "--ffmpeg PATH", "Path to the ffmpeg binary."),
@@ -474,7 +443,6 @@ MODES: tuple[Mode, ...] = (
         usage="lattice --testWAV [ROOT] [--workers N]",
         example="lattice --testWAV ~/Music",
         shared=("root", "output", "quiet"),
-        output_default=DEFAULT_WAV_OUTPUT,
         own=(
             Opt("workers", "--workers N", "Parallel decode workers (default 4)."),
             Opt("ffmpeg", "--ffmpeg PATH", "Path to the ffmpeg binary."),
@@ -498,7 +466,6 @@ MODES: tuple[Mode, ...] = (
         usage="lattice --testWMA [ROOT] [--workers N]",
         example="lattice --testWMA ~/Music",
         shared=("root", "output", "quiet"),
-        output_default=DEFAULT_WMA_OUTPUT,
         own=(
             Opt("workers", "--workers N", "Parallel decode workers (default 4)."),
             Opt("ffmpeg", "--ffmpeg PATH", "Path to the ffmpeg binary."),
@@ -542,7 +509,6 @@ MODES: tuple[Mode, ...] = (
         usage="lattice --missingArt [ROOT] [--output PATH]",
         example="lattice --missingArt ~/Music",
         shared=("root", "output", "quiet"),
-        output_default=DEFAULT_MISSING_ART_OUTPUT,
     ),
     Mode(
         dest="auditArtQuality",
@@ -555,7 +521,6 @@ MODES: tuple[Mode, ...] = (
         usage="lattice --auditArtQuality [ROOT] [--min-art-res N]",
         example="lattice --auditArtQuality ~/Music --min-art-res 1000",
         shared=("root", "output", "quiet"),
-        output_default=DEFAULT_ART_QUALITY_OUTPUT,
         own=(
             Opt(
                 "min_art_res",
@@ -576,7 +541,6 @@ MODES: tuple[Mode, ...] = (
         usage="lattice --auditArtMismatch [ROOT] [--output PATH]",
         example="lattice --auditArtMismatch ~/Music --verbose",
         shared=("root", "output", "verbose", "quiet"),
-        output_default=DEFAULT_ART_MISMATCH_OUTPUT,
     ),
     # -- audits -------------------------------------------------------------
     Mode(
@@ -592,7 +556,6 @@ MODES: tuple[Mode, ...] = (
         usage="lattice --duplicates [ROOT] [--output PATH]",
         example="lattice --duplicates ~/Music",
         shared=("root", "output", "where", "json", "fail_on_findings", "quiet"),
-        output_default=DEFAULT_DUPLICATES_OUTPUT,
     ),
     Mode(
         dest="audit_audio_dupes",
@@ -606,7 +569,6 @@ MODES: tuple[Mode, ...] = (
         usage="lattice --auditAudioDupes [ROOT] [--output PATH]",
         example="lattice --auditAudioDupes ~/Music",
         shared=("root", "output", "quiet"),
-        output_default=DEFAULT_AUDIO_DUPES_OUTPUT,
     ),
     Mode(
         dest="auditTags",
@@ -619,7 +581,6 @@ MODES: tuple[Mode, ...] = (
         usage="lattice --auditTags [ROOT] [--output PATH]",
         example="lattice --auditTags ~/Music --where \"genre == 'Classical'\"",
         shared=("root", "output", "where", "json", "fail_on_findings", "quiet"),
-        output_default=DEFAULT_TAG_AUDIT_OUTPUT,
     ),
     Mode(
         dest="audit_junk_frames",
@@ -633,7 +594,6 @@ MODES: tuple[Mode, ...] = (
         usage="lattice --auditJunkFrames [ROOT] [--output PATH]",
         example="lattice --auditJunkFrames ~/Music",
         shared=("root", "output", "verbose", "quiet"),
-        output_default=DEFAULT_JUNK_FRAME_OUTPUT,
     ),
     Mode(
         dest="audit_albums",
@@ -654,7 +614,6 @@ MODES: tuple[Mode, ...] = (
             "verbose",
             "quiet",
         ),
-        output_default=DEFAULT_ALBUM_CONSISTENCY_OUTPUT,
     ),
     Mode(
         dest="auditBitrate",
@@ -675,7 +634,6 @@ MODES: tuple[Mode, ...] = (
             "verbose",
             "quiet",
         ),
-        output_default=DEFAULT_BITRATE_AUDIT_OUTPUT,
         own=(
             Opt(
                 "min_bitrate",
@@ -704,7 +662,6 @@ MODES: tuple[Mode, ...] = (
             "verbose",
             "quiet",
         ),
-        output_default=DEFAULT_REPLAYGAIN_AUDIT_OUTPUT,
     ),
     Mode(
         dest="audit_strays",
@@ -718,7 +675,6 @@ MODES: tuple[Mode, ...] = (
         usage="lattice --auditStrays [ROOT] [--layout PATTERN]",
         example='lattice --auditStrays ~/Music --layout "{genre}/{artist}/{album}"',
         shared=("root", "output", "layout", "quiet"),
-        output_default=DEFAULT_STRAY_AUDIT_OUTPUT,
     ),
     Mode(
         dest="health_score",
@@ -741,7 +697,6 @@ MODES: tuple[Mode, ...] = (
             "verbose",
             "quiet",
         ),
-        output_default=DEFAULT_HEALTH_SCORE_OUTPUT,
         own=(
             Opt(
                 "min_bitrate",
@@ -769,7 +724,6 @@ MODES: tuple[Mode, ...] = (
         usage="lattice --health [ROOT] [--output PATH] [--json]",
         example="lattice --health ~/Music",
         shared=("root", "output", "json", "verbose", "quiet"),
-        output_default=DEFAULT_HEALTH_OUTPUT,
         own=(
             Opt(
                 "min_bitrate",
@@ -802,7 +756,6 @@ MODES = MODES + (
         usage="lattice --verifyReplayGain [ROOT] [--target-lufs N] [--tolerance DB]",
         example="lattice --verifyReplayGain ~/Music --target-lufs -14",
         shared=("root", "output", "verbose", "quiet"),
-        output_default=DEFAULT_REPLAYGAIN_VERIFY_OUTPUT,
         own=(
             Opt(
                 "target_lufs",
@@ -1236,7 +1189,12 @@ def help_json() -> str:
                     for opt in m.own
                 ],
                 "shared": list(m.shared),
-                "output_default": m.output_default or None,
+                # The key stays for the machine surface's additive-only
+                # contract; every mode's default is stdout since v6.5.0, so
+                # the value is null and output_note carries the per-mode
+                # exception (the wings' directory outputs).
+                "output_default": None,
+                "output_note": m.output_note or None,
             }
             for m in MODES
         ],
@@ -1387,9 +1345,7 @@ def render_mode(dest: str, color: bool | None = None) -> str:
     for dest_name in m.shared:
         opt = SHARED[dest_name]
         if dest_name == "output":
-            text = m.output_note or opt.text + (
-                f" Default: {m.output_default}." if m.output_default else ""
-            )
+            text = m.output_note or opt.text
         else:
             text = opt.text
         shared_rows.append((st.tokens(opt.flag), text))
