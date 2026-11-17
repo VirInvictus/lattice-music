@@ -11,6 +11,7 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from lattice import cli
 from lattice.modes.playlists import RuleError, compile_where
@@ -236,6 +237,53 @@ class WriteTargetingTests(unittest.TestCase):
         self.assertEqual(rc, 0)
         text = out.read_text(encoding="utf-8")
         self.assertIn("--where scoped: 1 of 1 files", text)
+
+
+class AuditProgressTests(unittest.TestCase):
+    """Audit progress bars size to the file total: a mode that reads each
+    file twice under --where must not advance the bar twice (the ReplayGain
+    audit's second, where-scoped tag read used to drive it to 200%)."""
+
+    FIXTURES = Path(__file__).parent / "fixtures" / "library"
+
+    def test_replaygain_audit_where_advances_the_bar_once_per_file(self):
+        from lattice.modes import audit as audit_mod
+
+        class CountingBar:
+            def __init__(self):
+                self.updates = 0
+
+            def update(self, n=1):
+                self.updates += n
+
+            def close(self):
+                pass
+
+        with tempfile.TemporaryDirectory() as tmp:
+            album = Path(tmp) / "Art" / "Album"
+            album.mkdir(parents=True)
+            shutil.copy(
+                self.FIXTURES
+                / "Aphex Twin"
+                / "Selected Ambient Works"
+                / "01 - Xtal.flac",
+                album / "01.flac",
+            )
+            bar = CountingBar()
+            out = Path(tmp) / "rg_audit.txt"
+            with (
+                mock.patch.object(audit_mod, "_make_pbar", return_value=bar),
+                contextlib.redirect_stdout(io.StringIO()),
+            ):
+                rc = audit_mod.run_replaygain_audit(
+                    [str(tmp)],
+                    str(out),
+                    quiet=True,
+                    where=compile_where("genre == 'Electronic'"),
+                )
+            self.assertEqual(rc, 0)
+            # One update per file, not one per read pass.
+            self.assertEqual(bar.updates, 1)
 
 
 if __name__ == "__main__":

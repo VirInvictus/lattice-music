@@ -1,6 +1,6 @@
 # lattice-music Application Specification
 
-**Version:** 6.4.2  
+**Version:** 6.4.3  
 **Language:** Python 3.14+  
 **Dependencies:** `mutagen`, `tqdm`, `vir-tui`  
 **License:** MIT
@@ -143,7 +143,7 @@ test suite. Mode dispatch itself is unchanged.
 | Smart playlist | `--playlist` | Generate an `.m3u` from a dynamic rule (e.g. `rating >= 4 and genre == 'Jazz'`) |
 | Playlist check | `--checkPlaylists` | Verify the library's `.m3u`/`.m3u8` playlists: missing `#EXTM3U` headers and entries whose target no longer exists (relative entries resolve against the playlist's own directory) |
 | Snapshot | `--snapshot` | Write a per-file library snapshot TSV (path, size, mtime, track/rating/genre/year, ReplayGain presence); the `--diff` baseline |
-| Snapshot diff | `--diff SNAPSHOT` | Replay a snapshot against the current tree: MOVED (size+mtime preserved at a new path), RETAGGED (per-field old -> new), RESIZED, ADDED, REMOVED |
+| Snapshot diff | `--diff SNAPSHOT` | Replay a snapshot against the current tree: MOVED (size+mtime preserved at a new path), RETAGGED (per-field old -> new; wins over RESIZED, since a retag usually changes the bytes too), RESIZED (no tag changes, different bytes), ADDED, REMOVED |
 | Clean | `--clean` | Consolidate fragmented album folders (quote/dash/case variants) with opt-in name (`--normalize-names`, `--normalize-filenames`) and tag (`--normalize-tags`) normalization passes; write mode, dry-run by default |
 | APEv2 strip | `--apestrip` | Remove stray APEv2 tags from MP3s (`--keep-metadata` to migrate sole-source fields first, `--repair-malformed` for tags mutagen cannot parse); write mode, dry-run by default |
 | Rating strip | `--stripRatings` | Delete rating tags wherever they carry a nonzero value: MP3 POPM frames and rating TXXX frames plus the APEv2 `Rating` key, Vorbis rating/score/stars keys, MP4 rate/rating atoms, ASF rating attributes: the same sources `get_all_tags` decodes, through shared helpers so reader and stripper cannot drift; zero-valued shells and play-count-only POPM frames survive, nothing else is touched; write mode, dry-run by default, log `<root>/stripratings.log`; --apply refuses any root at or under a config `rating_protected_roots` entry except through a staging inbox |

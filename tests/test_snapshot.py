@@ -124,6 +124,28 @@ class DiffTests(unittest.TestCase):
             self.assertIn("genre (none) -> Metal", report)
             self.assertIn("year (none) -> 1985", report)
 
+    def test_retagged_wins_over_resized(self):
+        # A retag rewrites container headers, so a retagged file's size
+        # usually changes too; sizing the section first buried every retag
+        # behind RESIZED and the diff reported no tag changes at all.
+        with tempfile.TemporaryDirectory() as td:
+            album = self._tree(td)
+            snap = self._snap(td)
+            (album / "01.flac").write_bytes(b"a" * 40)  # resized AND retagged
+            retagged = TagBundle(title="t", trackno=1, genre="Metal", year=1985)
+            real = library_mod.get_all_tags
+
+            def fake(path):
+                if path.endswith("01.flac"):
+                    return retagged
+                return real(path)
+
+            with mock.patch.object(library_mod, "get_all_tags", side_effect=fake):
+                _rc, report = self._diff(td, snap)
+            self.assertIn("RETAGGED (1)", report)
+            self.assertIn("genre (none) -> Metal", report)
+            self.assertNotIn("RESIZED", report)
+
     def test_diff_against_a_non_snapshot_refuses(self):
         with tempfile.TemporaryDirectory() as td:
             self._tree(td)

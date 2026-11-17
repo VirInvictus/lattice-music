@@ -586,9 +586,9 @@ def diff_snapshot(
 ) -> int:
     """Replay a snapshot against the current tree: MOVED (same size+mtime at
     a new path), RETAGGED (same path, changed tag fields, with old -> new per
-    field), RESIZED (same path, different bytes), then ADDED and REMOVED
-    leftovers. The report is the whole point; nothing is written to the
-    library."""
+    field; wins over RESIZED, since a retag usually changes the bytes too),
+    RESIZED (same path, different bytes), then ADDED and REMOVED leftovers.
+    The report is the whole point; nothing is written to the library."""
     roots = as_roots(root_dir)
     total = count_audio_files(roots)
     if not quiet:
@@ -642,9 +642,10 @@ def diff_snapshot(
 
     for path in sorted(old_paths & new_paths):
         old_row, new_row = baseline[path], current[path]
-        if old_row["size"] != new_row["size"]:
-            resized.append((path, str(old_row["size"]), str(new_row["size"])))
-            continue
+        # Tag changes are the point of the diff, so they win the section:
+        # a retag rewrites container metadata headers, so a retagged file's
+        # size usually changes too, and sizing the section first used to
+        # bury every retag behind RESIZED.
         changes = []
         for col in ("track", "rating", "genre", "year", "rg"):
             if old_row[col] != new_row[col]:
@@ -653,6 +654,8 @@ def diff_snapshot(
                 )
         if changes:
             retagged.append((path, changes))
+        elif old_row["size"] != new_row["size"]:
+            resized.append((path, str(old_row["size"]), str(new_row["size"])))
 
     out_path = resolve_output(output_file, output_file)
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)

@@ -126,6 +126,31 @@ class HealthDigestTests(_Tree):
         # And the digest entry point is the same function the TUI dispatches.
         self.assertTrue(callable(run_health))
 
+    def test_exact_dupe_lens_folds_like_the_duplicates_audit(self):
+        # The digest's duplicate count keys through the same fold as
+        # --duplicates' exact lens: raw-string keys read casing variants of
+        # one album as two, and the digest reported 0 pairs while
+        # --duplicates flagged the same tree.
+        from mutagen.flac import FLAC
+
+        twin = self.root / "Other" / "Album"
+        twin.mkdir(parents=True)
+        shutil.copy(FLAC_SRC, twin / "01.flac")
+        f = FLAC(str(twin / "01.flac"))
+        f["artist"] = ["APHEx TWIN"]
+        f["album"] = ["selected  ambient works"]
+        f.save()
+        rc, out = _main(
+            [
+                "--health",
+                "--output",
+                str(Path(self._tmp.name) / "d2.txt"),
+                str(self.root),
+            ]
+        )
+        self.assertEqual(rc, 0)
+        self.assertIn("Duplicates: 1 exact album pair(s)", out)
+
 
 class HealthWiringTests(unittest.TestCase):
     def test_health_is_in_the_house_flag_group_and_tui_menu(self):

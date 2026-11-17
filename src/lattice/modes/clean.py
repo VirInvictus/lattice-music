@@ -43,6 +43,7 @@ recorded in an append-only timestamped log (default <root>/cleanup.log).
 """
 
 import argparse
+import filecmp
 import os
 import sys
 from datetime import datetime
@@ -292,14 +293,19 @@ def merge_dir(source: Path, target: Path, run: Run) -> None:
             elif item.is_file() and run._is_file(target_item):
                 src_size = item.stat().st_size
                 tgt_size = run._size(target_item)
-                identical = src_size == tgt_size and head_tail_equal(
-                    item, run._real(target_item)
+                # The sampled head/tail check is the cheap pre-filter; the
+                # unlink branch confirms with a full byte compare (the same
+                # primitive cquarry's duplicate refusal uses), because a
+                # difference confined to the middle of two same-size files
+                # slips through the sample and this branch destroys the
+                # incoming variant.
+                identical = (
+                    src_size == tgt_size
+                    and head_tail_equal(item, run._real(target_item))
+                    and filecmp.cmp(item, run._real(target_item), shallow=False)
                 )
                 if identical:
-                    run.log(
-                        f"    DROP DUPE (identical size + sampled bytes, "
-                        f"{src_size}B): {item}"
-                    )
+                    run.log(f"    DROP DUPE (byte-identical, {src_size}B): {item}")
                     run._unlink(item)
                     run.stats["exact_dupes_dropped"] += 1
                 else:

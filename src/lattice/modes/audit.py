@@ -1359,8 +1359,11 @@ def run_replaygain_audit(
         if where is not None:
             # Album-granular: a where matching any track selects the whole
             # album, and coverage stays an album property (counts over the
-            # full file set, never a subset).
-            bundles = read_tags_concurrent(paths, pbar=pbar)
+            # full file set, never a subset). The bar is sized to the file
+            # total and the RG read above already consumed it, so this
+            # second read advances nothing (the health walk sizes its bar
+            # to total*2 instead; this audit would count to 200%).
+            bundles = read_tags_concurrent(paths, pbar=None)
             if not any(where(t) for t in bundles.values()):
                 continue
         n_track = sum(1 for p in paths if statuses[p].has_track_gain)
@@ -2023,7 +2026,12 @@ def run_health(
         dominant_artist = _most_common_tag(album_bundles, "artist")
         dominant_album = _most_common_tag(album_bundles, "album")
         if dominant_artist and dominant_album:
-            album_keys.setdefault((dominant_artist, dominant_album), []).append(dirpath)
+            # Through _norm_key, the exact-dupe lens's own fold: raw strings
+            # let casing/quote/dash variants of one album count as two, and
+            # the digest reported 0 pairs where --duplicates found them.
+            album_keys.setdefault(
+                (_norm_key(dominant_artist), _norm_key(dominant_album)), []
+            ).append(dirpath)
 
         score, _notes = _album_health(
             bundles,

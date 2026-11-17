@@ -150,6 +150,39 @@ class ConsolidateTests(unittest.TestCase):
         self.assertFalse(any(canon.glob("*from-fragment*")))
         self.assertFalse(src.exists())
 
+    def test_sampled_equal_same_size_but_middle_differs_kept(self):
+        # C2: head/tail sampling alone can clear two same-size files whose
+        # difference sits in the middle, and the DROP DUPE branch used to
+        # unlink on that sample. The destructive verdict is confirmed with a
+        # full byte compare, so the incoming variant survives as a fragment.
+        head, tail = b"x" * 70000, b"x" * 70000
+        canon = _make_dir(
+            self.root,
+            "Album",
+            {"01.flac": head + b"A" * 100 + tail, "02.flac": b"y"},
+        )
+        src = _make_dir(self.root, "album", {"01.flac": head + b"B" * 100 + tail})
+        run = self._run()
+        clean.consolidate_group([canon, src], "test", run)
+        run.close()
+        self.assertEqual(
+            (canon / "01.from-fragment.flac").read_bytes(), head + b"B" * 100 + tail
+        )
+        self.assertEqual((canon / "01.flac").read_bytes(), head + b"A" * 100 + tail)
+        self.assertFalse(src.exists())
+
+    def test_full_byte_compare_confirms_a_real_duplicate(self):
+        # The gate must not turn a genuine duplicate into a kept fragment:
+        # same-size, head/tail-equal AND byte-identical still drops.
+        body = b"x" * 70000 + b"SAME" * 25 + b"x" * 70000
+        canon = _make_dir(self.root, "Album", {"01.flac": body, "02.flac": b"y"})
+        src = _make_dir(self.root, "album", {"01.flac": bytes(body)})
+        run = self._run()
+        clean.consolidate_group([canon, src], "test", run)
+        run.close()
+        self.assertFalse((canon / "01.from-fragment.flac").exists())
+        self.assertFalse(src.exists())
+
     def test_dry_run_changes_nothing(self):
         canon = _make_dir(self.root, "Album", {"01.flac": b"x", "02.flac": b"y"})
         src = _make_dir(self.root, "album", {"03.flac": b"z"})

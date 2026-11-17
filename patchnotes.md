@@ -1,5 +1,44 @@
 # lattice-music Patch Notes
 
+## v6.4.3 (2026-11-16)
+
+### Four analysis-correctness fixes
+
+The other half of the 2026-11-16 audit haul: the read and report paths
+whose verdicts were subtly wrong.
+
+- **`--clean` confirms a DROP DUPE with a full byte compare (#7)**: the
+  destructive branch unlinked on the sampled check (equal size, equal first
+  and last 64 KiB) whose own docstring concedes a difference confined to the
+  middle slips through. The sample stays as the cheap pre-filter; the unlink
+  now requires a full `filecmp` confirmation (the same primitive cquarry's
+  duplicate refusal uses), so a padded-to-size pair that differs mid-file
+  survives as a `.from-fragment` copy instead of being destroyed. A genuine
+  duplicate still drops (pinned by test).
+- **`--diff` reports RETAGGED ahead of RESIZED (#11)**: the diff sized each
+  shared-path file first and skipped the tag columns on any byte change, so
+  every retag (which rewrites container headers and therefore changes the
+  size) was classified RESIZED with no tag detail at all. Tag changes are
+  now the section a retagged file lands in; a same-path file with no tag
+  changes and different bytes is still RESIZED.
+- **`--health`'s duplicate count folds like `--duplicates` (#13)**: the
+  digest keyed its exact-album-dupe count on the raw dominant artist+album
+  strings, so casing/quote/whitespace variants of one album counted as two
+  separate keys and the digest reported 0 pairs while `--duplicates` flagged
+  the same tree. The keys now go through `_norm_key`, the exact lens's own
+  fold, so the digest's number is the audit's number.
+- **`--auditReplayGain --where` stops double-advancing its progress bar
+  (#14)**: the where-scoped second tag read passed the same progress bar the
+  ReplayGain read had already driven through the file total, so the bar
+  counted to 200% and terminal output misled. The second read advances
+  nothing (the health walk, which legitimately reads twice, sizes its bar
+  to total x 2 instead).
+
+5 new tests (817 total): a mid-file-difference pair kept as a fragment, a
+genuine >64 KiB duplicate still dropped, a resized-and-retagged file
+reporting its tag changes, a casing/whitespace album variant counting as
+one duplicate pair, and the RG audit's bar advancing once per file.
+
 ## v6.4.2 (2026-11-16)
 
 ### Five machine-surface contract violations, closed
