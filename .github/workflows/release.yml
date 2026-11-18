@@ -2,12 +2,13 @@ name: Release
 
 # A v* tag auto-publishes to PyPI (publish.yml) and opens the GitHub Release
 # here. The Release body is the tag's own message, which is the verbatim
-# patchnotes entry per the house tagging procedure. The checkout is required:
-# `gh release create --notes-from-tag` refuses to combine with --repo, so the
-# step runs inside the repository and lets the remote infer it (v5.5.0's run
-# failed on exactly that). Stock gh CLI only; no third-party action. Tags cut
-# before this file existed used the manual `gh release create vX
-# --notes-from-tag`.
+# patchnotes entry per the house tagging procedure. The body is read straight
+# off the local annotated tag object: gh's --notes-from-tag is NOT used,
+# because inside Actions it silently falls back to the commit message
+# (Catagotchi issue #2; this repo's v5.6.0 was one of its casualties, and
+# v5.7.0 was repaired from its tag on 2026-11-17). The step runs inside the
+# repository and lets the remote be inferred (v5.5.0's run failed on an
+# explicit --repo). Stock gh CLI only; no third-party action.
 on:
   push:
     tags: ["v*"]
@@ -23,13 +24,24 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: .
-          # --notes-from-tag needs the ANNOTATED tag object in the clone;
-          # the default shallow fetch carries only the commit, and gh then
-          # falls back to the commit message (v5.6.0's first live fire did
-          # exactly that; repaired by hand afterwards).
           fetch-depth: 0
+      # checkout rewrites refs/tags/vX to the resolved commit SHA even after
+      # a full fetch (deadbeef-cui v2.0.1 precedent), so the annotated object
+      # must be re-fetched --force right before it is read.
+      - name: Fetch the annotated tag object
+        env:
+          TAG: ${{ github.ref_name }}
+        run: git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
       - name: Create the release from the tag message
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
         run: |
-          gh release create "$GITHUB_REF_NAME" --notes-from-tag --verify-tag
+          OT="$(git for-each-ref "refs/tags/$TAG" --format='%(objecttype)')"
+          if [ "$OT" != "tag" ]; then
+            echo "::error::tag $TAG is $OT, not an annotated tag; the verbatim patchnotes entry is unavailable"
+            exit 1
+          fi
+          git for-each-ref "refs/tags/$TAG" --format='%(contents)' > /tmp/release-notes.md
+          TITLE="$(head -1 /tmp/release-notes.md)"
+          gh release create "$TAG" --verify-tag --notes-file /tmp/release-notes.md --title "$TITLE"
