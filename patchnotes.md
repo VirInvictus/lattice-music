@@ -1,5 +1,40 @@
 # lattice-music Patch Notes
 
+## v6.6.0 (2026-11-22)
+
+### --exportDb: the library hierarchy as a SQLite database
+
+The library, in relational form, built the same way the wings are:
+GENRE (primary) -> ARTIST -> ALBUM -> SONG, queryable from any SQL client.
+
+- **`lattice --exportDb [ROOT] --output PATH`** rebuilds the whole hierarchy
+  into a SQLite database on every run: `genres`, `artists`, `albums`
+  (dominant genre, contributing paths, year, track count, total duration,
+  embedded-art coverage), `album_genres` (the "/" split of the contributing
+  directories' dominant genres, exactly the wing membership `--all-wings`
+  buckets by), and `tracks` (title, per-track artist, track number, raw
+  genre, year, rating, duration, bitrate, and ReplayGain track/album gain
+  dB). A denormalized `v_track` view joins the whole chain for one-line
+  queries. The filesystem stays the source of truth: the database is a
+  derived artifact, rebuilt wholesale from a fresh walk each run into a
+  temp file and swapped into place with os.replace only after an
+  integrity_check passes, so a failed or interrupted build never damages
+  the previous export, and lattice never reads the database back (spec.md
+  §5 carries the carve-out).
+- **`--output PATH` is required** (a missing or `-` target refuses with
+  exit 2): binary bytes have no stdout report, making `--exportDb` the one
+  mode with no stdout form (spec.md §4). `--where` scopes the export
+  album-granularly like the other exports.
+- **Duckdb users:** `ATTACH 'library.db' AS lib (TYPE sqlite, READ_ONLY)`
+  and qualify tables (`lib.tracks`, `lib.albums`, ...). The sqlite scanner
+  imports tables, not views, so `v_track` lives in sqlite clients only.
+
+Housekeeping since v6.5.0: the release workflow now mints the GitHub
+Release body from the annotated tag object (the v5.6.0 casualty class;
+v5.7.0's body repaired in place), the v6.5.0 spec sync that its bump
+commit lost has landed, and two dependency bumps (actions/setup-python
+7.1.0, pypa/gh-action-pypi-publish 1.14.3).
+
 ## v6.5.0 (2026-11-16)
 
 ### The report discipline: every report mode prints to stdout by default
