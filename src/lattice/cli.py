@@ -42,6 +42,7 @@ from lattice.modes.library import (
     write_ai_library,
     write_ai_wings,
     write_all_wings,
+    write_export_db,
     write_music_library_tree,
     write_snapshot,
 )
@@ -68,6 +69,7 @@ _WHERE_MODES = frozenset(
         "ai_library",
         "all_wings",
         "ai_wings",
+        "export_db",
         "stats",
         "auditTags",
         "audit_albums",
@@ -174,6 +176,7 @@ def build_parser() -> argparse.ArgumentParser:
     group.add_argument("--stats", action="store_true")
     group.add_argument("--snapshot", action="store_true")
     group.add_argument("--diff", dest="diff_snapshot", metavar="SNAPSHOT", default=None)
+    group.add_argument("--exportDb", dest="export_db", action="store_true")
     group.add_argument("--clean", action="store_true")
     group.add_argument("--apestrip", action="store_true")
     group.add_argument("--stripRatings", dest="stripratings", action="store_true")
@@ -700,6 +703,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.diff_snapshot:
             output = args.output
             return diff_snapshot(root, args.diff_snapshot, output, quiet=args.quiet)
+
+        if args.export_db:
+            return write_export_db(
+                root, args.output, layout=args.layout, quiet=args.quiet, where=where
+            )
 
         # The write modes operate on exactly one tree (like the companion
         # scripts they replace), not on an aggregated root list. The

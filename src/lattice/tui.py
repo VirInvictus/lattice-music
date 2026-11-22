@@ -22,6 +22,7 @@ from lattice.config import (
     DEFAULT_AUDIO_DUPES_OUTPUT,
     DEFAULT_BITRATE_AUDIT_OUTPUT,
     DEFAULT_DUPLICATES_OUTPUT,
+    DEFAULT_EXPORTDB_OUTPUT,
     DEFAULT_FLAC_OUTPUT,
     DEFAULT_HEALTH_OUTPUT,
     DEFAULT_HEALTH_SCORE_OUTPUT,
@@ -80,6 +81,7 @@ from lattice.modes.library import (
     write_ai_library,
     write_ai_wings,
     write_all_wings,
+    write_export_db,
     write_music_library_tree,
     write_snapshot,
 )
@@ -175,6 +177,7 @@ _LIB_SECTIONS = [
             "Generate smart playlist (.m3u)",
             "Write library snapshot",
             "Diff against a snapshot",
+            "Export library database",
         ],
     ),
     ("", ["Back to main menu"]),
@@ -254,6 +257,9 @@ _LIB_ALIASES: dict[str, tuple | None] = {
     "playlist": (0, 4),
     "snapshot": (0, 5),
     "diff": (0, 6),
+    "db": (0, 7),
+    "exportdb": (0, 7),
+    "export-db": (0, 7),
     "back": None,
     "": None,
 }
@@ -393,6 +399,17 @@ def _library_submenu(roots: list[str]) -> None:
                     roots,
                     snapshot,
                     output,
+                    quiet=False,
+                    footer=out_note(output),
+                )
+            elif result == (0, 7):
+                output = prompt_out("Database file", DEFAULT_EXPORTDB_OUTPUT)
+                run_with_capture(
+                    "Export library database",
+                    write_export_db,
+                    roots,
+                    output,
+                    layout=get_layout(),
                     quiet=False,
                     footer=out_note(output),
                 )

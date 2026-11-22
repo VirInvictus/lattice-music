@@ -119,6 +119,7 @@ test suite. Mode dispatch itself is unchanged.
 | AI export | `--ai-library` | Token-efficient flat export for LLM recommendation prompts |
 | AI wings | `--ai-wings` | Separate flat library files per genre for AI processing |
 | Genre wings | `--all-wings` | Separate library tree file per genre |
+| Database export | `--exportDb` | Export the library hierarchy (GENRE primary -> ARTIST -> ALBUM -> SONG) into a SQLite database rebuilt wholesale on every run: genres, artists, albums (dominant genre, contributing paths, year, ReplayGain and embedded-art coverage), per-track tags with duration/bitrate/ReplayGain dB, and a denormalized `v_track` view for one-line queries; `--output PATH` required (binary has no stdout form); a derived artifact, never read back by lattice |
 | Statistics | `--stats` | Format breakdown, bitrate, ratings, genres, top artists |
 | FLAC integrity | `--testFLAC` | Verify via `flac -t` (authoritative) or FFmpeg; classify each file into a severity tier |
 | MP3 integrity | `--testMP3` | Decode via FFmpeg (demuxer forced from extension); classify into severity tiers |
@@ -163,7 +164,10 @@ Report modes print to stdout by default: omitting `--output` (or passing
 `-` explicitly) streams the report to the terminal, and `--output PATH` is
 the only way a report becomes a file, so a read run litters no default
 `.txt` into the caller's working directory. The multi-file exports
-(`--all-wings`, `--ai-wings`) keep their output directories. Results are
+(`--all-wings`, `--ai-wings`) keep their output directories. `--exportDb` is
+the one mode with no stdout form: it writes a binary SQLite database, so
+`--output PATH` is required and a missing or `-` target refuses with exit 2.
+Results are
 grouped by severity or category with headers and relative paths; designed
 for human reading. `--json` swaps the report for a machine-readable JSON
 document (the uniform envelope `{mode, root, findings, payload}` for stats
@@ -225,7 +229,10 @@ without `--output` refuses with exit 2.
   `--lyrics` writes beside audio files when applied (audio files themselves are
   never touched by it), and the transient `--resume` state file beside an
   integrity report.
-- **Not a database.** It walks the filesystem every time; there is no index.
+- **Not a database.** It walks the filesystem every time; there is no index it
+  consults. The `--exportDb` mode writes a SQLite snapshot of the library as a
+  derived artifact, rebuilt wholesale on every run and never read back by
+  lattice, so the filesystem stays the only source of truth.
 - **Not a sync tool.** It does not interact with cloud services or devices. The
   single exception is `--lyrics`' read-only lookup against the open LRCLIB API:
   it fetches lyrics for files already in the library and pushes nothing

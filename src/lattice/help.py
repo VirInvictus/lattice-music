@@ -165,10 +165,10 @@ SHARED: dict[str, Opt] = {
         "--playlist grammar: rating, genre, artist, album, title, duration, "
         "bitrate). On targeting modes a rule matching any track selects the "
         "whole album. Accepted by: --library, --ai-library, --all-wings, "
-        "--ai-wings, --stats, --auditTags, --auditAlbums, --auditBitrate, "
-        "--auditReplayGain, --healthScore, --duplicates, --genreTidy-build, "
-        "--genreTidy-apply, --genreMap, --replayGain; everywhere else --where "
-        "is a usage error (exit 2).",
+        "--ai-wings, --exportDb, --stats, --auditTags, --auditAlbums, "
+        "--auditBitrate, --auditReplayGain, --healthScore, --duplicates, "
+        "--genreTidy-build, --genreTidy-apply, --genreMap, --replayGain; "
+        "everywhere else --where is a usage error (exit 2).",
     ),
     "json": Opt(
         "json",
@@ -266,6 +266,23 @@ MODES: tuple[Mode, ...] = (
         example="lattice --ai-wings ~/Music --output wings_ai",
         shared=("root", "output", "layout", "where", "quiet"),
         output_note="Directory for the per-genre files (default: wings_ai).",
+    ),
+    Mode(
+        dest="export_db",
+        flag="--exportDb",
+        category="exports",
+        summary="Library as a SQLite database",
+        detail="Export the library hierarchy (GENRE primary -> ARTIST -> "
+        "ALBUM -> SONG) into a SQLite database rebuilt wholesale on every "
+        "run: genres, artists, albums (dominant genre, contributing paths, "
+        "year, ReplayGain and embedded-art coverage), per-track tags with "
+        "duration, bitrate and ReplayGain dB, and a denormalized v_track "
+        "view for one-line queries. A derived artifact, never read back by "
+        "lattice; the filesystem stays the source of truth.",
+        usage="lattice --exportDb [ROOT] --output PATH [--where EXPR]",
+        example="lattice --exportDb ~/Music --output ~/music-library.db",
+        shared=("root", "output", "layout", "where", "quiet"),
+        output_note="Path for the SQLite database; required, there is no stdout form.",
     ),
     # -- reports ------------------------------------------------------------
     Mode(

@@ -1,11 +1,20 @@
 import io
 import os
 import re
+import sqlite3
 import sys
 from collections import defaultdict
+from datetime import datetime, timezone
 from typing import NamedTuple, TextIO
 
-from lattice.tags import TagBundle, get_all_tags, read_replaygain
+from lattice.config import VERSION
+from lattice.modes.artwork import _has_embedded_art
+from lattice.tags import (
+    TagBundle,
+    get_all_tags,
+    read_replaygain,
+    read_replaygain_values,
+)
 from lattice.utils import (
     STDOUT_REPORT,
     _make_pbar,
@@ -720,4 +729,270 @@ def diff_snapshot(
 
 # =====================================
 # Mode: Snapshot / diff (end)
+# =====================================
+
+
+# =====================================
+# Mode: Library database export
+# =====================================
+
+# A SQLite snapshot of the library hierarchy (GENRE primary -> ARTIST ->
+# ALBUM -> SONG), rebuilt wholesale on every run and never read back by
+# lattice: the filesystem stays the only source of truth, and the database is
+# a derived artifact like any report, one a SQL client (or duckdb's sqlite
+# ATTACH) can interrogate without a bespoke flag per question. The hierarchy
+# is wings-shaped: the album's dominant genre is primary, and album_genres
+# carries the "/" split of every contributing directory's dominant genre as
+# wing membership.
+
+_EXPORT_DB_SCHEMA_VERSION = "1"
+
+_EXPORT_DB_SCHEMA = """
+CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE genres (genre_id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE);
+CREATE TABLE artists (artist_id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE);
+CREATE TABLE albums (
+    album_id INTEGER PRIMARY KEY,
+    artist_id INTEGER NOT NULL REFERENCES artists(artist_id),
+    name TEXT NOT NULL,
+    primary_genre_id INTEGER REFERENCES genres(genre_id),
+    paths TEXT NOT NULL,
+    year INTEGER,
+    track_count INTEGER NOT NULL,
+    total_duration_s REAL,
+    has_embedded_art INTEGER NOT NULL,
+    UNIQUE (artist_id, name)
+);
+CREATE TABLE album_genres (
+    album_id INTEGER NOT NULL REFERENCES albums(album_id),
+    genre_id INTEGER NOT NULL REFERENCES genres(genre_id),
+    PRIMARY KEY (album_id, genre_id)
+);
+CREATE TABLE tracks (
+    track_id INTEGER PRIMARY KEY,
+    album_id INTEGER NOT NULL REFERENCES albums(album_id),
+    path TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    ext TEXT,
+    title TEXT,
+    artist TEXT,
+    trackno INTEGER,
+    genre TEXT,
+    year INTEGER,
+    rating REAL,
+    duration_s REAL,
+    bitrate_kbps INTEGER,
+    rg_track_gain REAL,
+    rg_album_gain REAL
+);
+CREATE INDEX idx_tracks_album ON tracks(album_id);
+CREATE INDEX idx_albums_artist ON albums(artist_id);
+CREATE INDEX idx_album_genres_genre ON album_genres(genre_id);
+CREATE VIEW v_track AS
+    SELECT t.*, a.name AS album, a.paths AS album_paths,
+           ar.name AS album_artist, g.name AS primary_genre,
+           a.year AS album_year
+    FROM tracks t
+    JOIN albums a ON a.album_id = t.album_id
+    JOIN artists ar ON ar.artist_id = a.artist_id
+    LEFT JOIN genres g ON g.genre_id = a.primary_genre_id;
+"""
+
+
+def _merge_album_dirs(album_dirs: list[_AlbumDir]) -> dict:
+    """Collapse scan output to one record per (artist, album), extending songs
+    and deduplicating contributing paths exactly like the wings writer."""
+    merged: dict[tuple[str, str], dict] = {}
+    for ad in album_dirs:
+        rec = merged.setdefault(
+            (ad.artist, ad.album),
+            {"paths": [], "songs": [], "dir_genres": []},
+        )
+        if ad.path not in rec["paths"]:
+            rec["paths"].append(ad.path)
+        rec["songs"].extend(ad.songs)
+        rec["dir_genres"].append(ad.genre)
+    return merged
+
+
+def _album_wing_genres(dir_genres: list[str]) -> dict[str, int]:
+    """Wing membership counts: every contributing directory's dominant genre,
+    split on "/", one count per (directory, genre) the way --all-wings buckets
+    the album into each wing. Empty result means the album belongs to no wing."""
+    counts: dict[str, int] = defaultdict(int)
+    for genre_str in dir_genres:
+        for genre in (g.strip() for g in (genre_str or "").split("/") if g.strip()):
+            counts[genre] += 1
+    return dict(counts)
+
+
+def _populate_export_db(
+    conn: sqlite3.Connection,
+    roots: list[str],
+    layout: str,
+    album_dirs: list[_AlbumDir],
+    total_files: int,
+) -> dict[str, int]:
+    """Insert every row in one transaction; returns the entity counts the run
+    summary prints. RG values cost one extra open per file, the same pattern
+    the snapshot writer pays."""
+    merged = _merge_album_dirs(album_dirs)
+    cur = conn.cursor()
+    cur.execute("BEGIN")
+    genre_ids: dict[str, int] = {}
+    artist_ids: dict[str, int] = {}
+
+    def genre_id(name: str) -> int:
+        gid = genre_ids.get(name)
+        if gid is None:
+            cur.execute("INSERT INTO genres(name) VALUES (?)", (name,))
+            gid = cur.lastrowid
+            genre_ids[name] = gid
+        return gid
+
+    def artist_id(name: str) -> int:
+        aid = artist_ids.get(name)
+        if aid is None:
+            cur.execute("INSERT INTO artists(name) VALUES (?)", (name,))
+            aid = cur.lastrowid
+            artist_ids[name] = aid
+        return aid
+
+    for (artist, album), rec in merged.items():
+        songs = rec["songs"]
+        wing = _album_wing_genres(rec["dir_genres"])
+        primary = _most_common(wing, "")
+        years = defaultdict(int)
+        durations: list[float] = []
+        for _f, _p, t in songs:
+            if t.year is not None:
+                years[t.year] += 1
+            if t.duration_s is not None:
+                durations.append(t.duration_s)
+        cur.execute(
+            "INSERT INTO albums (artist_id, name, primary_genre_id, paths,"
+            " year, track_count, total_duration_s, has_embedded_art)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                artist_id(artist),
+                album,
+                genre_id(primary) if primary else None,
+                "; ".join(rec["paths"]),
+                _most_common(years, None),
+                len(songs),
+                sum(durations) if durations else None,
+                int(any(_has_embedded_art(p) for p in rec["paths"])),
+            ),
+        )
+        album_id = cur.lastrowid
+        for gid in sorted(genre_id(g) for g in wing):
+            cur.execute(
+                "INSERT INTO album_genres (album_id, genre_id) VALUES (?, ?)",
+                (album_id, gid),
+            )
+        for filename, filepath, t in songs:
+            track_gain, album_gain = read_replaygain_values(filepath)
+            cur.execute(
+                "INSERT INTO tracks (album_id, path, filename, ext, title,"
+                " artist, trackno, genre, year, rating, duration_s,"
+                " bitrate_kbps, rg_track_gain, rg_album_gain)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    album_id,
+                    filepath,
+                    filename,
+                    os.path.splitext(filename)[1].lower().strip("."),
+                    t.title,
+                    t.artist,
+                    t.trackno,
+                    t.genre,
+                    t.year,
+                    t.rating,
+                    t.duration_s,
+                    t.bitrate_kbps,
+                    track_gain,
+                    album_gain,
+                ),
+            )
+
+    cur.executemany(
+        "INSERT INTO meta (key, value) VALUES (?, ?)",
+        [
+            ("generated_at", datetime.now(timezone.utc).isoformat(timespec="seconds")),
+            ("lattice_version", VERSION),
+            ("schema_version", _EXPORT_DB_SCHEMA_VERSION),
+            ("roots", ", ".join(roots)),
+            ("layout", layout),
+            ("file_count", str(total_files)),
+        ],
+    )
+    return {
+        "albums": len(merged),
+        "artists": len(artist_ids),
+        "genres": len(genre_ids),
+        "tracks": sum(len(rec["songs"]) for rec in merged.values()),
+    }
+
+
+def write_export_db(
+    root_dir: str | list[str],
+    output_file: str,
+    *,
+    layout: str = "{artist}/{album}",
+    quiet: bool = False,
+    where=None,
+) -> int:
+    """Export the library hierarchy into a SQLite database, rebuilt wholesale
+    on every run. `--output PATH` is required: binary bytes have no stdout
+    report, so a missing or '-' target refuses with exit 2. The build goes to
+    a temp file beside the target and os.replace()s into place only after the
+    schema and an integrity_check both pass, so a failed or interrupted build
+    never damages the previous export."""
+    roots = as_roots(root_dir)
+    if not output_file or resolve_output(output_file) == STDOUT_REPORT:
+        print(
+            "error: --exportDb writes a binary database; --output PATH is required (no stdout form)",
+            file=sys.stderr,
+        )
+        return 2
+
+    total_files = count_audio_files(roots)
+    if not quiet:
+        print(f"Found {total_files} audio files to process under: {', '.join(roots)}\n")
+
+    pbar = _make_pbar(total_files, "Scanning library", quiet)
+    album_dirs = _scan_album_dirs(roots, layout, pbar, where=where)
+    pbar.close()
+
+    out_path = resolve_output(output_file)
+    os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
+    tmp_path = f"{out_path}.tmp-{os.getpid()}"
+
+    try:
+        conn = sqlite3.connect(tmp_path)
+        try:
+            conn.executescript(_EXPORT_DB_SCHEMA)
+            counts = _populate_export_db(conn, roots, layout, album_dirs, total_files)
+            conn.commit()
+            verdict = conn.execute("PRAGMA integrity_check").fetchone()[0]
+            if verdict != "ok":
+                raise RuntimeError(f"export db failed integrity_check: {verdict}")
+        finally:
+            conn.close()
+        os.replace(tmp_path, out_path)
+    except BaseException:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
+
+    if not quiet:
+        print(
+            f"Exported {counts['tracks']} tracks across {counts['albums']} albums "
+            f"({counts['artists']} artists, {counts['genres']} genres) to: {out_path}"
+        )
+    return 0
+
+
+# =====================================
+# Mode: Library database export (end)
 # =====================================

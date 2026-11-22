@@ -44,6 +44,7 @@ Modern music players often hide your library behind proprietary databases. latti
 | **AI library export** | `--ai-library` | Token-efficient flat export for LLM recommendation prompts |
 | **Genre wings** | `--all-wings` | Generates a separate library tree file for each genre |
 | **AI wings** | `--ai-wings` | Generates separate AI-friendly flat library files per genre |
+| **Database export** | `--exportDb` | Exports the library hierarchy (GENRE primary -> ARTIST -> ALBUM -> SONG) into a SQLite database rebuilt wholesale on every run: per-track tags with duration, bitrate, and ReplayGain dB, album genre/paths/year/art coverage, and a denormalized `v_track` view for one-line SQL queries. `--output` required (binary has no stdout form); a derived artifact, never read back by lattice |
 | **Smart Playlist** | `--playlist` | Generates an .m3u playlist based on a dynamic rule (e.g. `rating >= 4`) |
 | **Where selector** | `--where EXPR` | Scopes a scan to tracks matching the rule expression (the `--playlist` grammar) across the library exports, `--stats`, and the tag-reading audits, and targets the genre/RG write modes album-granularly (any matching track selects the whole album) |
 | **Playlist check** | `--checkPlaylists` | Verifies the library's .m3u playlists: missing #EXTM3U headers and entries whose target no longer exists |
@@ -390,7 +391,7 @@ lattice --retag ~/Music/Album "Jazz" --apply --json | jq '.counts.updated'
 cache: the walk happens as always, and non-matching tracks simply don't reach
 the report.
 
-- **Library exports** (`--library`, `--ai-library`, `--all-wings`, `--ai-wings`): only matching tracks are aggregated; an album with no matching tracks drops out of the export entirely.
+- **Library exports** (`--library`, `--ai-library`, `--all-wings`, `--ai-wings`, `--exportDb`): only matching tracks are aggregated; an album with no matching tracks drops out of the export entirely.
 - **`--stats`**: every figure describes the matching subset, and the header says so (`--where scoped: N of M files`).
 - **Tag-reading audits** (`--auditTags`, `--auditAlbums`, `--auditBitrate`, `--auditReplayGain`, `--healthScore`, `--duplicates`): scoped to the matching tracks (audits with album-level lenses select an album when *any* of its tracks matches, and score it whole). Audits that never read tags (`--auditAudioDupes`, `--auditStrays`, `--auditJunkFrames`, the art audits) refuse `--where` rather than ignore it.
 - **Write targeting** (`--genreTidy-build`, `--genreTidy-apply`, `--genreMap`, `--replayGain`): album-granular. A rule matching **any** track of an album selects the **whole** album as a target; no mode ever writes a partial album. The folder-merging `--clean`, the file-scoped `--retag`, `--apestrip`, `--stripRatings`, and `--lyrics` do not take `--where`.
@@ -468,6 +469,7 @@ LIBRARY TREES & EXPORTS
   --ai-library  Token-efficient export for AI prompts
   --all-wings   One library file per genre
   --ai-wings    AI-friendly library file per genre
+  --exportDb    Library as a SQLite database
 
 REPORTS & SNAPSHOTS
   --stats           Format, bitrate, rating, genre breakdowns

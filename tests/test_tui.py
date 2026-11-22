@@ -30,6 +30,7 @@ from lattice.modes.library import (
     write_ai_library,
     write_ai_wings,
     write_all_wings,
+    write_export_db,
     write_music_library_tree,
     write_snapshot,
 )
@@ -296,6 +297,24 @@ class CliTuiKwargsParityTests(unittest.TestCase):
                 "Snapshot file to diff against": "snap.tsv",
                 "Report file": self.OUT,
             },
+            main_menu=False,
+        )
+
+    def test_export_db(self):
+        self._parity(
+            mode="write_export_db",
+            real=write_export_db,
+            cli_argv=[
+                "--exportDb",
+                "--root",
+                self.ROOTS[0],
+                "--output",
+                self.OUT,
+                "--layout",
+                self.LAYOUT,
+            ],
+            selections=[(0, 7), tui._SEL_LIB_BACK],
+            answers={"Database file": self.OUT},
             main_menu=False,
         )
 
