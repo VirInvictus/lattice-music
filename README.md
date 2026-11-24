@@ -467,7 +467,7 @@ lattice --clean /mnt/SharedData/Music --all --apply
 
 ## Companion scripts
 
-The `scripts/` directory carries nine standalone helpers, and **every one of them can modify your library** (tags, rating bytes, or folder layout): preview with `--dry-run`, read the log, then apply. Six of them (`cleaner.py`, `apestrip.py`, `replaygain.py`, `retag.py`, `genre_tidy.py`, `genre_foldermap.py`) are thin launchers over the package write modes above, kept for aliases and cron with their historical apply-by-default contracts (the package modes dry-run by default instead). The other three are not installed by pip or pipx and run directly.
+The `scripts/` directory carries nine standalone helpers, and **every one of them can modify your library** (tags, rating bytes, or folder layout): preview with `--dry-run`, read the log, then apply. Six of them (`cleaner.py`, `apestrip.py`, `replaygain.py`, `retag.py`, `genre_tidy.py`, `genre_foldermap.py`) are thin launchers over the package write modes above, kept for aliases and cron with their historical contracts (five apply by default, so aliases and cron don't change; `genre_foldermap.py` dry-runs by default in both the script and `lattice --genreMap`, the one fold that needed no default inversion). The other three are not installed by pip or pipx and run directly.
 
 ### `retag.py`
 
