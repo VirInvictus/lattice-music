@@ -15,3 +15,7 @@ fmt:
 
 version:
     @PYTHONPATH=src python -m lattice --version
+
+# Regenerate docs/help.md from the live parser (pinned by tests/test_help_doc.py)
+help-doc:
+    PYTHONPATH=src python -m lattice --help > docs/help.md

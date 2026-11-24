@@ -1,109 +1,37 @@
-<svg width="100%" viewBox="0 0 680 320" xmlns="http://www.w3.org/2000/svg">
-<defs>
-<clipPath id="waveClip">
-<rect x="40" y="60" width="600" height="200" rx="0"/>
-</clipPath>
-<mask id="imagine-text-gaps-mtldqu" maskUnits="userSpaceOnUse"><rect x="0" y="0" width="680" height="320" fill="white"/><rect x="243.27915954589844" y="46.6875" width="193.44166564941406" height="17.40625" fill="black" rx="2"/><rect x="228.39231872558594" y="108.16346740722656" width="223.21536254882812" height="60.579437255859375" fill="black" rx="2"/><rect x="309.5606689453125" y="163.0544891357422" width="60.87864303588867" height="23.21565818786621" fill="black" rx="2"/><rect x="177.5656280517578" y="219.6875" width="324.8687438964844" height="17.40625" fill="black" rx="2"/><rect x="52" y="255.6875" width="74.16666412353516" height="17.125" fill="black" rx="2"/><rect x="52" y="245.6875" width="14" height="17.125" fill="black" rx="2"/><rect x="76" y="256.625" width="26.0625" height="16.1875" fill="black" rx="2"/><rect x="52" y="258.625" width="573.9583129882812" height="16.1875" fill="black" rx="2"/></mask>
-<style>
-  :root {
-    --bg2: #eaeaea;
-    --s: #a0a0a0;
-    --t: #555555;
-    --p: #222222;
-    --b: rgba(0, 0, 0, 0.2);
-    --font-mono: ui-monospace, monospace;
-    --font-sans: "Anthropic Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root {
-      --bg2: rgb(38, 38, 36);
-      --s: rgb(194, 192, 182);
-      --t: rgb(156, 154, 146);
-      --p: rgb(250, 249, 245);
-      --b: rgba(222, 220, 209, 0.3);
+<svg width="100%" viewBox="0 0 680 200" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="lattice-music: filesystem-first music library toolkit">
+  <title>lattice-music</title>
+  <desc>A waveform built from cells of a lattice, beside the lattice-music wordmark.</desc>
+  <style>
+    :root { --ink:#24292f; --dim:#57606a; --accent:#2f6f5e; }
+    @media (prefers-color-scheme: dark) {
+      :root { --ink:#e6e2cf; --dim:#9a978c; --accent:#8ea4a2; }
     }
-  }
-  * {
-    font-family: var(--font-sans);
-  }
-  .mono {
-    font-family: var(--font-mono);
-  }
-</style>
-</defs>
+    text { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+  </style>
 
-<rect x="40" y="40" width="600" height="240" fill="none" stroke="var(--s)" stroke-width="0.5"/>
+  <!-- 10-column lattice equalizer, bottom-anchored -->
+  <g fill="var(--accent, #2f6f5e)">
+    <rect x="44" y="132" width="18" height="18" rx="4"/>
+    <rect x="67" y="109" width="18" height="18" rx="4"/>
+    <rect x="67" y="132" width="18" height="18" rx="4"/>
+    <rect x="90" y="109" width="18" height="18" rx="4"/>
+    <rect x="90" y="132" width="18" height="18" rx="4"/>
+    <rect x="113" y="86"  width="18" height="18" rx="4"/>
+    <rect x="113" y="109" width="18" height="18" rx="4"/>
+    <rect x="113" y="132" width="18" height="18" rx="4"/>
+    <rect x="136" y="86"  width="18" height="18" rx="4"/>
+    <rect x="136" y="132" width="18" height="18" rx="4"/>
+    <rect x="159" y="109" width="18" height="18" rx="4"/>
+    <rect x="159" y="132" width="18" height="18" rx="4"/>
+    <rect x="182" y="132" width="18" height="18" rx="4"/>
+    <rect x="205" y="109" width="18" height="18" rx="4"/>
+    <rect x="205" y="132" width="18" height="18" rx="4"/>
+    <rect x="228" y="86"  width="18" height="18" rx="4"/>
+    <rect x="228" y="109" width="18" height="18" rx="4"/>
+    <rect x="228" y="132" width="18" height="18" rx="4"/>
+    <rect x="251" y="132" width="18" height="18" rx="4"/>
+  </g>
 
-<rect x="40" y="40" width="600" height="32" fill="var(--bg2)"/>
-<line x1="40" y1="72" x2="640" y2="72" stroke="var(--s)" stroke-width="0.5"/>
-
-<circle cx="60" cy="56" r="5" fill="none" stroke="var(--t)" stroke-width="0.5"/>
-<circle cx="78" cy="56" r="5" fill="none" stroke="var(--t)" stroke-width="0.5"/>
-<circle cx="96" cy="56" r="5" fill="none" stroke="var(--t)" stroke-width="0.5"/>
-
-<text x="340" y="59" text-anchor="middle" class="mono" font-size="11" fill="var(--s)" font-weight="400">~/Music $ lattice</text>
-
-<g clip-path="url(#waveClip)">
-<g opacity="0.06">
-<path d="M40,160 Q80,80 120,160 T200,160 T280,160 T360,160 T440,160 T520,160 T600,160 T680,160" fill="none" stroke="var(--p)" stroke-width="60" mask="url(#imagine-text-gaps-mtldqu)"/>
-<path d="M40,160 Q90,100 140,160 T240,160 T340,160 T440,160 T540,160 T640,160" fill="none" stroke="var(--p)" stroke-width="40" mask="url(#imagine-text-gaps-mtldqu)"/>
-</g>
-
-<g opacity="0.12">
-<rect x="80" y="130" width="2" height="60" fill="var(--p)" rx="1"/>
-<rect x="88" y="118" width="2" height="84" fill="var(--p)" rx="1"/>
-<rect x="96" y="126" width="2" height="68" fill="var(--p)" rx="1"/>
-<rect x="104" y="140" width="2" height="40" fill="var(--p)" rx="1"/>
-<rect x="112" y="110" width="2" height="100" fill="var(--p)" rx="1"/>
-<rect x="120" y="122" width="2" height="76" fill="var(--p)" rx="1"/>
-<rect x="128" y="135" width="2" height="50" fill="var(--p)" rx="1"/>
-<rect x="136" y="115" width="2" height="90" fill="var(--p)" rx="1"/>
-<rect x="144" y="128" width="2" height="64" fill="var(--p)" rx="1"/>
-<rect x="152" y="138" width="2" height="44" fill="var(--p)" rx="1"/>
-<rect x="160" y="105" width="2" height="110" fill="var(--p)" rx="1"/>
-<rect x="168" y="120" width="2" height="80" fill="var(--p)" rx="1"/>
-<rect x="176" y="132" width="2" height="56" fill="var(--p)" rx="1"/>
-<rect x="184" y="142" width="2" height="36" fill="var(--p)" rx="1"/>
-<rect x="192" y="112" width="2" height="96" fill="var(--p)" rx="1"/>
-<rect x="200" y="125" width="2" height="70" fill="var(--p)" rx="1"/>
-
-<rect x="480" y="132" width="2" height="56" fill="var(--p)" rx="1"/>
-<rect x="488" y="120" width="2" height="80" fill="var(--p)" rx="1"/>
-<rect x="496" y="138" width="2" height="44" fill="var(--p)" rx="1"/>
-<rect x="504" y="110" width="2" height="100" fill="var(--p)" rx="1"/>
-<rect x="512" y="126" width="2" height="68" fill="var(--p)" rx="1"/>
-<rect x="520" y="140" width="2" height="40" fill="var(--p)" rx="1"/>
-<rect x="528" y="115" width="2" height="90" fill="var(--p)" rx="1"/>
-<rect x="536" y="130" width="2" height="60" fill="var(--p)" rx="1"/>
-<rect x="544" y="122" width="2" height="76" fill="var(--p)" rx="1"/>
-<rect x="552" y="135" width="2" height="50" fill="var(--p)" rx="1"/>
-<rect x="560" y="108" width="2" height="104" fill="var(--p)" rx="1"/>
-<rect x="568" y="128" width="2" height="64" fill="var(--p)" rx="1"/>
-<rect x="576" y="118" width="2" height="84" fill="var(--p)" rx="1"/>
-<rect x="584" y="142" width="2" height="36" fill="var(--p)" rx="1"/>
-<rect x="592" y="125" width="2" height="70" fill="var(--p)" rx="1"/>
-<rect x="600" y="134" width="2" height="52" fill="var(--p)" rx="1"/>
-</g>
-</g>
-
-<text x="340" y="155" text-anchor="middle" class="mono" font-size="48" fill="var(--p)" font-weight="500" letter-spacing="-2">lattice-music</text>
-<text x="340" y="180" text-anchor="middle" class="mono" font-size="16" fill="var(--s)" font-weight="400" letter-spacing="8">.py</text>
-
-<line x1="140" y1="210" x2="540" y2="210" stroke="var(--b)" stroke-width="0.5"/>
-
-<text x="340" y="232" text-anchor="middle" class="mono" font-size="11" fill="var(--t)" font-weight="400" letter-spacing="3">LIBRARY · INTEGRITY · ART · AUDIT</text>
-
-<g opacity="0.35">
-<text x="56" y="268" class="mono" font-size="10" fill="var(--t)" font-weight="400">├── ARTIST/</text>
-<text x="56" y="258" class="mono" font-size="10" fill="var(--t)" font-weight="400" opacity="0">│</text>
-</g>
-<g opacity="0.25">
-<text x="80" y="268" class="mono" font-size="10" fill="var(--t)" font-weight="400" opacity="0">pad</text>
-</g>
-
-<rect x="40" y="252" width="600" height="28" fill="var(--bg2)"/>
-<line x1="40" y1="252" x2="640" y2="252" stroke="var(--s)" stroke-width="0.5" mask="url(#imagine-text-gaps-mtldqu)"/>
-
-<text x="56" y="270" class="mono" font-size="10" fill="var(--t)" font-weight="400">$ --library  --testFLAC  --testMP3  --testOpus  --extractArt  --auditTags  --duplicates  --missingArt</text>
-
+  <text x="296" y="112" font-size="42" font-weight="700" letter-spacing="-1" fill="var(--ink, #24292f)">lattice-music</text>
+  <text x="298" y="142" font-size="13" letter-spacing="3" fill="var(--dim, #57606a)">FILESYSTEM-FIRST MUSIC TOOLKIT</text>
 </svg>

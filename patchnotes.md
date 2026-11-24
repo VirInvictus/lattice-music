@@ -1,5 +1,17 @@
 # lattice-music Patch Notes
 
+## 2026-11-24 (no version bump: the docs pass)
+
+Documentation-only pass; the package is unchanged at 6.6.0:
+
+- README: restored the `## Companion scripts` heading the v6.4.1 edit accidentally deleted (eight script sections had been orphaned under it), gave "Importing new music: the circuit" its missing heading (two body links had pointed at an anchor that never existed), closed the `<details>` element the same edit left unclosed, and replaced the embedded help sample (frozen at 6.4.1) with a pointer to the new generated page.
+- docs/help.md (new): the categorized `lattice --help` index checked in as a page, regenerated with `just help-doc` and pinned to the live parser by tests/test_help_doc.py.
+- roadmap.md: collapsed to the shipped ledger plus the open/parked section; the pre-collapse prose is one commit back in git history.
+- AGENTS.md: trimmed to rules, decisions, and constraints (behavior prose now lives only in README), refreshed the test count and modes inventory, and recorded the docs-layout and historical-tag decisions.
+- spec.md: §6 now names AGENTS.md instead of the retired CLAUDE.md filename.
+- logo.svg: replaced the first-generation placeholder with a lattice-equalizer mark (a waveform built from cells of the lattice; adaptive light/dark).
+- project.done: removed (the September blitz handoff note, fully absorbed into the roadmap ledger and patchnotes).
+
 ## v6.6.0 (2026-11-22)
 
 ### --exportDb: the library hierarchy as a SQLite database

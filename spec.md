@@ -250,4 +250,4 @@ implementation, preserving their historical CLIs.
 Notable scripts include:
 - `slipcover.py`: Embeds existing folder cover art (`cover.jpg`, etc.) into audio files lacking embedded art, maintaining parity between the filesystem and embedded metadata.
 - `flac2opus.py`: Converts FLAC files to Opus 128kbps, guaranteeing tag and duration parity before cleanly deleting the original FLAC.
-- `rerate.py`: the MP3 POPM rating reconciler documented in `CLAUDE.md` and `README.md`. (`cleaner.py`, `apestrip.py`, `replaygain.py`, `retag.py`, `genre_tidy.py`, and `genre_foldermap.py` are now launchers over the package's write modes.)
+- `rerate.py`: the MP3 POPM rating reconciler documented in `README.md`. (`cleaner.py`, `apestrip.py`, `replaygain.py`, `retag.py`, `genre_tidy.py`, and `genre_foldermap.py` are now launchers over the package's write modes.)

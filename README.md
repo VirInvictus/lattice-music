@@ -26,7 +26,7 @@ A CLI/TUI toolkit for music collectors who manage their own libraries. lattice-m
 - [Installation](#installation) · [Requirements](#requirements)
 - [Usage](#usage)
 - [Library health digest](#library-health-digest) · [Machine output](#machine-output) · [The `--where` selector](#the---where-selector)
-- Modes: [Write modes](#write-modes) · [AI library export](#ai-library-export) · [Genre wings](#genre-wings) · [Multi-root scanning](#multi-root-scanning) · [Integrity checks](#integrity-checks) · [Library statistics](#library-statistics) · [Cover art extraction](#cover-art-extraction) · [Color output](#color-output) · [Supported formats](#supported-formats)
+- Modes: [Write modes](#write-modes) · [Importing new music](#importing-new-music-the-circuit) · [AI library export](#ai-library-export) · [Genre wings](#genre-wings) · [Multi-root scanning](#multi-root-scanning) · [Integrity checks](#integrity-checks) · [Library statistics](#library-statistics) · [Cover art extraction](#cover-art-extraction) · [Color output](#color-output) · [Supported formats](#supported-formats)
 - [Architecture](#architecture)
 - [Help](#help)
 - [Companion scripts](#companion-scripts) (destructive): [`retag.py`](#retagpy) · [`genre_tidy.py`](#genre_tidypy) · [`rerate.py`](#reratepy) · [`cleaner.py`](#cleanerpy) · [`genre_foldermap.py`](#genre_foldermappy) · [`replaygain.py`](#replaygainpy) · [`apestrip.py`](#apestrippy) · [`slipcover.py`](#slipcoverpy) · [`flac2opus.py`](#flac2opuspy)
@@ -450,100 +450,14 @@ lattice-music is a modular Python package under `src/lattice/`:
 - `utils.py`: filesystem walk, progress-bar dispatch, subprocess helper, and layout parsing.
 
 The filesystem is the source of truth: lattice-music walks the tree on every invocation and keeps no index or database.
+
 ## Help
 
-`lattice --help` prints a categorized mode index (the grouping mirrors the TUI menu); `lattice help MODE` (or `--MODE --help`) prints a full page for one mode: what it does, its own options, the shared options that apply to it, and a worked example. An unknown topic exits 2. On a terminal the output is ANSI-colored with the same theme Python 3.14's argparse uses (plain when piped; `NO_COLOR` and `FORCE_COLOR` are honored).
+`lattice --help` prints a categorized mode index (the grouping mirrors the TUI menu); `lattice help MODE` (or `--MODE --help`) prints a full page for one mode: what it does, its own options, the shared options that apply to it, and a worked example. An unknown topic exits 2. On a terminal the output is ANSI-colored with the same theme Python 3.14's argparse uses (plain when piped; `NO_COLOR` and `FORCE_COLOR` are honored). The full index and exit-code legend are checked in at [docs/help.md](docs/help.md), regenerated from the live parser with `just help-doc` and pinned to it by a test.
 
-<details>
-<summary>The mode index (<code>lattice --help</code>)</summary>
+## Importing new music: the circuit
 
-```
-lattice 6.4.1 - filesystem-first music library toolkit
-
-usage: lattice MODE [ROOT] [options]
-       lattice help MODE    full help for one mode
-       lattice              interactive TUI (no arguments)
-
-LIBRARY TREES & EXPORTS
-  --library     Album/track tree as a text report
-  --ai-library  Token-efficient export for AI prompts
-  --all-wings   One library file per genre
-  --ai-wings    AI-friendly library file per genre
-  --exportDb    Library as a SQLite database
-
-REPORTS & SNAPSHOTS
-  --stats           Format, bitrate, rating, genre breakdowns
-  --snapshot        Per-file TSV (the --diff baseline)
-  --diff SNAPSHOT   Replay a snapshot against the current tree
-  --playlist        Smart .m3u playlist from a rule
-  --checkPlaylists  Verify the library's .m3u playlists
-
-INTEGRITY (decode checks)
-  --testFLAC  Verify FLAC files (flac -t / ffmpeg)
-  --testMP3   Decode-verify MP3 files via ffmpeg
-  --testOpus  Decode-verify Opus files via ffmpeg
-  --testWAV   Decode-verify WAV files via ffmpeg
-  --testWMA   Decode-verify WMA files via ffmpeg
-
-ARTWORK
-  --extractArt        Extract embedded cover art to folders (WRITES by default:
-                      the only mode whose default is to write; --dry-run
-                      previews; --apply is silently ignored here)
-  --missingArt        Report album folders with no cover art
-  --auditArtQuality   Folder covers below a resolution floor
-  --auditArtMismatch  Embedded art vs folder cover comparison
-
-AUDITS (read-only reports)
-  --duplicates       Four-section duplicate-album report
-  --auditAudioDupes  Content-hash duplicate detection
-  --auditTags        Files with incomplete tags
-  --auditJunkFrames  MP3 ID3v2 junk-frame audit
-  --auditAlbums      Per-album consistency (codecs, tracks, year)
-  --auditBitrate     Files below a bitrate floor
-  --auditReplayGain  Per-album ReplayGain coverage
-  --auditStrays      Wrong-depth audio, strays, hidden dirs
-  --healthScore      Per-album health score out of 100
-  --health           One-screen digest across all lenses
-
-REPLAYGAIN (audit, verify, write)
-  --verifyReplayGain  Stored ReplayGain vs a fresh rsgain measure
-  --replayGain        Write ReplayGain 2.0 tags via rsgain
-
-WRITE MODES (dry-run by default; --apply writes)
-  --clean            Consolidate fragmented album folders
-  --apestrip         Strip stray APEv2 tags from MP3s
-  --stripRatings     Delete rating tags carrying a nonzero rating
-  --lyrics           Fetch synced .lrc lyrics from LRCLIB
-  --retag            Rewrite genre tags on one album directory
-  --genreTidy-build  Write the artist-to-genre authority map
-  --genreTidy-apply  Retag albums to the authority map
-  --genreMap         Restructure into Genre/Artist/Album
-  --ingest           Import ritual: stripRatings, genreMap, apestrip, clean,
-                     health
-
-OPTIONS
-  -h, --help           This index; "lattice help MODE" shows one mode.
-  --version            Show the version.
-  --root DIR           Library root; repeatable (default: config or current
-                       dir).
-  --output PATH        Report path; each mode's default is in its help page.
-  --where EXPR         Scope to tracks matching a playlist rule (tag-reading
-                       modes).
-  --layout PATTERN     Path pattern (default: {artist}/{album}).
-  --json               Machine-readable output where supported.
-  --fail-on-findings   Audits exit 1 on findings (cron/CI gating).
-  --apply / --dry-run  Write modes: commit vs preview (preview is the default).
-  --quiet              Minimize output.
-  --verbose            Extra detail on the audits that support it.
-
-Every mode above has a full help page:
-  lattice help MODE    (try: lattice help clean)
-  lattice help --json    the whole surface as JSON
-
-exit codes: 0 clean (an export with no matches is still 0); 1 findings or failure: audits only with --fail-on-findings; the integrity scans exit 1 on any CORRUPT file without a flag; write modes on run failure; 2 usage error or missing dependency (including --where/--json/--fail-on-findings on a mode that refuses them, --replayGain --apply without rsgain, and an invalid --where/--playlist rule); 130 interrupted
-```
-
-Or run the whole circuit as one command: `lattice --ingest /mnt/SharedData/Music/Unfiltered --apply` sequences the stripRatings, genreMap, apestrip, and clean stages with per-stage logs and one summary; see [Write modes](#write-modes).
+New albums stage in an inbox (`Unfiltered/` at the library root is the convention), and one command runs the whole circuit: `lattice --ingest /mnt/SharedData/Music/Unfiltered --apply` sequences the stripRatings, genreMap, apestrip, and clean stages with per-stage logs and one summary; see [Write modes](#write-modes).
 
 Once processed, you can confidently merge these albums into your main library (`/mnt/SharedData/Music`). Over time, as your library grows, you may want to periodically maintain the entire tree by running the clean mode on the root:
 
@@ -551,6 +465,9 @@ Once processed, you can confidently merge these albums into your main library (`
 lattice --clean /mnt/SharedData/Music --all --apply
 ```
 
+## Companion scripts
+
+The `scripts/` directory carries nine standalone helpers, and **every one of them can modify your library** (tags, rating bytes, or folder layout): preview with `--dry-run`, read the log, then apply. Six of them (`cleaner.py`, `apestrip.py`, `replaygain.py`, `retag.py`, `genre_tidy.py`, `genre_foldermap.py`) are thin launchers over the package write modes above, kept for aliases and cron with their historical apply-by-default contracts (the package modes dry-run by default instead). The other three are not installed by pip or pipx and run directly.
 
 ### `retag.py`
 
